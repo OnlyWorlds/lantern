@@ -7,6 +7,7 @@ import { preparePhoto } from '@onlyworlds/sdk';
 import { errorText, go, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
+import { consumeShared } from '../share';
 
 export const UNSORTED = 'Unsorted';
 
@@ -29,6 +30,9 @@ export function captureView(s: WorldSession): View {
     placeholder: 'An idea, a name, what just happened at the table…',
     style: 'min-height:200px',
   });
+  // Shared from another app: the note is here already, to keep or change.
+  const shared = consumeShared();
+  if (shared) text.value = shared;
   const file = h('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none', 'aria-hidden': 'true' });
   const preview = h('div', { class: 'stack' });
   const photoBtn = h('button', { class: 'btn', type: 'button' }, icon('camera', 20), 'Add a photo');

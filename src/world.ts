@@ -63,6 +63,13 @@ export function movedFields(row: OutboxRow, current: OwElement): string[] {
 
 const sessions = new Map<string, Promise<WorldSession>>();
 
+/** Whether this phone can change the world: one on this phone, or a write key (not the demo). */
+export function recordCanWrite(rec: WorldRecord): boolean {
+  if (rec.kind === 'local') return true;
+  if (rec.kind === 'demo' || !rec.apiKey || isDemoKey(rec.apiKey)) return false;
+  return kindCanWrite(rec.keyKind ?? detectKeyKind(rec.apiKey));
+}
+
 export function openWorld(id: string): Promise<WorldSession> {
   let p = sessions.get(id);
   if (!p) {
@@ -141,9 +148,7 @@ export class WorldSession {
   }
 
   get canWrite(): boolean {
-    if (this.isLocal) return true;
-    if (this.rec.kind === 'demo' || !this.rec.apiKey || isDemoKey(this.rec.apiKey)) return false;
-    return kindCanWrite(this.rec.keyKind ?? detectKeyKind(this.rec.apiKey));
+    return recordCanWrite(this.rec);
   }
 
   subscribe(fn: () => void): () => void {

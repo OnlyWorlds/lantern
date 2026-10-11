@@ -16,6 +16,8 @@ import { captureView } from './views/capture';
 import { outboxView } from './views/outbox';
 import { askView } from './views/ask';
 import { mapView } from './views/map';
+import { shareView } from './views/share';
+import { takeShared } from './share';
 import { isType } from './schema';
 import { errorText } from './ui';
 
@@ -98,12 +100,17 @@ async function route(): Promise<void> {
     case 'settings':
       mount(settingsView());
       return;
+    case 'share':
+      mount(await shareView());
+      return;
     default:
       mount(notFound('That page is not in Lantern.'));
   }
 }
 
 window.addEventListener('hashchange', () => void route());
+// replaceState fires no hashchange: one route, so one catch screen takes the note.
+if (takeShared()) history.replaceState(null, '', '/#/share');
 void route();
 
 // ---------- staying in step ----------
