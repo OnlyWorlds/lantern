@@ -151,6 +151,28 @@ export class WorldSession {
     return () => this.listeners.delete(fn);
   }
 
+  /**
+   * Who this key is in the world, asked once (keel's GET /me with the world's own key, Skeld
+   * #3457): a player's own Character, and the member role for a world opened with a key.
+   */
+  async learnWhoIAm(): Promise<void> {
+    if (this.isLocal || this.rec.kind === 'demo' || !this.rec.apiKey || this.rec.characterId !== undefined) return;
+    try {
+      const me = await this.client(false).request<{ role?: string; character?: string | null }>('GET', '/me');
+      const role = me.role === 'guest' || me.role === 'co_builder' || me.role === 'contributor' ? me.role : undefined;
+      const rec = await db.updateWorldRecord(this.id, {
+        characterId: role === 'guest' && typeof me.character === 'string' ? me.character : null,
+        ...(role && !this.rec.memberRole ? { memberRole: role } : {}),
+      });
+      if (rec) {
+        this.rec = rec;
+        this.emit();
+      }
+    } catch {
+      /* no signal, or an older keel: asked again on the next open */
+    }
+  }
+
   /** Re-render whoever is watching (an app-wide change, such as a newer build). */
   touch(): void {
     this.emit();

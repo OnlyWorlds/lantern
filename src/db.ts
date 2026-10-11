@@ -16,6 +16,8 @@ export interface WorldRecord {
   /** From the account list: owner, or collaborator with a member role. */
   role?: 'owner' | 'collaborator';
   memberRole?: 'co_builder' | 'contributor' | 'guest';
+  /** A player's own Character, from keel's /me (Skeld #3457); null once asked and there is none. */
+  characterId?: string | null;
   count?: number;
   /** The /changes cursor: opaque, stored verbatim. */
   cursor?: string;

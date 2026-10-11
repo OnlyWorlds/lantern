@@ -449,8 +449,13 @@ function playerHome(s: WorldSession): (Node | string)[] {
   const stamp = (e: { updated_at?: string; created_at?: string }) => e.updated_at ?? e.created_at ?? '';
   const newest = [...els].sort((a, b) => stamp(b).localeCompare(stamp(a))).slice(0, 3);
   const all = [...els].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
+  // Named by name, never a pronoun: the player chose who their Character is.
+  const me = s.rec.characterId ? s.get(s.rec.characterId) : undefined;
+  const intro = me
+    ? h('p', { class: 'dim', style: 'margin:0' }, 'You play ', h('a', { href: `#/w/${s.id}/e/${me.id}` }, elName(me)), `. You see what ${elName(me)} knows.`)
+    : h('p', { class: 'dim', style: 'margin:0' }, 'You are a player here. You see what your Character knows.');
   return [
-    h('p', { class: 'dim', style: 'margin:0' }, 'You are a player here. You see what your Character knows.'),
+    intro,
     els.length
       ? h('div', { class: 'stack' }, h('p', { class: 'section-label' }, 'Newest'), h('div', { class: 'results' }, ...newest.map((e) => elRow(s.id, e))))
       : h('p', { class: 'empty' }, s.status === 'syncing' ? 'Fetching what you know…' : 'Nothing yet. What your game master gives you appears here.'),

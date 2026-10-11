@@ -1,6 +1,6 @@
 # Lantern: progress
 
-**2026-10-12 00:40, updated 01:24** · Temper, S394 (the first overnight build) · S395 (maps)
+**2026-10-12 00:40, updated 01:50** · Temper, S394 (the first overnight build) · S395 (maps)
 
 ## CURRENT STATE
 
@@ -20,14 +20,14 @@ Built, tested and walked: the spine of DESIGN.md's tonight list. Preview: https:
 | World files | done; Save a copy, Open a world file, Atlas's file names; maps, pins, zones and markers under `spatial/` both ways, Atlas's older `map_id`/`zone_id` read as `map`/`zone` (S395: before, a world file lost its maps) | `src/worldfile.ts` |
 | Maps | done S395, read only, Quillon's rules: "Show on map" on a pin, a marker, a zone, a placed element, a Map ("Open the map"), only for a Map with an https picture; Leaflet 1.9.4 CRS.Simple, SVG renderer, clusters past 1,000 pins (markercluster 1.5.3, loaded only then), zoom stops where the picture runs out (one step past the whole view at least), a tap within a finger of a pin opens its card | `src/maps.ts` (the rules), `src/views/map.ts` |
 
-**Instruments**: `walk/map.mjs` (S395, both engines, the demo's two maps read from keel, a tap on a pin, the ceiling, 1,200 pins clustered from a world file) · `npm test` (43: the outbox and feed against a fake keel that refuses what keel refuses; world files on the Captain's real folders, an Atlas world's spatial files included; the map rules) · `walk/walk.mjs` (both engines, `.tap()`, airplane mode; `LANTERN_URL` for the preview) · `walk/live-write.mjs` (the write path on live keel, Hyperion scratch elements, deleted after; `walk/leftovers.mjs` proves it) · `walk/update.mjs` (a newer build). Run walks against `vite preview` (:5181, `appType: 'mpa'` so missing paths 404 as on Pages).
+**Instruments**: `walk/map.mjs` (S395, both engines, the demo's two maps read from keel, a tap on a pin, the ceiling, 1,200 pins clustered from a world file) · `npm test` (45: the outbox and feed against a fake keel that refuses what keel refuses; world files on the Captain's real folders, an Atlas world's spatial files included; the map rules) · `walk/walk.mjs` (both engines, `.tap()`, airplane mode; `LANTERN_URL` for the preview; offline, Playwright's WebKit here fails every subresource even from the worker, so the worker's offline serving is Chromium's proof) · `walk/live-write.mjs` (the write path on live keel, Hyperion scratch elements, deleted after; `walk/leftovers.mjs` proves it) · `walk/update.mjs` (a newer build). Run walks against `vite preview` (:5181, `appType: 'mpa'` so missing paths 404 as on Pages).
 
 **The S395 gate** (opus, fresh reader, on the maps diff): four confirmed, seven plausible, all fixed. A clustered map's chunk timer outlived a removed map (chunking off); a redraw keyed on counts missed moved pins, and two redraws could overlap (a content key, one drawing at a time); a file with both `map` and `map_id` landed opposite to Atlas; one id in both folders counted twice; buttons that opened an empty view; a failed Leaflet load stuck until reload; width without height stretched the picture; clustered taps; rotation; five-digit colours. Upheld: no XSS, the CSP, the precache, the round trip to Atlas.
 
 ## Not built (next, in order)
 
 1. (done S394) **Put it online**: the account world made once (remembered for a retry), phone-held pictures uploaded, one atomic `/bulk` under a remembered Idempotency-Key, read back, then the phone copy removed. Tested on a fake account keel (4 cases, revert-checked); a live walk needs the Captain's account.
-2. (player home done S394: a guest's world opens on what is newest and what they know; the header names "your Character" until keel says which, asked in h37 #3450) **Give it to the party** (after Keel #213 is live and #212): the reveal Narrative copies the Object's picture and the DM's line (Skeld's ruling, h37 #3432).
+2. (player home done S394; S395: the header names the player's own Character, "You play Mira. You see what Mira knows.", from keel's GET /me read once with the world's own key, Skeld #3457; /me also gives the member role to a world opened with a key. The live /me on a guest key is #213's walk: none here) **Give it to the party** (after Keel #213 is live and #212): the reveal Narrative copies the Object's picture and the DM's line (Skeld's ruling, h37 #3432).
 3. (done S395) **Maps** (Quillon's rules, `Armature/Notes/2026-10-12-lantern-maps-report.md`).
 4. (done S394) Sign in with email and password through Keel #211; the token door stays behind "I have an account token". Walked live only with a wrong password: a real sign-in is the Captain's.
 5. Ask through the proxy (#159) for what the local lookup cannot answer.

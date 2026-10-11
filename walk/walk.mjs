@@ -122,20 +122,23 @@ async function walk(engine, deviceName, tag) {
 
   // 4c. A player's home: the demo marked as a guest's world (no guest key here; Keel #213's live walk is the first invite)
   const demoId = await page.evaluate(() => location.hash.split('/')[2]);
+  // The guest's own Character, as keel's /me would name it (Skeld #3457): one the demo holds.
+  const chars = (await (await fetch('https://www.onlyworlds.com/api/v2/character/?limit=200', { headers: { 'API-Key': '0000000001' } })).json()).data;
+  const mine = chars.find((c) => c.name === 'Admiral Fluffington');
   await page.evaluate(
-    (id) =>
+    ([id, characterId]) =>
       new Promise((res, rej) => {
         const r = indexedDB.open('lantern');
         r.onsuccess = () => {
           const t = r.result.transaction('worlds', 'readwrite');
           const st = t.objectStore('worlds');
           const g = st.get(id);
-          g.onsuccess = () => st.put({ ...g.result, memberRole: 'guest' });
+          g.onsuccess = () => st.put({ ...g.result, memberRole: 'guest', characterId });
           t.oncomplete = () => res(true);
           t.onerror = () => rej(t.error);
         };
       }),
-    demoId,
+    [demoId, mine.id],
   );
   // A full navigation (a new query string), so the app starts fresh and reads the record again.
   await page.goto(`${BASE}/?as=player#/w/${demoId}`);
@@ -143,6 +146,8 @@ async function walk(engine, deviceName, tag) {
   const labels = await page.locator('[data-screen="home"] .section-label').allInnerTexts();
   check(tag, labels[0] === 'NEWEST' || labels[0] === 'Newest', `a player's home leads with what is newest (${labels.join(', ')})`);
   check(tag, (await page.locator('.pill').innerText()) === 'Player', 'the head says Player');
+  const intro = await page.locator('[data-screen="home"] p.dim').first().innerText();
+  check(tag, intro === 'You play Admiral Fluffington. You see what Admiral Fluffington knows.', `the player's header names their Character: ${JSON.stringify(intro)}`);
   await shot('player-home');
   await page.evaluate(
     (id) =>
@@ -189,14 +194,19 @@ async function walk(engine, deviceName, tag) {
   const offTiles = await page.locator('.type-tile').count();
   check(tag, offTiles === tiles, `offline, the world opens from the phone (${offTiles} tiles)`);
   await page.waitForTimeout(800);
-  await shot('offline-home');
+  // Playwright's WebKit on Windows fails every subresource offline, worker or not (probed S395: a
+  // precached font and script both "Load failed" with the worker in control and the cache holding
+  // them), so a screenshot waits for fonts forever. The worker serving offline is Chromium's proof.
+  if (engine === webkit) console.log(`[${tag}] (no offline screenshot: this WebKit cannot load anything offline)`);
+  else await shot('offline-home');
   const banner = await page.locator('.banner').innerText().catch(() => '');
   check(tag, /No connection/.test(banner), `offline banner: ${JSON.stringify(banner)}`);
   await ctx.setOffline(false);
   offline = false;
 
   // 7. A world on this phone: catch, edit, all offline-capable
-  await page.goto(`${BASE}/#/new`);
+  // A new document (a query string): fonts that failed offline stay failed in the old one.
+  await page.goto(`${BASE}/?online#/new`);
   await page.waitForSelector('[data-screen="new-world"]');
   await page.locator('input[aria-label="World name"]').tap();
   await page.keyboard.type('Bus stop ideas');

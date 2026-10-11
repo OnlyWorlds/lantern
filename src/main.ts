@@ -58,6 +58,7 @@ async function route(): Promise<void> {
     if (!pulledThisLaunch.has(s.id) && !s.isLocal) {
       pulledThisLaunch.add(s.id);
       void s.pull().then(() => s.flush());
+      void s.learnWhoIAm();
     }
     const sub = parts[2];
     if (!sub) mount(homeView(s), s);
