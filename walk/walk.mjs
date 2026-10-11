@@ -120,6 +120,46 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('[data-answer="none"]').count()) === 1, 'a question the world cannot answer gets "Your world does not say."');
   await shot('ask-none');
 
+  // 4c. A player's home: the demo marked as a guest's world (no guest key here; Keel #213's live walk is the first invite)
+  const demoId = await page.evaluate(() => location.hash.split('/')[2]);
+  await page.evaluate(
+    (id) =>
+      new Promise((res, rej) => {
+        const r = indexedDB.open('lantern');
+        r.onsuccess = () => {
+          const t = r.result.transaction('worlds', 'readwrite');
+          const st = t.objectStore('worlds');
+          const g = st.get(id);
+          g.onsuccess = () => st.put({ ...g.result, memberRole: 'guest' });
+          t.oncomplete = () => res(true);
+          t.onerror = () => rej(t.error);
+        };
+      }),
+    demoId,
+  );
+  // A full navigation (a new query string), so the app starts fresh and reads the record again.
+  await page.goto(`${BASE}/?as=player#/w/${demoId}`);
+  await page.waitForSelector('[data-screen="home"] .section-label');
+  const labels = await page.locator('[data-screen="home"] .section-label').allInnerTexts();
+  check(tag, labels[0] === 'NEWEST' || labels[0] === 'Newest', `a player's home leads with what is newest (${labels.join(', ')})`);
+  check(tag, (await page.locator('.pill').innerText()) === 'Player', 'the head says Player');
+  await shot('player-home');
+  await page.evaluate(
+    (id) =>
+      new Promise((res) => {
+        const r = indexedDB.open('lantern');
+        r.onsuccess = () => {
+          const t = r.result.transaction('worlds', 'readwrite');
+          const st = t.objectStore('worlds');
+          const g = st.get(id);
+          g.onsuccess = () => st.put({ ...g.result, memberRole: undefined });
+          t.oncomplete = () => res(true);
+        };
+      }),
+    demoId,
+  );
+  await page.goto(`${BASE}/?as=owner#/`);
+
   // 5. A type's list
   await page.goto(`${BASE}/#/`);
   await page.waitForSelector('[data-screen="worlds"]');

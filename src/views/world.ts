@@ -97,6 +97,7 @@ function headPill(s: WorldSession): HTMLElement | null {
   const waiting = s.waitingCount();
   if (waiting) return h('a', { class: 'pill', href: `#/w/${s.id}/outbox` }, `${waiting} waiting to send`);
   if (s.isLocal) return h('span', { class: 'pill quiet' }, 'On this phone');
+  if (s.rec.memberRole === 'guest') return h('span', { class: 'pill quiet' }, 'Player');
   if (!s.canWrite) return h('span', { class: 'pill quiet' }, 'Read only');
   return null;
 }
@@ -128,8 +129,14 @@ export function homeView(s: WorldSession): View {
       );
       return;
     }
+    if (s.rec.memberRole === 'guest') {
+      body.replaceChildren(...playerHome(s));
+      return;
+    }
     const counts = s.counts();
-    const present = TYPES.filter((t) => counts.get(t)).sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
+    // Pins and markers are map furniture, mostly unnamed: they go last, after the world's things.
+    const furniture = (t: string) => (t === 'pin' || t === 'marker' ? 1 : 0);
+    const present = TYPES.filter((t) => counts.get(t)).sort((a, b) => furniture(a) - furniture(b) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
     if (!present.length) {
       body.replaceChildren(
         h(
@@ -426,6 +433,32 @@ export function elementView(s: WorldSession, id: string): View {
   };
   refresh();
   return { el: main, refresh };
+}
+
+/**
+ * A player's home (a guest, Keel #213): the world as their Character knows it is small, so it is
+ * one list, newest first at the top, where what the game master gives the party appears.
+ */
+function playerHome(s: WorldSession): (Node | string)[] {
+  // Pins and markers are map furniture, mostly unnamed: not what a player reads.
+  const els = s.elements().filter((e) => e.type !== 'pin' && e.type !== 'marker');
+  const stamp = (e: { updated_at?: string; created_at?: string }) => e.updated_at ?? e.created_at ?? '';
+  const newest = [...els].sort((a, b) => stamp(b).localeCompare(stamp(a))).slice(0, 3);
+  const all = [...els].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
+  return [
+    h('p', { class: 'dim', style: 'margin:0' }, 'You are a player here. You see what your Character knows.'),
+    els.length
+      ? h('div', { class: 'stack' }, h('p', { class: 'section-label' }, 'Newest'), h('div', { class: 'results' }, ...newest.map((e) => elRow(s.id, e))))
+      : h('p', { class: 'empty' }, s.status === 'syncing' ? 'Fetching what you know…' : 'Nothing yet. What your game master gives you appears here.'),
+    els.length > 3
+      ? h(
+          'div',
+          { class: 'stack' },
+          h('p', { class: 'section-label' }, `What you know · ${els.length}`),
+          h('div', { class: 'results' }, ...all.slice(0, 300).map((e) => elRow(s.id, e))),
+        )
+      : '',
+  ];
 }
 
 /** An element's picture, large: a photographed page has to be readable. Tap opens it whole. */

@@ -24,7 +24,7 @@ Built, tested and walked: the spine of DESIGN.md's tonight list. Preview: https:
 ## Not built (next, in order)
 
 1. (done S394) **Put it online**: the account world made once (remembered for a retry), phone-held pictures uploaded, one atomic `/bulk` under a remembered Idempotency-Key, read back, then the phone copy removed. Tested on a fake account keel (4 cases, revert-checked); a live walk needs the Captain's account.
-2. **Give it to the party** (after Keel #213 is live and #212): the reveal Narrative copies the Object's picture and the DM's line (Skeld's ruling, h37 #3432).
+2. (player home done S394: a guest's world opens on what is newest and what they know; the header names "your Character" until keel says which, asked in h37 #3450) **Give it to the party** (after Keel #213 is live and #212): the reveal Narrative copies the Object's picture and the DM's line (Skeld's ruling, h37 #3432).
 3. **Maps** (Quillon's rules, `Armature/Notes/2026-10-12-lantern-maps-report.md`): Leaflet CRS.Simple, one webp overlay, SVG renderer, cluster above 1,000 pins. Only when a map has an online picture.
 4. (done S394) Sign in with email and password through Keel #211; the token door stays behind "I have an account token". Walked live only with a wrong password: a real sign-in is the Captain's.
 5. Ask through the proxy (#159) for what the local lookup cannot answer.
