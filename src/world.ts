@@ -135,6 +135,11 @@ export class WorldSession {
     return () => this.listeners.delete(fn);
   }
 
+  /** Re-render whoever is watching (an app-wide change, such as a newer build). */
+  touch(): void {
+    this.emit();
+  }
+
   private emit(): void {
     for (const fn of this.listeners) fn();
   }

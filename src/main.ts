@@ -106,7 +106,9 @@ window.addEventListener('online', () => {
 });
 
 /** Reach the new build: find (or fetch) the waiting worker, let it take over, and reload. */
+let askedForNewBuild = false;
 async function reloadToNewBuild(): Promise<void> {
+  askedForNewBuild = true;
   const r = navigator.serviceWorker?.controller ? await navigator.serviceWorker.getRegistration() : undefined;
   if (!r) {
     location.reload();
@@ -127,7 +129,8 @@ async function reloadToNewBuild(): Promise<void> {
 
 function onBehind(): void {
   setBehindReload(() => void reloadToNewBuild());
-  void route();
+  // Show the banner without remounting: a remount would wipe whatever is being typed.
+  activeSession?.touch();
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -147,11 +150,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       });
     });
   });
-  let reloading = false;
+  // Only the reload the user asked for. The first install's clients.claim() also changes the
+  // controller, and reloading then would wipe a form mid-typing (the live walk caught it).
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) return;
-    reloading = true;
-    location.reload();
+    if (askedForNewBuild) location.reload();
   });
 }
 void checkForUpdate(onBehind);
