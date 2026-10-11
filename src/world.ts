@@ -369,6 +369,8 @@ export class WorldSession {
       if (photo) el.image_url = await blobToDataUrl(photo);
       await db.applyElements(this.id, [el]);
       this.truth.set(id, el);
+      const rec = await db.updateWorldRecord(this.id, { count: this.truth.size });
+      if (rec) this.rec = rec;
       this.rebuild();
       this.emit();
       return id;

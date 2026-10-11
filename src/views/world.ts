@@ -96,7 +96,8 @@ function headPill(s: WorldSession): HTMLElement | null {
   if (needs) return h('a', { class: 'pill alert', href: `#/w/${s.id}/outbox` }, `${needs} need${needs === 1 ? 's' : ''} you`);
   const waiting = s.waitingCount();
   if (waiting) return h('a', { class: 'pill', href: `#/w/${s.id}/outbox` }, `${waiting} waiting to send`);
-  if (!s.canWrite && !s.isLocal) return h('span', { class: 'pill quiet' }, 'Read only');
+  if (s.isLocal) return h('span', { class: 'pill quiet' }, 'On this phone');
+  if (!s.canWrite) return h('span', { class: 'pill quiet' }, 'Read only');
   return null;
 }
 

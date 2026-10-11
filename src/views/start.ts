@@ -16,6 +16,7 @@ import {
 } from '../account';
 import { setSessionPin, forgetSession } from '../world';
 import { uuid7 } from '../uuid7';
+import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
 import { errorText, go, isStandalone, toast, topbar } from '../ui';
 import { applyTheme, currentTheme, BUILD_ID } from '../app-state';
 
@@ -230,6 +231,44 @@ function worldCard(rec: db.WorldRecord, waiting: number): HTMLElement {
   );
 }
 
+function saveCopyButton(rec: db.WorldRecord): HTMLElement {
+  const b = h('button', { class: 'btn', type: 'button', style: 'color:var(--lan-accent)' }, 'Save a copy');
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      const { bytes, name } = toWorldFile(rec, await db.allElements(rec.id));
+      const how = await saveFile(bytes, name);
+      await db.updateWorldRecord(rec.id, { lastCopy: new Date().toISOString() });
+      toast(how === 'shared' ? 'Copy handed over.' : `Saved ${name}.`);
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') toast(errorText(e));
+    } finally {
+      b.disabled = false;
+    }
+  });
+  return b;
+}
+
+function openFileButton(): HTMLElement {
+  const input = h('input', { type: 'file', accept: '.zip,application/zip', style: 'display:none', 'aria-label': 'A world file' });
+  const b = h('button', { class: 'btn', type: 'button' }, 'Open a world file', input);
+  b.addEventListener('click', (e) => {
+    if (e.target !== input) input.click();
+  });
+  input.addEventListener('change', async () => {
+    const f = input.files?.[0];
+    input.value = '';
+    if (!f) return;
+    try {
+      const id = await openWorldFile(new Uint8Array(await f.arrayBuffer()));
+      go(`#/w/${id}`);
+    } catch (e) {
+      toast(errorText(e));
+    }
+  });
+  return b;
+}
+
 export function worldsView(): HTMLElement {
   const main = h('main', { class: 'screen', 'data-screen': 'worlds' });
   const render = async (fresh?: AccountWorld[]) => {
@@ -299,7 +338,7 @@ export function worldsView(): HTMLElement {
           'div',
           { class: 'stack' },
           h('p', { class: 'section-label' }, 'On this phone only'),
-          ...local.map((r) => h('div', { class: 'local-group' }, worldCard(r, 0))),
+          ...local.map((r) => h('div', { class: 'local-group' }, worldCard(r, 0), saveCopyButton(r))),
         ),
       );
     }
@@ -315,8 +354,13 @@ export function worldsView(): HTMLElement {
         'div',
         { class: 'row-gap' },
         h('a', { class: 'btn', href: '#/new' }, 'New world'),
-        token ? h('a', { class: 'btn', href: '#/key' }, 'Open with a key') : h('a', { class: 'btn', href: '#/signin' }, 'Sign in'),
+        openFileButton(),
       ),
+    );
+    main.appendChild(
+      token
+        ? h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'Open with a key')
+        : h('a', { class: 'btn btn-quiet', href: '#/signin', style: 'align-self:center' }, 'Sign in to OnlyWorlds'),
     );
     if (!demos.length) {
       const b = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Explore Moppetopia');
@@ -357,7 +401,7 @@ export function settingsView(): HTMLElement {
       });
       return b;
     };
-    const keep = h('button', { class: 'btn', type: 'button' }, 'Ask the phone to keep it');
+    const keep = h('button', { class: 'btn', type: 'button' }, 'Ask the phone to keep your worlds');
     keep.addEventListener('click', async () => {
       const ok = await db.persistStorage();
       toast(ok ? 'The phone will keep your worlds.' : 'The phone did not agree yet. Adding Lantern to the home screen helps.');

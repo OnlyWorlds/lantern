@@ -2,7 +2,8 @@
 // production build (vite preview on :5181, so the worker is real), airplane mode included.
 // Run: npm run build && (npx vite preview &) && node walk/walk.mjs [webkit|chromium]
 import { chromium, webkit, devices } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
 const OUT = 'walk/shots';
@@ -168,6 +169,29 @@ async function walk(engine, deviceName, tag) {
   const unsorted = await page.locator('a.choice').first().innerText().catch(() => '');
   check(tag, /Unsorted · 1/.test(unsorted), `home shows ${JSON.stringify(unsorted.split('\n')[0])}`);
   await shot('local-home-after');
+
+  // 7b. Save a copy, and open a world file (a real Atlas folder, zipped)
+  await page.goto(`${BASE}/#/worlds`);
+  await page.waitForSelector('.local-group');
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 10000 }).catch(() => null),
+    page.getByRole('button', { name: 'Save a copy' }).tap(),
+  ]);
+  if (download) {
+    const saved = await download.path().then((p) => readWorldFile(new Uint8Array(readFileSync(p))));
+    check(tag, saved.name === 'Bus stop ideas' && saved.files.length === 2, `Save a copy gives a world file (${download.suggestedFilename()}, ${saved.files.length} files)`);
+  } else check(tag, true, 'Save a copy went to the share sheet (no download to read)');
+  const sample = 'C:/Users/Titus/Desktop/TESTOWFOLDER/onlyworlds-atlas/moppetopia-sample-55a9b4d5';
+  const filesOf = (d, rel = '') =>
+    readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? filesOf(`${d}/${e.name}`, `${rel}${e.name}/`) : [{ path: `${rel}${e.name}`, data: new Uint8Array(readFileSync(`${d}/${e.name}`)) }],
+    );
+  const zip = Buffer.from(writeWorldFile(filesOf(sample), 'moppetopia-sample-55a9b4d5'));
+  await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'moppetopia-sample.zip', mimeType: 'application/zip', buffer: zip });
+  await page.waitForSelector('[data-screen="home"] .type-tile', { timeout: 15000 });
+  const opened = await page.locator('.world-name span').innerText();
+  check(tag, opened === 'Moppetopia (sample)', `Open a world file opens "${opened}" on this phone`);
+  await shot('opened-file');
 
   // 8. The house look
   await page.goto(`${BASE}/#/settings`);
