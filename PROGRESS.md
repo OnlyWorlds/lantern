@@ -26,7 +26,7 @@ Built, tested and walked: the spine of DESIGN.md's tonight list. Preview: https:
 1. **Put it online** (a world on this phone to the account: `POST /account/worlds`, then `/bulk`; a data-URL picture must be uploaded first). Needs an account token to walk; none in Forge.
 2. **Give it to the party** (after Keel #213 is live and #212): the reveal Narrative copies the Object's picture and the DM's line (Skeld's ruling, h37 #3432).
 3. **Maps** (Quillon's rules, `Armature/Notes/2026-10-12-lantern-maps-report.md`): Leaflet CRS.Simple, one webp overlay, SVG renderer, cluster above 1,000 pins. Only when a map has an online picture.
-4. Sign in with email and password when Keel #211 lands (today: a pasted `ow_a_` token).
+4. (done S394) Sign in with email and password through Keel #211; the token door stays behind "I have an account token". Walked live only with a wrong password: a real sign-in is the Captain's.
 5. Ask through the proxy (#159) for what the local lookup cannot answer.
 
 ## Known gaps (said, not hidden)

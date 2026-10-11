@@ -23,9 +23,10 @@ async function walk(engine, deviceName, tag) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   let offline = false;
+  let expect400 = false; // the deliberate wrong password
   page.on('console', (m) => {
     // Offline, a failed fetch is the expected answer, not an error.
-    if (m.type() === 'error' && !(offline && /Failed to load resource/.test(m.text()))) errors.push('console: ' + m.text());
+    if (m.type() === 'error' && !((offline || expect400) && /Failed to load resource/.test(m.text()))) errors.push('console: ' + m.text());
   });
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
@@ -37,6 +38,21 @@ async function walk(engine, deviceName, tag) {
   await shot('welcome');
   const first = await page.locator('.choice').first().innerText();
   check(tag, /Sign in/.test(first), `Sign in is the first choice (${JSON.stringify(first.split('\n')[0])})`);
+
+  // 1b. Sign in against live keel (Keel #211) with a wrong password: the server's own words come back
+  await page.locator('a.choice.primary').tap();
+  await page.waitForSelector('[data-screen="signin"]');
+  await page.locator('input[aria-label="Email"]').fill('nobody-lantern-walk@example.com');
+  await page.locator('input[aria-label="Password"]').fill('not-the-password-1');
+  expect400 = true;
+  await page.getByRole('button', { name: 'Sign in', exact: true }).tap();
+  await page.waitForFunction(() => document.querySelector('.error')?.textContent, null, { timeout: 15000 });
+  const signErr = await page.locator('.error').first().innerText();
+  check(tag, /not correct/.test(signErr), `a wrong password is answered by keel: ${JSON.stringify(signErr)}`);
+  await shot('signin-wrong');
+  expect400 = false;
+  await page.goto(`${BASE}/#/welcome`);
+  await page.waitForSelector('[data-screen="welcome"]');
 
   // 2. The demo
   await page.getByRole('button', { name: /Explore Moppetopia/ }).tap();

@@ -11,6 +11,7 @@ import {
   openAccountWorld,
   openWithKey,
   signIn,
+  signInWithPassword,
   signOut,
   type AccountWorld,
 } from '../account';
@@ -85,7 +86,38 @@ export function welcomeView(): HTMLElement {
 }
 
 export function signInView(): HTMLElement {
-  const input = h('input', {
+  const email = h('input', { class: 'input', type: 'email', autocomplete: 'username', autocapitalize: 'off', 'aria-label': 'Email' });
+  const password = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Password' });
+  const err = h('p', { class: 'error', role: 'alert' });
+  const btn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Sign in');
+  const form = h(
+    'form',
+    { class: 'stack' },
+    h('label', { class: 'field-label' }, 'Email', email),
+    h('label', { class: 'field-label' }, 'Password', password),
+    err,
+    btn,
+  );
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.textContent = '';
+    if (!email.value.trim() || !password.value) {
+      err.textContent = 'Your email and password, as on onlyworlds.com.';
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await signInWithPassword(email.value, password.value);
+      go('#/worlds', true);
+    } catch (ex) {
+      err.textContent = errorText(ex);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // The older door: a token made on onlyworlds.com, pasted.
+  const token = h('input', {
     class: 'input',
     type: 'password',
     autocomplete: 'off',
@@ -94,39 +126,39 @@ export function signInView(): HTMLElement {
     placeholder: 'ow_a_…',
     'aria-label': 'Account token',
   });
-  const err = h('p', { class: 'error', role: 'alert' });
-  const btn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Sign in');
-  const form = h(
+  const tokenErr = h('p', { class: 'error', role: 'alert' });
+  const tokenForm = h(
     'form',
-    { class: 'stack' },
-    h('label', { class: 'field-label' }, 'Account token', input),
-    err,
-    btn,
+    { class: 'stack', hidden: true },
+    h('label', { class: 'field-label' }, 'Account token', token),
+    tokenErr,
+    h('button', { class: 'btn', type: 'submit' }, 'Sign in with the token'),
   );
-  form.addEventListener('submit', async (e) => {
+  tokenForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    err.textContent = '';
-    btn.disabled = true;
+    tokenErr.textContent = '';
     try {
-      await signIn(input.value);
+      await signIn(token.value);
       go('#/worlds', true);
     } catch (ex) {
-      err.textContent = errorText(ex);
-    } finally {
-      btn.disabled = false;
+      tokenErr.textContent = errorText(ex);
     }
   });
+  const reveal = h('button', { class: 'btn btn-quiet', type: 'button' }, 'I have an account token');
+  reveal.addEventListener('click', () => {
+    tokenForm.hidden = false;
+    reveal.remove();
+    token.focus();
+  });
+
   return h(
     'main',
     { class: 'screen', 'data-screen': 'signin' },
     topbar('Sign in', '#/'),
-    h(
-      'p',
-      { class: 'dim', style: 'margin:0' },
-      'For now, Lantern signs in with an account token. Make one on onlyworlds.com under your account, then paste it here. It stays on this phone.',
-    ),
+    h('p', { class: 'dim', style: 'margin:0' }, 'Your OnlyWorlds account. This phone keeps its own key, which you can take back on onlyworlds.com.'),
     form,
-    h('p', { class: 'muted small', style: 'margin:0' }, 'Signing in with your email and password is coming.'),
+    reveal,
+    tokenForm,
   );
 }
 
@@ -419,7 +451,7 @@ export function settingsView(): HTMLElement {
       h('div', { class: 'row-gap' }, themeBtn('warm', 'Warm'), themeBtn('house', 'House')),
       h('p', { class: 'section-label' }, 'Account'),
       token
-        ? h('div', { class: 'stack' }, h('p', { class: 'dim', style: 'margin:0' }, 'Signed in with an account token.'), out)
+        ? h('div', { class: 'stack' }, h('p', { class: 'dim', style: 'margin:0' }, 'Signed in. This phone has its own key to your account.'), out)
         : h('a', { class: 'btn', href: '#/signin' }, 'Sign in to OnlyWorlds'),
       h('p', { class: 'section-label' }, 'This phone'),
       h(

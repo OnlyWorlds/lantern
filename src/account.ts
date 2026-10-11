@@ -31,6 +31,50 @@ export async function signIn(token: string): Promise<AccountWorld[]> {
   return worlds;
 }
 
+const AUTH_BASE = 'https://www.onlyworlds.com/api/v2/auth/app/v1';
+
+/**
+ * Keel #211: sign in with email and password through the headless app client, turn the session
+ * into this phone's own account token (POST /account/tokens with X-Session-Token, named for the
+ * phone and revocable on the portal), then end the session. Only the token is kept.
+ */
+export async function signInWithPassword(email: string, password: string): Promise<AccountWorld[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${AUTH_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+  } catch {
+    throw new Error('No connection. Signing in needs signal.');
+  }
+  const data = (await res.json().catch(() => null)) as {
+    meta?: { session_token?: string };
+    errors?: { message?: string }[];
+    data?: { flows?: { id?: string; is_pending?: boolean }[] };
+  } | null;
+  const session = res.ok ? data?.meta?.session_token : undefined;
+  if (!session) {
+    if (data?.data?.flows?.some((f) => f.id === 'verify_email' && f.is_pending)) {
+      throw new Error('Confirm your email first: the link is in the mail onlyworlds.com sent you.');
+    }
+    throw new Error(data?.errors?.[0]?.message ?? 'Signing in did not work. Try again.');
+  }
+  try {
+    const t = await fetch(`${API_BASE}/account/tokens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': session },
+      body: JSON.stringify({ name: `Lantern on ${deviceName()}` }),
+    });
+    const body = (await t.json().catch(() => null)) as { token?: string; error?: { message?: string } } | null;
+    if (!t.ok || !body?.token) throw new Error(body?.error?.message ?? "This phone's token could not be made. Try again.");
+    return await signIn(body.token);
+  } finally {
+    void fetch(`${AUTH_BASE}/auth/session`, { method: 'DELETE', headers: { 'X-Session-Token': session } }).catch(() => undefined);
+  }
+}
+
 export async function signOut(): Promise<void> {
   await db.kvSet('accountToken', undefined);
   await db.kvSet('accountWorlds', undefined);
