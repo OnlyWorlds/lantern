@@ -56,8 +56,9 @@ function sameValue(a: unknown, b: unknown): boolean {
 
 /** The 412 rule: the server's copy moved, but did it move on a field this edit touches? */
 export function movedFields(row: OutboxRow, current: OwElement): string[] {
-  const base = row.base ?? {};
-  return Object.keys(row.values).filter((f) => !sameValue((base as Record<string, unknown>)[f], current[f]));
+  const base = (row.base ?? {}) as Record<string, unknown>;
+  // A field that already holds my value is no conflict (my send landed, its answer was lost).
+  return Object.keys(row.values).filter((f) => !sameValue(base[f], current[f]) && !sameValue(row.values[f], current[f]));
 }
 
 const sessions = new Map<string, Promise<WorldSession>>();
@@ -80,6 +81,21 @@ export class WorldSession {
   rec: WorldRecord;
   /** The server's truth (or, for a world on this phone only, the only truth). */
   private truth = new Map<string, OwElement>();
+
+  /** Is this copy at least as new as the one held? (change_seq is last-write order.) */
+  private isNewer(el: OwElement): boolean {
+    const held = this.truth.get(el.id);
+    return !held || (el.change_seq ?? 0) >= (held.change_seq ?? 0);
+  }
+
+  /** A row leaves the outbox with the server's answer, which lands only if it is the newer copy. */
+  private async settle(row: OutboxRow, answer: OwElement): Promise<void> {
+    const el = { ...answer, type: answer.type || row.type };
+    const take = this.isNewer(el);
+    await db.settleOutboxRow(this.id, row.seq!, take ? el : null);
+    this.outbox = this.outbox.filter((r) => r !== row);
+    if (take) this.truth.set(el.id, el);
+  }
   outbox: OutboxRow[] = [];
   /** What the screen shows: truth with the outbox laid on top. */
   view = new Map<string, OwElement>();
@@ -257,14 +273,24 @@ export class WorldSession {
       });
       if (rec) this.rec = rec;
 
-      const gen = c.changesAll(this.rec.cursor);
+      const gen = c.changesAll(resynced ? undefined : this.rec.cursor);
       let puts: OwElement[] = [];
       let dels: string[] = [];
       let seen = 0;
+      // After resync_required the walk goes into a fresh copy, swapped in only when it completes:
+      // a walk that fails halfway leaves the old copy standing, not half a world.
+      const fresh = resynced ? new Map<string, OwElement>() : null;
       const flushBatch = async () => {
-        await db.applyElements(this.id, puts, dels);
-        for (const el of puts) this.truth.set(el.id, el);
-        for (const id of dels) this.truth.delete(id);
+        if (fresh) {
+          for (const el of puts) fresh.set(el.id, el);
+          for (const id of dels) fresh.delete(id);
+        } else {
+          // A page fetched before a send settled must not put back the older copy.
+          puts = puts.filter((el) => this.isNewer(el));
+          await db.applyElements(this.id, puts, dels);
+          for (const el of puts) this.truth.set(el.id, el);
+          for (const id of dels) this.truth.delete(id);
+        }
         puts = [];
         dels = [];
       };
@@ -272,6 +298,11 @@ export class WorldSession {
         const r = await gen.next();
         if (r.done) {
           await flushBatch();
+          if (fresh) {
+            await db.clearElements(this.id);
+            await db.applyElements(this.id, [...fresh.values()]);
+            this.truth = fresh;
+          }
           const rec2 = await db.updateWorldRecord(this.id, {
             cursor: r.value.cursor,
             lastSync: new Date().toISOString(),
@@ -294,11 +325,7 @@ export class WorldSession {
       this.statusText = '';
     } catch (e) {
       if (e instanceof OwApiError && e.isResyncRequired && !resynced) {
-        // What this key may see changed: drop the cursor and the copy, walk from zero.
-        await db.clearElements(this.id);
-        this.truth.clear();
-        const rec = await db.updateWorldRecord(this.id, { cursor: undefined });
-        if (rec) this.rec = rec;
+        // What this key may see changed: walk from zero and replace the copy (not merge into it).
         return this.doPull(true);
       }
       this.setError(e);
@@ -339,14 +366,18 @@ export class WorldSession {
       open.values = { ...open.values, ...values };
       await db.putOutboxRow(this.id, open);
     } else {
-      const base = this.truth.get(id);
       const el = this.view.get(id);
       if (!el) throw new Error('That element is not on this phone.');
+      // A row for this element still in the outbox (being sent, a create not landed, a conflict):
+      // this edit follows it, and its base is the server's copy at the moment it is sent.
+      const behind = this.outbox.some((r) => r.id === id);
+      const base = behind ? undefined : this.truth.get(id);
       const row: OutboxRow = {
-        op: base ? 'patch' : 'create',
+        op: behind || base ? 'patch' : 'create',
         type: el.type,
         id,
         base,
+        lateBase: behind || undefined,
         values,
         state: 'waiting',
         createdAt: new Date().toISOString(),
@@ -420,10 +451,17 @@ export class WorldSession {
     }
     this.needPin = false;
     const c = this.client(true);
-    for (const row of rows) {
+    // Per element, in order: a row waits while an earlier row for the same element is unsettled.
+    const blocked = new Set<string>();
+    for (const row of [...this.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
       if (buildBehind) break;
+      if (row.state !== 'waiting' || blocked.has(row.id)) {
+        blocked.add(row.id);
+        continue;
+      }
       const stop = await this.send(c, row);
       if (stop) break;
+      if (this.outbox.includes(row)) blocked.add(row.id);
     }
     this.rebuild();
     this.emit();
@@ -431,6 +469,13 @@ export class WorldSession {
 
   /** Send one row; true when the whole outbox should stop (no network, auth, busy). */
   private async send(c: OwV2Client, row: OutboxRow, attempt = 0): Promise<boolean> {
+    if (row.lateBase) {
+      const base = this.truth.get(row.id);
+      if (!base) return false; // what it follows has not landed: it waits
+      row.base = base;
+      row.lateBase = undefined;
+      await db.putOutboxRow(this.id, row);
+    }
     row.state = 'sending';
     this.emit();
     try {
@@ -446,10 +491,7 @@ export class WorldSession {
       } else {
         el = await c.patch(row.type, row.id, row.values, { ifMatch: row.base?.change_seq });
       }
-      el = { ...el, type: el.type || row.type };
-      await db.settleOutboxRow(this.id, row.seq!, el);
-      this.outbox = this.outbox.filter((r) => r !== row);
-      this.truth.set(el.id, el);
+      await this.settle(row, el);
       return false;
     } catch (e) {
       return this.onSendError(c, row, e, attempt);
@@ -468,6 +510,10 @@ export class WorldSession {
         await keep('gone', 'Deleted elsewhere');
         return false;
       }
+      if (Object.keys(row.values).every((f) => sameValue(row.values[f], current[f]))) {
+        await this.settle(row, current);
+        return false;
+      }
       const moved = movedFields(row, current);
       if (!moved.length && attempt < 3) {
         // The element moved, but not on anything this edit touches: send again on the new copy.
@@ -484,17 +530,35 @@ export class WorldSession {
         await keep('gone', 'Deleted elsewhere');
         return false;
       }
-      if (e.isIdConflict && row.op === 'create') {
-        // The create reached the server before (its answer was lost): take the server's copy.
+      if (row.op === 'create' && (e.isIdConflict || e.isIdempotencyConflict) && attempt < 3) {
+        // The create reached the server before (its answer was lost). Edits merged into the row
+        // since then are not on the server: send them as a patch on the server's copy.
         try {
-          const el = await c.get(row.type, row.id);
-          await db.settleOutboxRow(this.id, row.seq!, el);
-          this.outbox = this.outbox.filter((r) => r !== row);
-          this.truth.set(el.id, el);
-          return false;
+          const server = { ...(await c.get(row.type, row.id)), type: row.type } as OwElement;
+          const differs = Object.keys(row.values).filter((f) => !sameValue(row.values[f], server[f]));
+          if (!differs.length) {
+            await this.settle(row, server);
+            return false;
+          }
+          if (this.isNewer(server)) {
+            this.truth.set(server.id, server);
+            await db.applyElements(this.id, [server]);
+          }
+          row.op = 'patch';
+          row.base = server;
+          row.values = Object.fromEntries(differs.map((f) => [f, row.values[f]]));
+          delete row.idempotencyKey;
+          await keep('waiting');
+          return this.send(c, row, attempt + 1);
         } catch {
           /* fall through to refused */
         }
+      }
+      if (e.status === 401 && /^ticket_/.test(e.code ?? '')) {
+        // The media edge's ticket expired or was used: a new one on the next try, the PIN is fine.
+        await keep('waiting');
+        this.retryLater(2000);
+        return true;
       }
       if (e.status === 401) {
         // A wrong PIN: stop and ask again; keel throttles wrong PINs, so never loop.
@@ -509,9 +573,10 @@ export class WorldSession {
         this.statusText = 'This key can no longer write to the world';
         return true;
       }
-      if (e.isBusy || (e.status === 409 && e.code === 'upload_pending')) {
+      if (e.isBusy || e.status === 429 || e.status >= 500 || (e.status === 409 && e.code === 'upload_pending')) {
+        // Busy, throttled (a wrong-PIN throttle included) or a server fault: wait, never refuse.
         await keep('waiting');
-        this.retryLater((e.retryAfter ?? 5) * 1000);
+        this.retryLater((e.retryAfter ?? (e.status === 429 ? 60 : 10)) * 1000);
         return true;
       }
       await keep('refused', e.isNotAuthor ? 'You can change only what you made in this world' : e.message);
@@ -534,9 +599,9 @@ export class WorldSession {
     const current = row.current;
     if (!current) return;
     const values: Record<string, unknown> = {};
+    const moved = new Set(movedFields(row, current));
     for (const f of Object.keys(row.values)) {
-      const moved = !sameValue((row.base as Record<string, unknown> | undefined)?.[f], current[f]);
-      if (!moved || keepMine.includes(f)) values[f] = row.values[f];
+      if (!moved.has(f) || keepMine.includes(f)) values[f] = row.values[f];
     }
     if (!Object.keys(values).length) {
       await this.drop(row, current);
@@ -548,8 +613,10 @@ export class WorldSession {
     row.state = 'waiting';
     row.error = undefined;
     await db.putOutboxRow(this.id, row);
-    this.truth.set(current.id, current);
-    await db.applyElements(this.id, [current]);
+    if (this.isNewer(current)) {
+      this.truth.set(current.id, current);
+      await db.applyElements(this.id, [current]);
+    }
     this.rebuild();
     this.emit();
     void this.flush();
@@ -557,8 +624,9 @@ export class WorldSession {
 
   /** Drop an edit (take theirs, or let a refused change go). */
   async drop(row: OutboxRow, theirs?: OwElement): Promise<void> {
-    await db.settleOutboxRow(this.id, row.seq!, theirs ?? null);
-    if (theirs) this.truth.set(theirs.id, theirs);
+    const take = theirs && this.isNewer(theirs) ? { ...theirs, type: theirs.type || row.type } : null;
+    await db.settleOutboxRow(this.id, row.seq!, take);
+    if (take) this.truth.set(take.id, take);
     this.outbox = this.outbox.filter((r) => r !== row);
     this.rebuild();
     this.emit();

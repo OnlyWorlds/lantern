@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
         const res = await fetch(path, { cache: 'reload' });
         // Never store a redirect or an error under a precache path.
         if (!res.ok || res.redirected) throw new Error(`precache refused ${path}: ${res.status}`);
-        await cache.put(path === '/index.html' ? '/' : path, res);
+        await cache.put(path, res);
       }
     })(),
   );

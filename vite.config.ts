@@ -36,7 +36,9 @@ function lanternWorker(): Plugin {
       const files = walk(outDir)
         .map((p) => relative(outDir, p).split(sep).join('/'))
         .filter((p) => !NOT_PRECACHED.has(p) && !p.endsWith('.map'))
-        .map((p) => '/' + p)
+        // Pages answers /index.html with a 308 to /, and the worker refuses a redirect: the shell
+        // is precached as "/" itself (probed on the preview, 2026-10-12).
+        .map((p) => (p === 'index.html' ? '/' : '/' + p))
         .sort();
       const sw = readFileSync('sw/sw.js', 'utf8')
         .replace('__BUILD_ID__', BUILD_ID)

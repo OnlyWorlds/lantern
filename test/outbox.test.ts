@@ -26,6 +26,15 @@ class FakeKeel {
   offline = false;
   calls: string[] = [];
   resyncOnce = false;
+  /** Writes wait on this before answering (a send held in flight). */
+  gate: Promise<void> | null = null;
+  /** The next write is applied, then its answer is lost, and the network stays down. */
+  dropAnswerOnce = false;
+  /** The next write answers this error instead. */
+  nextError: { status: number; code: string } | null = null;
+  /** A walk from zero fails (a resync whose walk drops). */
+  failZeroWalk = false;
+  idem = new Map<string, string>();
 
   put(el: Omit<El, 'change_seq'>): El {
     const full = { ...el, change_seq: ++this.seq } as El;
@@ -54,6 +63,7 @@ class FakeKeel {
 
     if (path === '/world') return this.json(200, { id: 'w1', name: 'Fake world' });
     if (path === '/changes') {
+      if (this.failZeroWalk && !url.searchParams.get('since')) throw new TypeError('Failed to fetch');
       if (this.resyncOnce && url.searchParams.get('since')) {
         this.resyncOnce = false;
         return this.err(409, 'resync_required');
@@ -69,9 +79,31 @@ class FakeKeel {
     if (!m) return this.err(404, 'not_found');
     const [, type, id] = m;
     const body = init.body ? JSON.parse(String(init.body)) : {};
+    if (method !== 'GET') {
+      if (this.gate) await this.gate;
+      if (this.nextError) {
+        const e = this.nextError;
+        this.nextError = null;
+        return this.err(e.status, e.code);
+      }
+    }
+    const answer = (r: Response): Response => {
+      if (method !== 'GET' && this.dropAnswerOnce) {
+        this.dropAnswerOnce = false;
+        this.offline = true;
+        throw new TypeError('Failed to fetch');
+      }
+      return r;
+    };
     if (method === 'POST') {
+      const key = headers.get('Idempotency-Key');
+      if (key && this.idem.has(key)) {
+        if (this.idem.get(key) !== String(init.body)) return this.err(409, 'idempotency_error');
+        return this.json(201, this.els.get(body.id));
+      }
+      if (key && !this.els.has(body.id)) this.idem.set(key, String(init.body));
       if (this.els.has(body.id)) return this.err(409, 'id_conflict');
-      return this.json(201, this.put({ ...body, type }));
+      return answer(this.json(201, this.put({ ...body, type })));
     }
     if (method === 'GET') {
       const el = this.els.get(id);
@@ -84,7 +116,7 @@ class FakeKeel {
       if (ifMatch !== null && Number(ifMatch.replace(/"/g, '')) !== el.change_seq) {
         return this.err(412, 'precondition_failed', { current: el });
       }
-      return this.json(200, this.put({ ...el, ...body }));
+      return answer(this.json(200, this.put({ ...el, ...body })));
     }
     return this.err(405, 'method_not_allowed');
   };
@@ -323,5 +355,131 @@ describe('outbox', () => {
     forgetSession(s.id);
     const s2 = await openWorld(s.id);
     expect(s2.outbox[0].state).toBe('waiting');
+  });
+
+  // ---------- the gate's findings (S394), each a case ----------
+
+  it('an edit made while its create is in flight follows it, and both land', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    setSessionPin(s.id, '1234');
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    const id = await s.create('narrative', { name: 'A page' });
+    const flushing = s.flush();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.outbox[0].state).toBe('sending');
+    await s.edit(id, { description: 'Written while it was sending' });
+    expect(s.outbox.length).toBe(2);
+    expect(s.outbox[1].op).toBe('patch');
+    keel.gate = null;
+    release();
+    await flushing;
+    await s.flush();
+    expect(keel.els.get(id)).toMatchObject({ name: 'A page', description: 'Written while it was sending' });
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('an edit made while a patch is in flight is no conflict with itself', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setSessionPin(s.id, '1234');
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    await s.edit('a', { name: 'Ada Vell' });
+    await new Promise((r) => setTimeout(r, 20));
+    await s.edit('a', { name: 'Ada Vell of Tharn' });
+    keel.gate = null;
+    release();
+    await s.flush();
+    await s.flush();
+    expect(s.needsYouCount()).toBe(0);
+    expect(keel.els.get('a')?.name).toBe('Ada Vell of Tharn');
+  });
+
+  it('a patch that landed but lost its answer settles quietly on the re-send', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setSessionPin(s.id, '1234');
+    keel.dropAnswerOnce = true;
+    await s.edit('a', { name: 'Ada Vell' });
+    await s.flush();
+    expect(s.waitingCount()).toBe(1);
+    keel.offline = false;
+    await s.flush();
+    expect(keel.calls.filter((c) => c.startsWith('PATCH')).length).toBe(2);
+    expect(s.needsYouCount()).toBe(0);
+    expect(s.outbox.length).toBe(0);
+    expect(s.get('a')?.name).toBe('Ada Vell');
+  });
+
+  it('a create that landed but lost its answer, then edited: the edit is sent as a patch', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    setSessionPin(s.id, '1234');
+    keel.dropAnswerOnce = true;
+    const id = await s.create('narrative', { name: 'A page' });
+    await s.flush();
+    expect(s.outbox[0].state).toBe('waiting');
+    await s.edit(id, { description: 'Added after' });
+    expect(s.outbox.length).toBe(1); // merged into the waiting create
+    keel.offline = false;
+    await s.flush();
+    expect(keel.calls.filter((c) => c.startsWith('PATCH')).length).toBe(1);
+    expect(keel.els.get(id)).toMatchObject({ name: 'A page', description: 'Added after' });
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('busy, throttled or a server fault: the row waits and nothing after it is sent', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    setSessionPin(s.id, '1234');
+    for (const status of [429, 503, 502]) {
+      keel.offline = true;
+      await s.edit('a', { name: `Ada ${status}` });
+      await s.edit('b', { name: `Bo ${status}` });
+      await s.flush();
+      keel.offline = false;
+      keel.nextError = { status, code: 'x' };
+      const before = keel.calls.filter((c) => c.startsWith('PATCH')).length;
+      await s.flush();
+      expect(s.outbox.filter((r) => r.state === 'refused').length).toBe(0);
+      expect(keel.calls.filter((c) => c.startsWith('PATCH')).length - before).toBe(1);
+      await s.flush();
+      expect(s.outbox.length).toBe(0);
+    }
+  });
+
+  it('a feed page older than a settled send does not put the old copy back', async () => {
+    // The race: the feed carries another hand's edit (seq 2) while my send, re-sent on that copy,
+    // settles at seq 3. Applying the page after the settle would put seq 2 back.
+    keel.put({ id: 'a', type: 'character', name: 'Ada', age: 50 });
+    const s = await freshWorld();
+    await s.pull();
+    const theirs = keel.put({ ...keel.els.get('a')!, age: 51 });
+    setSessionPin(s.id, '1234');
+    await s.edit('a', { name: 'Ada Vell' });
+    await s.flush();
+    expect(s.get('a')).toMatchObject({ name: 'Ada Vell', change_seq: 3 });
+    keel.els.set('a', { ...theirs }); // the feed still answers with seq 2
+    await s.pull();
+    expect(s.get('a')).toMatchObject({ name: 'Ada Vell', change_seq: 3 });
+  });
+
+  it('a resync whose walk drops keeps the old copy whole', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'location', name: 'Tharn' });
+    const s = await freshWorld();
+    await s.pull();
+    keel.resyncOnce = true;
+    keel.failZeroWalk = true;
+    await s.pull();
+    expect(s.get('a')?.name).toBe('Ada');
+    expect(s.get('b')?.name).toBe('Tharn');
+    expect(s.status).toBe('offline');
   });
 });

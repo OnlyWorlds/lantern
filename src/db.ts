@@ -34,6 +34,8 @@ export interface OutboxRow {
   id: string;
   /** The element as it was when the edit started (patch only): the base the conflict rule compares. */
   base?: OwElement;
+  /** The edit follows an unsettled row for the same element: its base is taken when it is sent. */
+  lateBase?: boolean;
   /** The fields this edit sets. */
   values: Record<string, unknown>;
   idempotencyKey?: string;
@@ -78,6 +80,9 @@ function app(): Promise<IDBDatabase> {
   appDb ??= open('lantern', 1, (db) => {
     db.createObjectStore('worlds', { keyPath: 'id' });
     db.createObjectStore('kv');
+  }).catch((e) => {
+    appDb = null; // a blocked or failed open is tried again next time, not cached
+    throw e;
   });
   return appDb;
 }
@@ -146,6 +151,9 @@ function world(id: string): Promise<IDBDatabase> {
     p = open(worldDbName(id), 1, (db) => {
       db.createObjectStore('elements', { keyPath: 'id' });
       db.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true });
+    }).catch((e) => {
+      worldDbs.delete(id);
+      throw e;
     });
     worldDbs.set(id, p);
   }
