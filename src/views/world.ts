@@ -417,6 +417,7 @@ export function elementView(s: WorldSession, id: string): View {
           )
         : '',
       h('div', { class: 'el-head' }, avatar, headText),
+      picture(el),
       descNode ?? '',
       h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? ''),
       toggle ?? '',
@@ -425,6 +426,15 @@ export function elementView(s: WorldSession, id: string): View {
   };
   refresh();
   return { el: main, refresh };
+}
+
+/** An element's picture, large: a photographed page has to be readable. Tap opens it whole. */
+function picture(el: { image_url?: unknown; name?: string }): HTMLElement | '' {
+  const src = typeof el.image_url === 'string' && /^(https:|data:image\/)/.test(el.image_url) ? el.image_url : '';
+  if (!src) return '';
+  const img = h('img', { class: 'picture', src, alt: el.name ? `The picture of ${el.name}` : 'The picture', loading: 'lazy' });
+  if (src.startsWith('https:')) return h('a', { href: src, target: '_blank', rel: 'noopener' }, img);
+  return img;
 }
 
 export function notFound(text: string, back = '#/'): HTMLElement {

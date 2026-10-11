@@ -49,7 +49,8 @@ function conflictCard(s: WorldSession, row: OutboxRow): HTMLElement {
     const send = h('button', { class: 'btn btn-primary', type: 'button' }, 'Use these');
     send.addEventListener('click', () => void s.resolve(row, [...mine]));
     card.replaceChildren(
-      h('b', null, elName(current)),
+      // Named as it was before either change, so the title is neither side's new name.
+      h('b', null, elName(row.base ?? current)),
       h('p', { class: 'dim small', style: 'margin:0' }, 'Someone changed this while your edit waited. Choose which to keep.'),
       ...pairs,
       quiet.length ? h('p', { class: 'muted small', style: 'margin:0' }, `Also sending: ${quiet.map(fieldLabel).join(', ')}`) : '',
