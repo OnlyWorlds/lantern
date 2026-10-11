@@ -41,6 +41,18 @@ export function topbar(title: string | Node, backHref?: string, ...actions: Node
   );
 }
 
+/** The world's two places: its home (find, the types) and Ask. */
+export function tabbar(worldId: string, on: 'world' | 'ask'): HTMLElement {
+  const tab = (id: 'world' | 'ask', label: string, href: string, ic: string) =>
+    h('a', { href, class: on === id ? 'on' : null, 'aria-current': on === id ? 'page' : null }, icon(ic, 22), label);
+  return h(
+    'nav',
+    { class: 'tabbar', 'aria-label': 'World' },
+    tab('world', 'World', `#/w/${worldId}`, 'search'),
+    tab('ask', 'Ask', `#/w/${worldId}/ask`, 'spark'),
+  );
+}
+
 let toastTimer: number | undefined;
 export function toast(text: string): void {
   document.querySelector('.toast')?.remove();

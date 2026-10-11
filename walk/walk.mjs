@@ -82,6 +82,27 @@ async function walk(engine, deviceName, tag) {
     await shot('empty-fields');
   }
 
+  // 4b. Ask, from the phone's own copy
+  await page.goto(`${BASE}/#/`);
+  await page.waitForSelector('[data-screen="worlds"]');
+  await page.locator('.world-card').first().tap();
+  await page.waitForSelector('.tabbar');
+  await page.getByRole('link', { name: 'Ask' }).tap();
+  await page.waitForSelector('[data-screen="ask"]');
+  await page.locator('[data-screen="ask"] input').tap();
+  await page.keyboard.type('who does Snoot quarrel with?', { delay: 20 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  const askHits = await page.locator('[data-screen="ask"] .el-row').count();
+  const askFirst = await page.locator('[data-screen="ask"] .el-row b').first().innerText().catch(() => '');
+  check(tag, askHits > 0, `Ask answers with ${askHits} sources, first "${askFirst}"`);
+  await shot('ask');
+  await page.locator('[data-screen="ask"] input').fill('zqxv wobblequark');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  check(tag, (await page.locator('[data-answer="none"]').count()) === 1, 'a question the world cannot answer gets "Your world does not say."');
+  await shot('ask-none');
+
   // 5. A type's list
   await page.goto(`${BASE}/#/`);
   await page.waitForSelector('[data-screen="worlds"]');

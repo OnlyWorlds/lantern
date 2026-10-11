@@ -14,7 +14,7 @@ import {
   typePlural,
   TYPES,
 } from '../schema';
-import { elName, elRow, errorText, sheet, topbar, typeChip } from '../ui';
+import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
 import { editField, newElementSheet } from './edit';
 
 export interface View {
@@ -198,7 +198,7 @@ export function homeView(s: WorldSession): View {
   refresh();
   const el = h(
     'main',
-    { class: 'screen', 'data-screen': 'home' },
+    { class: 'screen has-tabbar', 'data-screen': 'home' },
     head,
     banner,
     h('label', { class: 'search' }, icon('search', 20), input),
@@ -206,6 +206,7 @@ export function homeView(s: WorldSession): View {
     s.canWrite
       ? h('a', { class: 'fab', href: `#/w/${s.id}/capture`, 'aria-label': 'Catch an idea' }, icon('plus', 30, 2.2))
       : null,
+    tabbar(s.id, 'world'),
   );
   return { el, refresh };
 }

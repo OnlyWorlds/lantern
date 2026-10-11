@@ -14,6 +14,7 @@ import { keyView, newWorldView, settingsView, signInView, welcomeView, worldsVie
 import { elementView, homeView, notFound, setBehindReload, typeView, type View } from './views/world';
 import { captureView } from './views/capture';
 import { outboxView } from './views/outbox';
+import { askView } from './views/ask';
 import { isType } from './schema';
 import { errorText } from './ui';
 
@@ -62,6 +63,7 @@ async function route(): Promise<void> {
     else if (sub === 'e' && parts[3]) mount(elementView(s, parts[3]), s);
     else if (sub === 'capture' && s.canWrite) mount(captureView(s), s);
     else if (sub === 'outbox') mount(outboxView(s), s);
+    else if (sub === 'ask') mount(askView(s), s);
     else mount(notFound('That page is not in Lantern.', `#/w/${s.id}`));
     return;
   }

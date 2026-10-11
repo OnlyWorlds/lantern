@@ -3,7 +3,7 @@
 // elements (Skeld's convention, #3409).
 import { h } from '../dom';
 import { icon } from '../icons';
-import { preparePhoto } from '../photo';
+import { preparePhoto } from '@onlyworlds/sdk';
 import { errorText, go, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
@@ -59,7 +59,7 @@ export function captureView(s: WorldSession): View {
     err.textContent = '';
     photoBtn.disabled = true;
     try {
-      photo = await preparePhoto(f);
+      photo = (await preparePhoto(f)).blob;
       showPhoto();
     } catch (e) {
       err.textContent = errorText(e);

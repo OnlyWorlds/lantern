@@ -788,3 +788,9 @@ h2 {
   color: var(--lan-ink-faint);
   text-align: center;
 }
+
+/* Ask: rows run several lines; the chip sits by the name. */
+[data-screen="ask"] .el-row {
+  align-items: flex-start;
+  padding: 12px 4px;
+}

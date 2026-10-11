@@ -8,6 +8,8 @@ import {
   OwApiError,
   detectKeyKind,
   isDemoKey,
+  buildWorldIndex,
+  type OwWorldIndex,
   kindCanWrite,
   type OwElement,
 } from '@onlyworlds/sdk';
@@ -86,6 +88,7 @@ export class WorldSession {
   needPin = false;
   private listeners = new Set<() => void>();
   private backlinkCache: Map<string, string[]> | null = null;
+  private lookupCache: OwWorldIndex<OwElement> | null = null;
   private pulling: Promise<void> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
   private queuedFlush: Promise<void> | null = null;
@@ -146,6 +149,13 @@ export class WorldSession {
       this.view.set(row.id, { ...cur, ...row.values, type: row.type, id: row.id });
     }
     this.backlinkCache = null;
+    this.lookupCache = null;
+  }
+
+  /** Kael's lookup index (SDK buildWorldIndex) over what the screen shows, built on first ask. */
+  lookupIndex(): OwWorldIndex<OwElement> {
+    this.lookupCache ??= buildWorldIndex(this.view.values());
+    return this.lookupCache;
   }
 
   get(id: string): OwElement | undefined {
