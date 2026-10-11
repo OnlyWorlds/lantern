@@ -50,6 +50,8 @@ function lanternWorker(): Plugin {
 export default defineConfig({
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [lanternWorker()],
+  // mpa: unknown paths 404 in dev and preview, as on Pages with a 404.html (the worker's 404 rule is walked against it).
+  appType: 'mpa',
   build: { target: 'es2022' },
   server: { port: 5180, strictPort: true },
   preview: { port: 5181, strictPort: true },

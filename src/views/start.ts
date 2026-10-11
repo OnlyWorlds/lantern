@@ -108,7 +108,7 @@ export function signInView(): HTMLElement {
     btn.disabled = true;
     try {
       await signIn(input.value);
-      go('#/worlds');
+      go('#/worlds', true);
     } catch (ex) {
       err.textContent = errorText(ex);
     } finally {
@@ -165,7 +165,7 @@ export function keyView(): HTMLElement {
     try {
       const rec = await openWithKey(key.value, pin.value.trim() || undefined);
       if (pin.value.trim()) setSessionPin(rec.id, pin.value.trim());
-      go(`#/w/${rec.id}`);
+      go(`#/w/${rec.id}`, true);
     } catch (ex) {
       const m = errorText(ex);
       err.textContent = /PIN/i.test(m) ? 'That PIN does not open this world.' : m;
@@ -196,7 +196,7 @@ export function newWorldView(): HTMLElement {
     const rec: db.WorldRecord = { id: uuid7(), name: n, kind: 'local', addedAt: new Date().toISOString(), count: 0 };
     await db.putWorldRecord(rec);
     void db.persistStorage();
-    go(`#/w/${rec.id}`);
+    go(`#/w/${rec.id}`, true);
   });
   return h(
     'main',

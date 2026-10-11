@@ -84,7 +84,7 @@ export function captureView(s: WorldSession): View {
       const id = await s.create('narrative', values, photo ?? undefined);
       toast(s.isLocal || navigator.onLine ? 'Kept in Unsorted.' : 'Kept on this phone. It sends when you have signal.');
       if (photoUrl) URL.revokeObjectURL(photoUrl);
-      go(`#/w/${s.id}/e/${id}`);
+      go(`#/w/${s.id}/e/${id}`, true);
     } catch (ex) {
       err.textContent = errorText(ex);
       saveBtn.disabled = false;

@@ -4,8 +4,10 @@ import { h } from './dom';
 import { icon } from './icons';
 import { typeAbbr, typeColor, typeLabel } from './schema';
 
-export function go(hash: string): void {
+/** replace: the screen we leave (a form just submitted) drops out of Back's history. */
+export function go(hash: string, replace = false): void {
   if (location.hash === hash) window.dispatchEvent(new HashChangeEvent('hashchange'));
+  else if (replace) location.replace(hash);
   else location.hash = hash;
 }
 

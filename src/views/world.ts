@@ -322,7 +322,9 @@ export function elementView(s: WorldSession, id: string): View {
     } else avatar.textContent = initials(elName(el));
 
     const kind = [typeLabel(el.type), el.supertype, el.subtype].filter(Boolean).join(' · ');
-    const nameH = h('h1', null, elName(el), wait('name'));
+    // A caught line can be a sentence long: the title steps down so it does not fill the screen.
+    const len = [...elName(el)].length;
+    const nameH = h('h1', { style: len > 44 ? 'font-size:1.2rem' : len > 26 ? 'font-size:1.4rem' : null }, elName(el), wait('name'));
     const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind));
     if (editable) {
       headText.style.cursor = 'pointer';
@@ -336,7 +338,8 @@ export function elementView(s: WorldSession, id: string): View {
 
     const rows: HTMLElement[] = [];
     const empty: string[] = [];
-    for (const f of ['supertype', 'subtype']) {
+    // The head already says the kind; the rows are only there to tap and change it.
+    for (const f of editable ? ['supertype', 'subtype'] : []) {
       const v = el[f];
       if (isEmptyValue(v)) empty.push(f);
       else rows.push(tapRow(f, h('div', { class: 'frow' }, h('span', { class: 'k' }, fieldLabel(f), wait(f)), h('span', { class: 'v' }, String(v)))));
