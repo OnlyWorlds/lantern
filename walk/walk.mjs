@@ -189,6 +189,7 @@ async function walk(engine, deviceName, tag) {
   // 7b. Save a copy, and open a world file (a real Atlas folder, zipped)
   await page.goto(`${BASE}/#/worlds`);
   await page.waitForSelector('.local-group');
+  await shot('worlds-local');
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 10000 }).catch(() => null),
     page.getByRole('button', { name: 'Save a copy' }).tap(),

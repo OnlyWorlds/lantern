@@ -18,7 +18,8 @@ import {
 import { setSessionPin, forgetSession } from '../world';
 import { uuid7 } from '../uuid7';
 import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
-import { errorText, go, isStandalone, toast, topbar } from '../ui';
+import { PinNeeded, putOnline } from '../online';
+import { errorText, go, isStandalone, sheet, toast, topbar } from '../ui';
 import { applyTheme, currentTheme, BUILD_ID } from '../app-state';
 
 export function welcomeView(): HTMLElement {
@@ -281,6 +282,58 @@ function saveCopyButton(rec: db.WorldRecord): HTMLElement {
   return b;
 }
 
+function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
+  const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Put it online');
+  b.addEventListener('click', () => {
+    if (!signedIn) {
+      toast('Sign in first, then put it online.');
+      go('#/signin');
+      return;
+    }
+    sheet((close) => {
+      const pin = h('input', { class: 'input', type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: '4', 'aria-label': 'PIN' });
+      const step = h('p', { class: 'muted small', role: 'status', style: 'margin:0' });
+      const err = h('p', { class: 'error', role: 'alert' });
+      const go1 = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Put it online');
+      const form = h('form', { class: 'stack' }, h('label', { class: 'field-label' }, 'Your PIN', pin), step, err, go1);
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.textContent = '';
+        if (!/^\d{4}$/.test(pin.value.trim())) {
+          err.textContent = 'Four digits.';
+          return;
+        }
+        go1.disabled = true;
+        try {
+          const id = await putOnline(rec.id, pin.value.trim(), (t) => (step.textContent = t));
+          close();
+          toast(`${rec.name} is online. Atlas opens it too.`);
+          go(`#/w/${id}`, true);
+        } catch (ex) {
+          step.textContent = '';
+          err.textContent =
+            ex instanceof PinNeeded
+              ? 'Your account has no PIN yet: these four digits become it (from 1000 to 9999).'
+              : /PIN|credential/i.test(errorText(ex))
+                ? 'That PIN does not match your account.'
+                : errorText(ex);
+          go1.disabled = false;
+        }
+      });
+      return [
+        h('h2', null, `Put ${rec.name} online`),
+        h(
+          'p',
+          { class: 'dim', style: 'margin:0' },
+          'It becomes a world on your account, the same one Atlas opens, and this phone keeps working on it. The four digits are your PIN for changes; if your account has none yet, these become it.',
+        ),
+        form,
+      ];
+    }, 'Put it online');
+  });
+  return b;
+}
+
 function openFileButton(): HTMLElement {
   const input = h('input', { type: 'file', accept: '.zip,application/zip', style: 'display:none', 'aria-label': 'A world file' });
   const b = h('button', { class: 'btn', type: 'button' }, 'Open a world file', input);
@@ -370,7 +423,7 @@ export function worldsView(): HTMLElement {
           'div',
           { class: 'stack' },
           h('p', { class: 'section-label' }, 'On this phone only'),
-          ...local.map((r) => h('div', { class: 'local-group' }, worldCard(r, 0), saveCopyButton(r))),
+          ...local.map((r) => h('div', { class: 'local-group' }, worldCard(r, 0), h('div', { class: 'row-gap' }, saveCopyButton(r), putOnlineButton(r, !!token)))),
         ),
       );
     }

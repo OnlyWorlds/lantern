@@ -20,6 +20,8 @@ export interface WorldRecord {
   /** The /changes cursor: opaque, stored verbatim. */
   cursor?: string;
   lastSync?: string;
+  /** Put it online, under way: the account world already made, and the bulk's key, so a retry repeats nothing. */
+  pendingOnline?: { serverId: string; key: string; bulkKey: string };
   /** A world on this phone only: when a world file was last saved from it. */
   lastCopy?: string;
   addedAt: string;
