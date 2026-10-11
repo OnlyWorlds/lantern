@@ -1,5 +1,5 @@
 // Inside a world: its home (find, the types), a type's list, an element's page.
-import { OwV2Client } from '@onlyworlds/sdk';
+import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
@@ -16,11 +16,14 @@ import {
 } from '../schema';
 import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
 import { editField, newElementSheet } from './edit';
+import { placesOf, type Place } from '../maps';
 
 export interface View {
   el: HTMLElement;
   /** Called when the world changes; the view refreshes without touching what the user is typing in. */
   refresh?: () => void;
+  /** Called when the screen is left: release what the view holds (a map). */
+  destroy?: () => void;
 }
 
 // ---------- status lines shared by the world's screens ----------
@@ -424,6 +427,7 @@ export function elementView(s: WorldSession, id: string): View {
           )
         : '',
       h('div', { class: 'el-head' }, avatar, headText),
+      mapLinks(s, el),
       picture(el),
       descNode ?? '',
       h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? ''),
@@ -459,6 +463,24 @@ function playerHome(s: WorldSession): (Node | string)[] {
         )
       : '',
   ];
+}
+
+export function mapHref(worldId: string, p: Place): string {
+  const q = p.pin ? `?pin=${p.pin}` : p.marker ? `?marker=${p.marker}` : p.zone ? `?zone=${p.zone}` : '';
+  return `#/w/${worldId}/map/${p.map}${q}`;
+}
+
+/** "Show on map": one button per map this element is on (only maps with a picture online). */
+function mapLinks(s: WorldSession, el: OwElement): HTMLElement | '' {
+  const places = placesOf(s, el);
+  if (!places.length) return '';
+  const label = (p: Place) =>
+    el.type === 'map' ? 'Open the map' : places.length > 1 ? `On ${elName(s.get(p.map))}` : 'Show on map';
+  return h(
+    'div',
+    { class: 'chips map-links' },
+    ...places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p))),
+  );
 }
 
 /** An element's picture, large: a photographed page has to be readable. Tap opens it whole. */

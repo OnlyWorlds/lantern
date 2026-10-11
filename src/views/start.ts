@@ -336,19 +336,26 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
 
 function openFileButton(): HTMLElement {
   const input = h('input', { type: 'file', accept: '.zip,application/zip', style: 'display:none', 'aria-label': 'A world file' });
-  const b = h('button', { class: 'btn', type: 'button' }, 'Open a world file', input);
+  const label = h('span', null, 'Open a world file');
+  const b = h('button', { class: 'btn', type: 'button' }, label, input);
   b.addEventListener('click', (e) => {
-    if (e.target !== input) input.click();
+    if (e.target !== input && !b.disabled) input.click();
   });
   input.addEventListener('change', async () => {
     const f = input.files?.[0];
     input.value = '';
     if (!f) return;
+    // A big world takes a while to store (seconds in WebKit): say so, and take no second file meanwhile.
+    b.disabled = true;
+    label.textContent = 'Opening the world file…';
     try {
       const id = await openWorldFile(new Uint8Array(await f.arrayBuffer()));
       go(`#/w/${id}`);
     } catch (e) {
       toast(errorText(e));
+    } finally {
+      b.disabled = false;
+      label.textContent = 'Open a world file';
     }
   });
   return b;

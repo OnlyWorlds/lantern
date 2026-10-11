@@ -803,3 +803,144 @@ h2 {
   align-items: flex-start;
   padding: 12px 4px;
 }
+
+/* ---------- a map (read only) ---------- */
+
+.map-links {
+  margin-top: -6px;
+}
+
+.map-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--lan-bg);
+}
+
+.map-box {
+  position: absolute;
+  inset: 0;
+  background: var(--lan-surface);
+}
+
+.map-top {
+  position: absolute;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 10px) 12px 18px;
+  background: linear-gradient(var(--lan-bg), transparent);
+  pointer-events: none;
+}
+
+.map-top > * {
+  pointer-events: auto;
+}
+
+.map-back {
+  background: var(--lan-surface);
+  color: var(--lan-ink);
+}
+
+.map-title {
+  font-family: var(--lan-font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--lan-ink);
+  text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-note {
+  position: absolute;
+  z-index: 1000;
+  left: 50%;
+  top: 45%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--lan-surface);
+  color: var(--lan-ink-dim);
+  max-width: calc(100vw - 40px);
+  text-align: center;
+}
+
+.map-note[hidden],
+.map-card[hidden] {
+  display: none;
+}
+
+.map-card {
+  position: absolute;
+  z-index: 1000;
+  left: 12px;
+  right: 72px;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 14px;
+  background: var(--lan-surface);
+  border: 1px solid var(--lan-border);
+}
+
+.map-card .label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-pin-dom {
+  border-radius: 50%;
+  background: var(--lan-accent);
+  border: 1.5px solid var(--lan-bg);
+}
+
+.map-screen .leaflet-container {
+  background: var(--lan-surface);
+  font-family: var(--lan-font-body);
+}
+
+.map-screen .leaflet-bar a {
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  background: var(--lan-surface);
+  color: var(--lan-ink);
+  border-color: var(--lan-border);
+}
+
+.map-screen .leaflet-bottom.leaflet-right {
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+.map-screen .leaflet-bar a.leaflet-disabled {
+  background: var(--lan-surface);
+  color: var(--lan-ink-faint);
+  opacity: 0.5;
+}
+
+/* Clusters (past a thousand pins): one look at every size, the count in the body font. */
+.map-screen .marker-cluster-small,
+.map-screen .marker-cluster-medium,
+.map-screen .marker-cluster-large {
+  background-color: color-mix(in srgb, var(--lan-accent) 35%, transparent);
+}
+
+.map-screen .marker-cluster-small div,
+.map-screen .marker-cluster-medium div,
+.map-screen .marker-cluster-large div {
+  background-color: var(--lan-accent);
+  color: var(--lan-bg);
+  font: 700 12px/30px var(--lan-font-body);
+}

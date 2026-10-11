@@ -53,8 +53,66 @@ describe('world files', () => {
     await db.removeWorld('55a9b4d5-d203-4e80-b9f3-91fff436ff75');
     const id = await openWorldFile(zip);
     const els = await db.allElements(id);
-    const onDisk = files.filter((f) => /^elements\/[a-z]+\/[^/]+\.json$/.test(f.path)).length;
+    const onDisk = files.filter((f) => /^(elements|spatial)\/[a-z]+\/[^/]+\.json$/.test(f.path)).length;
     expect(els.length).toBe(onDisk);
     expect(els.find((e) => e.name === 'Admiral Fluffington')?.type).toBe('character');
+  });
+
+  it("opens an Atlas world's maps, pins, zones and markers (spatial/, Atlas's map_id spelling)", async () => {
+    const dir = 'C:/Users/Titus/Desktop/TESTOWFOLDER/onlyworlds-atlas/tuvsh-ul-019f6295';
+    let files: { path: string; data: Uint8Array }[];
+    try {
+      const walk = (d: string, rel = ''): { path: string; data: Uint8Array }[] =>
+        readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+          e.isDirectory() ? walk(join(d, e.name), `${rel}${e.name}/`) : [{ path: `${rel}${e.name}`, data: new Uint8Array(readFileSync(join(d, e.name))) }],
+        );
+      files = walk(dir).filter((f) => !f.path.startsWith('media/'));
+    } catch {
+      return; // the Captain's folder is not on this machine
+    }
+    const count = (t: string) => files.filter((f) => f.path.startsWith(`spatial/${t}/`) && f.path.endsWith('.json')).length;
+    expect(count('pin')).toBeGreaterThan(0); // the fixture fields the shape this test is about
+    const zip = writeWorldFile(files, 'tuvsh-ul-019f6295');
+    const read = readWorldFile(zip);
+    await db.removeWorld(read.worldId);
+    const id = await openWorldFile(zip);
+    const els = await db.allElements(id);
+    const of = (t: string) => els.filter((e) => e.type === t);
+    for (const t of ['map', 'pin', 'zone', 'marker']) expect(of(t).length).toBe(count(t));
+    const map = of('map')[0];
+    expect(of('pin').every((p) => p.map === map.id && !('map_id' in p))).toBe(true);
+    expect(of('marker').filter((m) => typeof m.zone === 'string').length).toBeGreaterThan(0);
+    expect(of('marker').some((m) => 'zone_id' in m)).toBe(false);
+  });
+
+  it("a file with both map and map_id lands where Atlas puts it; one id in both folders is one element (the gate, C2 C3)", async () => {
+    const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+    const wid = 'w0000000-0000-4000-8000-0000000000c2';
+    const pin = 'b2222222-0000-4000-8000-000000000001';
+    const zip = writeWorldFile(
+      [
+        { path: 'world.json', data: enc({ id: wid, name: 'Both names' }) },
+        { path: 'spatial/pin/a.json', data: enc({ id: pin, name: 'Here', map_id: 'NEW', map: 'OLD', x: 1, y: 2 }) },
+        { path: 'elements/pin/a.json', data: enc({ id: pin, name: 'Stale copy', map: 'OLD', x: 9, y: 9 }) },
+      ],
+      'both-names',
+    );
+    await db.removeWorld(wid);
+    const id = await openWorldFile(zip);
+    const els = await db.allElements(id);
+    expect(els).toHaveLength(1);
+    expect(els[0]).toMatchObject({ name: 'Here', map: 'NEW' });
+    expect('map_id' in els[0]).toBe(false);
+    expect((await db.getWorldRecord(id))?.count).toBe(1);
+  });
+
+  it('a saved world keeps its pins under spatial/, with the schema\'s link names', () => {
+    const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-000000000002', name: 'Pins', kind: 'local', addedAt: '' }, [
+      { id: 'b1111111-0000-4000-8000-000000000001', type: 'map', name: 'Sea' },
+      { id: 'b1111111-0000-4000-8000-000000000002', type: 'pin', name: 'Port', map: 'b1111111-0000-4000-8000-000000000001', x: 1, y: 2 },
+      { id: 'b1111111-0000-4000-8000-000000000003', type: 'location', name: 'Port' },
+    ]);
+    const paths = readWorldFile(bytes).files.map((f) => f.path).sort();
+    expect(paths).toEqual(['elements/location/port--00000003.json', 'spatial/map/sea--00000001.json', 'spatial/pin/port--00000002.json', 'world.json']);
   });
 });

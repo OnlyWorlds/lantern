@@ -15,6 +15,7 @@ import { elementView, homeView, notFound, setBehindReload, typeView, type View }
 import { captureView } from './views/capture';
 import { outboxView } from './views/outbox';
 import { askView } from './views/ask';
+import { mapView } from './views/map';
 import { isType } from './schema';
 import { errorText } from './ui';
 
@@ -28,13 +29,14 @@ let activeSession: WorldSession | null = null;
 function mount(view: View | HTMLElement, s?: WorldSession): void {
   cleanup?.();
   cleanup = null;
-  const v = view instanceof HTMLElement ? { el: view } : view;
+  const v: View = view instanceof HTMLElement ? { el: view } : view;
   app.replaceChildren(v.el);
   window.scrollTo(0, 0);
-  if (s && v.refresh) {
-    const refresh = v.refresh;
-    cleanup = s.subscribe(() => refresh());
-  }
+  const unsubscribe = s && v.refresh ? s.subscribe(v.refresh) : null;
+  cleanup = () => {
+    unsubscribe?.();
+    v.destroy?.();
+  };
 }
 
 async function route(): Promise<void> {
@@ -64,6 +66,10 @@ async function route(): Promise<void> {
     else if (sub === 'capture' && s.canWrite) mount(captureView(s), s);
     else if (sub === 'outbox') mount(outboxView(s), s);
     else if (sub === 'ask') mount(askView(s), s);
+    else if (sub === 'map' && parts[3]) {
+      const q = new URLSearchParams(query);
+      mount(mapView(s, { map: parts[3], pin: q.get('pin') ?? undefined, marker: q.get('marker') ?? undefined, zone: q.get('zone') ?? undefined }), s);
+    }
     else mount(notFound('That page is not in Lantern.', `#/w/${s.id}`));
     return;
   }

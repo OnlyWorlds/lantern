@@ -1,0 +1,204 @@
+// The map, walked on the demo world (Moppetopia: two maps with pictures online, pins, zones from
+// markers) as a phone taps it, both engines. Read only, so it runs against live keel safely.
+// Run: npm run build && (npx vite preview &) && node walk/map.mjs [webkit|chromium]
+import { chromium, webkit, devices } from 'playwright';
+import { mkdirSync } from 'node:fs';
+import { writeWorldFile } from '@onlyworlds/sdk';
+
+const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
+const API = 'https://www.onlyworlds.com/api/v2';
+const KEY = '0000000001';
+const OUT = 'walk/shots';
+mkdirSync(OUT, { recursive: true });
+const only = process.argv[2];
+let failures = 0;
+
+function check(tag, ok, what) {
+  console.log(`[${tag}] ${ok ? 'ok  ' : 'FAIL'} ${what}`);
+  if (!ok) failures++;
+}
+
+async function list(type) {
+  const r = await fetch(`${API}/${type}/?limit=500`, { headers: { 'API-Key': KEY } });
+  return (await r.json()).data;
+}
+
+// What the walk expects, read from keel itself, not written into the walk.
+const [maps, pins, markers] = await Promise.all([list('map'), list('pin'), list('marker')]);
+const overview = maps.find((m) => m.name === 'MoppetopiaMap');
+const placed = pins.find((p) => p.map === overview.id && p.element_id);
+const placedEl = (await list(placed.element_type)).find((e) => e.id === placed.element_id);
+const pinsOn = pins.filter((p) => p.map === overview.id).length;
+const zonesOn = new Set(markers.filter((m) => m.map === overview.id && m.zone).map((m) => m.zone)).size;
+console.log(`keel: ${overview.name} ${overview.width}x${overview.height}, ${pinsOn} pins, ${zonesOn} zones; walking to ${placedEl.name} (${placed.element_type})`);
+
+async function walk(engine, deviceName, tag) {
+  const browser = await engine.launch();
+  const ctx = await browser.newContext({ ...devices[deviceName] });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()));
+  page.on('requestfailed', (r) => errors.push('requestfailed: ' + r.url()));
+  let n = 0;
+  const shot = (name) => page.screenshot({ path: `${OUT}/map-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
+
+  await page.goto(BASE);
+  await page.waitForSelector('[data-screen="welcome"]');
+  await page.getByRole('button', { name: /Explore Moppetopia/ }).tap();
+  await page.waitForSelector('.type-tile', { timeout: 60000 });
+  await page.waitForFunction(() => !document.querySelector('.banner'), null, { timeout: 60000 }).catch(() => {});
+  const worldId = await page.evaluate(() => location.hash.split('/')[2]);
+
+  // 1. The placed element's page offers the map
+  await page.goto(`${BASE}/#/w/${worldId}/e/${placedEl.id}`);
+  await page.waitForSelector('[data-screen="element"] .el-head');
+  const links = await page.locator('.map-links a').allInnerTexts();
+  check(tag, links.length >= 1 && links.some((t) => /Show on map|On MoppetopiaMap/.test(t)), `the element page offers the map: ${JSON.stringify(links)}`);
+  await shot('element');
+
+  // 2. Show on map: the picture, the pins, the zones, centred on this pin
+  const link = page.locator('.map-links a', { hasText: links.length > 1 ? 'MoppetopiaMap' : 'Show on map' });
+  await link.tap();
+  await page.waitForSelector('[data-screen="map"] .leaflet-image-layer', { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('.leaflet-image-layer')?.complete && document.querySelector('.leaflet-image-layer').naturalWidth > 0, null, { timeout: 20000 });
+  await page.waitForTimeout(400);
+  const drawn = await page.evaluate(() => ({
+    circles: document.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive, .leaflet-overlay-pane path').length,
+    note: document.querySelector('.map-note:not([hidden])')?.textContent ?? '',
+    card: document.querySelector('.map-card:not([hidden])')?.textContent ?? '',
+    title: document.querySelector('.map-title')?.textContent ?? '',
+  }));
+  check(tag, drawn.title === overview.name, `the map is named: ${JSON.stringify(drawn.title)}`);
+  check(tag, !drawn.note, `no note over the map (${JSON.stringify(drawn.note)})`);
+  // pins (the focus drawn as two rings) + zones
+  check(tag, drawn.circles >= pinsOn + zonesOn, `${drawn.circles} paths drawn for ${pinsOn} pins and ${zonesOn} zones`);
+  check(tag, drawn.card.includes(placedEl.name), `the card names the pin: ${JSON.stringify(drawn.card)}`);
+  // The focus pin is at the centre of the screen.
+  const centred = await page.evaluate(() => {
+    const ring = [...document.querySelectorAll('.leaflet-overlay-pane path')].at(-1).getBoundingClientRect();
+    const box = document.querySelector('.map-box').getBoundingClientRect();
+    return { dx: Math.round(ring.x + ring.width / 2 - box.width / 2), dy: Math.round(ring.y + ring.height / 2 - box.height / 2) };
+  });
+  // Near an edge the bounds hold the view, so "centred" allows that slack.
+  check(tag, Math.abs(centred.dx) < 140 && Math.abs(centred.dy) < 260, `the pin sits near the centre (${centred.dx}, ${centred.dy})`);
+  await shot('map-focus');
+
+  // 3. A tap on empty water closes the card; a tap on another pin opens its own
+  const box = await page.locator('.map-box').boundingBox();
+  await page.touchscreen.tap(box.x + 8, box.y + box.height / 2);
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => document.querySelector('.map-card:not([hidden])')?.textContent ?? '');
+  check(tag, !after, `a tap far from any pin closes the card (${JSON.stringify(after)})`);
+
+  // 4. Zoom to the ceiling: the zoom-in button stops
+  for (let i = 0; i < 12; i++) {
+    const zin = page.locator('.leaflet-control-zoom-in');
+    if (await zin.evaluate((e) => e.classList.contains('leaflet-disabled'))) break;
+    await zin.tap();
+    await page.waitForTimeout(300);
+  }
+  check(tag, await page.locator('.leaflet-control-zoom-in').evaluate((e) => e.classList.contains('leaflet-disabled')), 'zoom in stops at the ceiling');
+  await shot('map-ceiling');
+
+  // 5. Open: from the card to the element; back returns to the map
+  await page.goto(`${BASE}/#/w/${worldId}/map/${overview.id}`);
+  await page.waitForSelector('[data-screen="map"] .leaflet-image-layer', { timeout: 20000 });
+  await page.waitForTimeout(400);
+  await shot('map-whole');
+  // A tap on a drawn pin (a circle: an arc path, fully filled) opens its card.
+  const dot = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.leaflet-overlay-pane path')].find((e) => /a\d/.test(e.getAttribute('d') ?? '') && e.getAttribute('fill-opacity') === '1');
+    const r = p?.getBoundingClientRect();
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+  });
+  check(tag, !!dot, 'a pin is drawn on the whole map');
+  if (dot) {
+    // A finger lands a little off the dot.
+    await page.touchscreen.tap(dot.x + 9, dot.y - 6);
+    await page.waitForTimeout(300);
+    const c = await page.evaluate(() => document.querySelector('.map-card:not([hidden])')?.textContent ?? '');
+    check(tag, /Open$/.test(c), `a tap beside a pin opens its card: ${JSON.stringify(c)}`);
+    await shot('map-tap');
+    await page.locator('.map-card a', { hasText: 'Open' }).tap();
+    await page.waitForSelector('[data-screen="element"]');
+    check(tag, true, 'Open on the card goes to the element');
+    await page.goBack();
+    await page.waitForSelector('[data-screen="map"] .leaflet-image-layer', { timeout: 20000 });
+    check(tag, true, 'Back returns to the map');
+  }
+
+  // 5b. The other map (wider than tall): the whole of it fits the phone
+  const space = maps.find((m) => m.id !== overview.id && m.image_url);
+  await page.goto(`${BASE}/#/w/${worldId}/map/${space.id}`);
+  await page.waitForFunction(() => document.querySelector('.leaflet-image-layer')?.complete && document.querySelector('.leaflet-image-layer').naturalWidth > 0, null, { timeout: 20000 });
+  await page.waitForTimeout(400);
+  const fits = await page.evaluate(() => {
+    const r = document.querySelector('.leaflet-image-layer').getBoundingClientRect();
+    return { w: Math.round(r.width), vw: innerWidth };
+  });
+  check(tag, fits.w <= fits.vw + 1 && fits.w > fits.vw * 0.8, `${space.name} opens whole (${fits.w} of ${fits.vw} px wide)`);
+  await shot('map-space');
+
+  // 6. A map with no picture shows a sentence, not a blank map
+  await page.goto(`${BASE}/#/w/${worldId}/map/not-a-map`);
+  await page.waitForSelector('main');
+  const none = await page.locator('main').innerText();
+  check(tag, /no picture online/.test(none), `a map without a picture says so: ${JSON.stringify(none.split('\n').at(-1))}`);
+
+  // 7. Past a thousand pins: clusters. A world file on this phone, the overview's picture, 1,200 pins.
+  const W = overview.width, H = overview.height;
+  const wid = '0f0f0f0f-0000-4000-8000-00000000c1a5';
+  const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const files = [
+    { path: 'world.json', data: enc({ id: wid, name: 'Cluster walk' }) },
+    { path: 'spatial/map/sea.json', data: enc({ id: 'c0000000-0000-4000-8000-000000000000', name: 'Sea', image_url: overview.image_url, width: W, height: H }) },
+  ];
+  for (let i = 0; i < 1200; i++) {
+    const id = `c0000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`;
+    files.push({ path: `spatial/pin/p${i}.json`, data: enc({ id, name: `Pin ${i}`, map_id: 'c0000000-0000-4000-8000-000000000000', x: Math.round(rnd() * W), y: Math.round(rnd() * H) }) });
+  }
+  const zip = Buffer.from(writeWorldFile(files, 'cluster-walk'));
+  await page.goto(`${BASE}/#/worlds`);
+  await page.waitForSelector('input[aria-label="A world file"]', { state: 'attached' });
+  await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'cluster-walk.zip', mimeType: 'application/zip', buffer: zip });
+  // WebKit on this machine stores 1,201 elements in about 18 s (Chromium: 0.1 s), so wait long.
+  const t0 = Date.now();
+  await page.waitForSelector('[data-screen="home"] .type-tile', { timeout: 90000 });
+  console.log(`[${tag}] (the world file opened in ${Date.now() - t0} ms)`);
+  await page.goto(`${BASE}/#/w/${wid}/map/c0000000-0000-4000-8000-000000000000`);
+  await page.waitForSelector('.marker-cluster', { timeout: 20000 });
+  const clusters = await page.locator('.marker-cluster').count();
+  check(tag, clusters > 0 && clusters < 300, `1,200 pins draw as ${clusters} clusters`);
+  await shot('map-clusters');
+  const z0 = await page.evaluate(() => document.querySelector('.leaflet-image-layer').getBoundingClientRect().width);
+  // The cluster nearest the middle (one at an edge can sit under the bar or the zoom buttons).
+  const mid = await page.evaluate(() => {
+    const cs = [...document.querySelectorAll('.marker-cluster')].map((e) => e.getBoundingClientRect());
+    const c = cs.sort((a, b) => Math.hypot(a.x - innerWidth / 2, a.y - innerHeight / 2) - Math.hypot(b.x - innerWidth / 2, b.y - innerHeight / 2))[0];
+    return { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+  });
+  await page.touchscreen.tap(mid.x, mid.y);
+  await page.waitForTimeout(800);
+  const z1 = await page.evaluate(() => document.querySelector('.leaflet-image-layer').getBoundingClientRect().width);
+  check(tag, z1 > z0, `a tap on a cluster zooms in (${Math.round(z0)} to ${Math.round(z1)} px)`);
+  // Leave a clustered map while it is still opening, twice: nothing may run after it (the gate, C1).
+  for (const wait of [30, 250]) {
+    await page.goto(`${BASE}/#/w/${wid}`);
+    await page.waitForSelector('[data-screen="home"]');
+    await page.evaluate(() => (location.hash = location.hash + '/map/c0000000-0000-4000-8000-000000000000'));
+    await page.waitForTimeout(wait);
+    await page.evaluate(() => history.back());
+  }
+  await page.waitForTimeout(1500);
+
+  check(tag, errors.length === 0, `no errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
+  await browser.close();
+}
+
+if (!only || only === 'chromium') await walk(chromium, 'Pixel 7', 'chromium');
+if (!only || only === 'webkit') await walk(webkit, 'iPhone 13', 'webkit');
+console.log(failures ? `${failures} FAILED` : 'all ok');
+process.exit(failures ? 1 : 0);
