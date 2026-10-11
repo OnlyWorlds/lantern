@@ -13,6 +13,9 @@ function gitSha(): string {
 
 const BUILD_ID = `${gitSha()}-${Date.now().toString(36)}`;
 
+/** The CSP has one home, public/_headers (what Pages serves); preview serves the same line so walks run under it. */
+const CSP = readFileSync('public/_headers', 'utf8').match(/Content-Security-Policy: (.+)/)?.[1]?.trim() ?? '';
+
 /** Files the host serves but the worker must never precache. */
 const NOT_PRECACHED = new Set(['sw.js', 'version.json', '_headers', '_redirects', '404.html']);
 
@@ -56,5 +59,5 @@ export default defineConfig({
   appType: 'mpa',
   build: { target: 'es2022' },
   server: { port: 5180, strictPort: true },
-  preview: { port: 5181, strictPort: true },
+  preview: { port: 5181, strictPort: true, headers: CSP ? { 'Content-Security-Policy': CSP } : {} },
 });
