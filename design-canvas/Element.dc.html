@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>An element</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#6fd0dc}a:hover{color:#a6e6ee}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #101218; color: #efe9dd; font-family: 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 16px; padding: 48px 20px 24px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<a href="Home.dc.html" aria-label="Back" style="width: 44px; height: 44px; display: flex; align-items: center; color: #efe9dd"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<div style="display: flex; gap: 8px">
+<a href="Lens.dc.html" style="font-size: 14px; border: 1px solid #2e3340; border-radius: 18px; padding: 10px 14px; text-decoration: none; color: #efe9dd">Who knows her</a>
+<button type="button" style="font: inherit; font-size: 14px; border: 1px solid #2e3340; background: transparent; color: #efe9dd; border-radius: 18px; padding: 10px 14px">Open in Atlas</button>
+</div>
+</div>
+<div style="display: flex; gap: 16px; align-items: center">
+<div style="width: 72px; height: 72px; border-radius: 16px; background: #3b3220; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #f0b44c; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 28px; font-weight: 700">AV</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 30px; line-height: 1.05; font-weight: 700">Ada Vell</h1>
+<span style="color: #a8a397; font-size: 15px">Character · harbour master</span>
+</div>
+</div>
+<p style="margin: 0; color: #c9c3b6; line-height: 1.5">Keeps the harbour books and every captain's debts. Rings the low bell when a ship is lost; nobody has heard it in twelve years.</p>
+<div style="display: flex; flex-direction: column; border-top: 1px solid #22262f">
+<div style="display: flex; justify-content: space-between; align-items: center; min-height: 52px; border-bottom: 1px solid #22262f"><span style="color: #a8a397">Title</span><span style="display: flex; align-items: center; gap: 8px"><b>Harbour master</b><span style="font-size: 12px; color: #f0b44c">waiting to send</span></span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; min-height: 52px; border-bottom: 1px solid #22262f"><span style="color: #a8a397">Age</span><b>54</b></div>
+<div style="display: flex; justify-content: space-between; align-items: center; min-height: 52px; border-bottom: 1px solid #22262f"><span style="color: #a8a397">Birthplace</span><a href="Element.dc.html" style="background: #1f3436; color: #6fd0dc; border-radius: 14px; padding: 6px 12px; text-decoration: none; font-size: 15px">Tharn</a></div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-bottom: 1px solid #22262f"><span style="color: #a8a397">Collectives</span><div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="Element.dc.html" style="background: #1f3436; color: #6fd0dc; border-radius: 14px; padding: 6px 12px; text-decoration: none; font-size: 15px">The Bellwrights</a><a href="Element.dc.html" style="background: #1f3436; color: #6fd0dc; border-radius: 14px; padding: 6px 12px; text-decoration: none; font-size: 15px">Harbour council</a></div></div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-bottom: 1px solid #22262f"><span style="color: #a8a397">Linked from</span><div style="display: flex; flex-wrap: wrap; gap: 8px"><a href="Element.dc.html" style="background: #232733; color: #efe9dd; border-radius: 14px; padding: 6px 12px; text-decoration: none; font-size: 15px">The harbour fire</a><a href="Element.dc.html" style="background: #232733; color: #efe9dd; border-radius: 14px; padding: 6px 12px; text-decoration: none; font-size: 15px">Capt. Morrow</a><a href="Element.dc.html" style="background: #232733; color: #efe9dd; border-radius: 14px; padding: 6px 12px; text-decoration: none; font-size: 15px">Chapter 3</a><span style="color: #a8a397; font-size: 15px; padding: 6px 4px">+5</span></div></div>
+</div>
+<button type="button" style="align-self: flex-start; background: transparent; border: 0; color: #6fd0dc; font: inherit; font-size: 15px; min-height: 44px; padding: 0">Show the 31 empty fields</button>
+<p style="margin: 0; font-size: 14px; color: #a8a397">Tap a value to change it.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

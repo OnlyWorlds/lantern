@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Two edits met</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#6fd0dc}a:hover{color:#a6e6ee}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #101218; color: #efe9dd; font-family: 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 16px; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #f0b44c">1 edit needs you</span>
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 28px; line-height: 1.1; font-weight: 700">Ada Vell's title changed in two places</h1>
+<p style="margin: 0; color: #c9c3b6">You changed it on this phone at 08:12, with no signal. It was also changed in Atlas at 14:40. Which one stays?</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; background: #1d1a12; border: 1px solid #f0b44c; border-radius: 14px; padding: 16px">
+<span style="font-size: 13px; color: #f0b44c">Yours · this phone · 08:12</span>
+<span style="font-size: 20px; font-weight: 700">Harbour master</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; background: #1a1d25; border: 1px solid #2e3340; border-radius: 14px; padding: 16px">
+<span style="font-size: 13px; color: #6fd0dc">Theirs · Atlas · 14:40</span>
+<span style="font-size: 20px; font-weight: 700">Harbour mistress of Tharn</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #22262f; padding-top: 14px">
+<span style="font-size: 14px; color: #a8a397">Sent without asking you, because they changed different fields:</span>
+<span style="font-size: 15px">Age 54 (yours) · Description (theirs)</span>
+</div>
+<div style="flex-grow: 1"></div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<button type="button" style="min-height: 52px; border-radius: 12px; border: 0; background: #f0b44c; color: #1a1408; font: inherit; font-size: 17px; font-weight: 700">Keep mine</button>
+<button type="button" style="min-height: 52px; border-radius: 12px; border: 1px solid #2e3340; background: #1a1d25; color: #efe9dd; font: inherit; font-size: 17px">Take theirs</button>
+<button type="button" style="min-height: 44px; border: 0; background: transparent; color: #6fd0dc; font: inherit; font-size: 15px">Edit a new title from both</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

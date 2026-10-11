@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A map in your hand</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}a{color:#6fd0dc}a:hover{color:#a6e6ee}</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #101218; color: #efe9dd; font-family: 'Atkinson Hyperlegible', system-ui, sans-serif; font-size: 16px; display: flex; flex-direction: column; position: relative; overflow: hidden">
+<svg width="390" height="844" viewBox="0 0 390 844" aria-hidden="true" style="position: absolute; left: 0; top: 0">
+<rect width="390" height="844" fill="#16232b"></rect>
+<path d="M-10 300 C 60 260, 120 330, 180 300 S 300 220, 400 260 L 400 900 L -10 900 Z" fill="#2a2a22"></path>
+<path d="M-10 520 C 80 480, 150 560, 240 520 S 340 470, 400 500 L 400 900 L -10 900 Z" fill="#33312a"></path>
+<path d="M120 300 C 140 380, 200 420, 230 520" stroke="#4a4436" stroke-width="3" fill="none"></path>
+<path d="M40 640 L 120 600 L 210 650 L 150 720 Z" fill="none" stroke="#c3a6f0" stroke-width="2" stroke-dasharray="6 5"></path>
+</svg>
+<div style="position: relative; padding: 52px 16px 0; display: flex; align-items: center; gap: 10px">
+<a href="Home.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 22px; background: rgba(16,18,24,0.85); display: flex; align-items: center; justify-content: center; color: #efe9dd"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<span style="background: rgba(16,18,24,0.85); border-radius: 22px; padding: 11px 16px; font-weight: 700">Tharn and the Sound</span>
+</div>
+<a href="Element.dc.html" aria-label="Tharn Harbour" style="position: absolute; left: 160px; top: 290px; width: 22px; height: 22px; border-radius: 11px; background: #6fd0dc; border: 3px solid #101218"></a>
+<a href="Element.dc.html" aria-label="The bell tower" style="position: absolute; left: 222px; top: 505px; width: 22px; height: 22px; border-radius: 11px; background: #f0b44c; border: 3px solid #101218"></a>
+<a href="Element.dc.html" aria-label="The ferry crossing" style="position: absolute; left: 70px; top: 470px; width: 22px; height: 22px; border-radius: 11px; background: #6fd0dc; border: 3px solid #101218"></a>
+<span style="position: absolute; left: 90px; top: 655px; font-size: 13px; color: #c3a6f0">The Drowned Reach</span>
+<div style="flex-grow: 1"></div>
+<a href="Element.dc.html" style="position: relative; margin: 0 12px 28px; display: flex; flex-direction: column; gap: 6px; background: #1a1d25; border: 1px solid #2e3340; border-radius: 16px; padding: 16px; text-decoration: none; color: #efe9dd">
+<span style="font-size: 13px; color: #f0b44c">Location · pinned on this map</span>
+<span style="font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 22px; font-weight: 700">The bell tower of Tharn</span>
+<span style="font-size: 15px; color: #c9c3b6">Kept by the Bellwrights · 6 links</span>
+</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
