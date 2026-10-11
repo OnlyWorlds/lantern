@@ -4,3 +4,4 @@ dist/
 .env.*
 Notes/ui-snapshots/
 *.log
+walk/shots/

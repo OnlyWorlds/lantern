@@ -1,0 +1,18 @@
+/* PLACEHOLDER (Temper, S394): the design canvas's warm values under Seethe's token names (h37 #3421).
+   Seethe owns this file and replaces it whole. */
+:root,
+[data-theme='warm'] {
+  --lan-bg: #101218;
+  --lan-surface: #1a1d25;
+  --lan-surface-2: #232733;
+  --lan-border: #2e3340;
+  --lan-border-subtle: #22262f;
+  --lan-ink: #efe9dd;
+  --lan-ink-dim: #c9c3b6;
+  --lan-ink-faint: #a8a397;
+  --lan-accent: #f0b44c;
+  --lan-action: #6fd0dc;
+  --lan-accent-glow: rgba(240, 180, 76, 0.35);
+  --lan-font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', system-ui, sans-serif;
+  --lan-font-body: 'Atkinson Hyperlegible', system-ui, sans-serif;
+}

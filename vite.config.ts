@@ -1,0 +1,56 @@
+import { defineConfig, type Plugin } from 'vite';
+import { execSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+
+function gitSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'nogit';
+  }
+}
+
+const BUILD_ID = `${gitSha()}-${Date.now().toString(36)}`;
+
+/** Files the host serves but the worker must never precache. */
+const NOT_PRECACHED = new Set(['sw.js', 'version.json', '_headers', '_redirects', '404.html']);
+
+function walk(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    return statSync(p).isDirectory() ? walk(p) : [p];
+  });
+}
+
+/** After the build is written: the worker's precache list is exactly what landed in dist. */
+function lanternWorker(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'lantern-worker',
+    apply: 'build',
+    configResolved(c) {
+      outDir = c.build.outDir;
+    },
+    closeBundle() {
+      const files = walk(outDir)
+        .map((p) => relative(outDir, p).split(sep).join('/'))
+        .filter((p) => !NOT_PRECACHED.has(p) && !p.endsWith('.map'))
+        .map((p) => '/' + p)
+        .sort();
+      const sw = readFileSync('sw/sw.js', 'utf8')
+        .replace('__BUILD_ID__', BUILD_ID)
+        .replace('__PRECACHE__', JSON.stringify(files));
+      writeFileSync(join(outDir, 'sw.js'), sw);
+      writeFileSync(join(outDir, 'version.json'), JSON.stringify({ build: BUILD_ID }) + '\n');
+    },
+  };
+}
+
+export default defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  plugins: [lanternWorker()],
+  build: { target: 'es2022' },
+  server: { port: 5180, strictPort: true },
+  preview: { port: 5181, strictPort: true },
+});

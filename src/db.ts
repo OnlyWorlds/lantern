@@ -1,0 +1,217 @@
+// The phone's store: IndexedDB, one app database (the world list and settings) and one
+// database per world (its elements as the API returned them, and the outbox).
+import type { OwElement, OwKeyKind } from '@onlyworlds/sdk';
+
+export type WorldKind = 'online' | 'local' | 'demo';
+
+export interface WorldRecord {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  kind: WorldKind;
+  /** The world key (ow_w_, ow_r_ or a legacy 10-digit key). Absent for a world on this phone only. */
+  apiKey?: string;
+  keyKind?: OwKeyKind;
+  /** From the account list: owner, or collaborator with a member role. */
+  role?: 'owner' | 'collaborator';
+  memberRole?: 'co_builder' | 'contributor' | 'guest';
+  count?: number;
+  /** The /changes cursor: opaque, stored verbatim. */
+  cursor?: string;
+  lastSync?: string;
+  /** A world on this phone only: when a world file was last saved from it. */
+  lastCopy?: string;
+  addedAt: string;
+}
+
+export type OutboxState = 'waiting' | 'sending' | 'needs-you' | 'gone' | 'refused';
+
+export interface OutboxRow {
+  seq?: number;
+  op: 'patch' | 'create';
+  type: string;
+  id: string;
+  /** The element as it was when the edit started (patch only): the base the conflict rule compares. */
+  base?: OwElement;
+  /** The fields this edit sets. */
+  values: Record<string, unknown>;
+  idempotencyKey?: string;
+  /** A queued photo, already converted and shrunk; uploaded before the write, then set as image_url. */
+  photo?: Blob;
+  state: OutboxState;
+  /** needs-you: the server's copy when it refused (412). */
+  current?: OwElement;
+  error?: string;
+  createdAt: string;
+}
+
+function req<T>(r: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+
+function done(t: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error ?? new Error('transaction aborted'));
+  });
+}
+
+function open(name: string, version: number, upgrade: (db: IDBDatabase) => void): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open(name, version);
+    r.onupgradeneeded = () => upgrade(r.result);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.onblocked = () => reject(new Error(`database ${name} is blocked by another tab`));
+  });
+}
+
+// ---------- the app database ----------
+
+let appDb: Promise<IDBDatabase> | null = null;
+function app(): Promise<IDBDatabase> {
+  appDb ??= open('lantern', 1, (db) => {
+    db.createObjectStore('worlds', { keyPath: 'id' });
+    db.createObjectStore('kv');
+  });
+  return appDb;
+}
+
+export async function listWorlds(): Promise<WorldRecord[]> {
+  const db = await app();
+  return req(db.transaction('worlds').objectStore('worlds').getAll() as IDBRequest<WorldRecord[]>);
+}
+
+export async function getWorldRecord(id: string): Promise<WorldRecord | undefined> {
+  const db = await app();
+  return req(db.transaction('worlds').objectStore('worlds').get(id) as IDBRequest<WorldRecord | undefined>);
+}
+
+export async function putWorldRecord(w: WorldRecord): Promise<void> {
+  const db = await app();
+  const t = db.transaction('worlds', 'readwrite');
+  t.objectStore('worlds').put(w);
+  await done(t);
+}
+
+export async function updateWorldRecord(id: string, patch: Partial<WorldRecord>): Promise<WorldRecord | undefined> {
+  const db = await app();
+  const t = db.transaction('worlds', 'readwrite');
+  const s = t.objectStore('worlds');
+  const cur = (await req(s.get(id))) as WorldRecord | undefined;
+  if (cur) s.put({ ...cur, ...patch });
+  await done(t);
+  return cur ? { ...cur, ...patch } : undefined;
+}
+
+export async function removeWorld(id: string): Promise<void> {
+  const db = await app();
+  const t = db.transaction('worlds', 'readwrite');
+  t.objectStore('worlds').delete(id);
+  await done(t);
+  worldDbs.get(id)?.then((d) => d.close());
+  worldDbs.delete(id);
+  await new Promise<void>((resolve) => {
+    const r = indexedDB.deleteDatabase(worldDbName(id));
+    r.onsuccess = r.onerror = r.onblocked = () => resolve();
+  });
+}
+
+export async function kvGet<T>(key: string): Promise<T | undefined> {
+  const db = await app();
+  return req(db.transaction('kv').objectStore('kv').get(key) as IDBRequest<T | undefined>);
+}
+
+export async function kvSet(key: string, value: unknown): Promise<void> {
+  const db = await app();
+  const t = db.transaction('kv', 'readwrite');
+  if (value === undefined) t.objectStore('kv').delete(key);
+  else t.objectStore('kv').put(value, key);
+  await done(t);
+}
+
+// ---------- one database per world ----------
+
+const worldDbs = new Map<string, Promise<IDBDatabase>>();
+const worldDbName = (id: string) => `lantern-world-${id}`;
+
+function world(id: string): Promise<IDBDatabase> {
+  let p = worldDbs.get(id);
+  if (!p) {
+    p = open(worldDbName(id), 1, (db) => {
+      db.createObjectStore('elements', { keyPath: 'id' });
+      db.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true });
+    });
+    worldDbs.set(id, p);
+  }
+  return p;
+}
+
+export async function allElements(worldId: string): Promise<OwElement[]> {
+  const db = await world(worldId);
+  return req(db.transaction('elements').objectStore('elements').getAll() as IDBRequest<OwElement[]>);
+}
+
+/** Apply upserts and deletes in one transaction. */
+export async function applyElements(worldId: string, puts: OwElement[], deletes: string[] = []): Promise<void> {
+  if (!puts.length && !deletes.length) return;
+  const db = await world(worldId);
+  const t = db.transaction('elements', 'readwrite');
+  const s = t.objectStore('elements');
+  for (const el of puts) s.put(el);
+  for (const id of deletes) s.delete(id);
+  await done(t);
+}
+
+export async function clearElements(worldId: string): Promise<void> {
+  const db = await world(worldId);
+  const t = db.transaction('elements', 'readwrite');
+  t.objectStore('elements').clear();
+  await done(t);
+}
+
+export async function outboxRows(worldId: string): Promise<OutboxRow[]> {
+  const db = await world(worldId);
+  return req(db.transaction('outbox').objectStore('outbox').getAll() as IDBRequest<OutboxRow[]>);
+}
+
+export async function putOutboxRow(worldId: string, row: OutboxRow): Promise<number> {
+  const db = await world(worldId);
+  const t = db.transaction('outbox', 'readwrite');
+  const key = await req(t.objectStore('outbox').put(row));
+  await done(t);
+  return key as number;
+}
+
+export async function deleteOutboxRow(worldId: string, seq: number): Promise<void> {
+  const db = await world(worldId);
+  const t = db.transaction('outbox', 'readwrite');
+  t.objectStore('outbox').delete(seq);
+  await done(t);
+}
+
+/** A row leaves the outbox and the server's answer lands in the store, together. */
+export async function settleOutboxRow(worldId: string, seq: number, el: OwElement | null): Promise<void> {
+  const db = await world(worldId);
+  const t = db.transaction(['outbox', 'elements'], 'readwrite');
+  t.objectStore('outbox').delete(seq);
+  if (el) t.objectStore('elements').put(el);
+  await done(t);
+}
+
+/** Ask the browser to keep this site's storage, and read back what it decided. */
+export async function persistStorage(): Promise<boolean | null> {
+  if (!navigator.storage?.persisted) return null;
+  try {
+    if (await navigator.storage.persisted()) return true;
+    await navigator.storage.persist?.();
+    return await navigator.storage.persisted();
+  } catch {
+    return null;
+  }
+}
