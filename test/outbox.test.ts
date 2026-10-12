@@ -6,14 +6,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const store = new Map<string, string>();
 Object.assign(globalThis, {
   window: globalThis,
-  sessionStorage: {
+  localStorage: {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, v),
     removeItem: (k: string) => void store.delete(k),
   },
 });
 
-const { openWorld, forgetSession, setSessionPin, setBuildBehind } = await import('../src/world');
+const { openWorld, forgetSession, setBuildBehind } = await import('../src/world');
+const { setPin } = await import('../src/pin');
 const db = await import('../src/db');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
@@ -280,7 +281,7 @@ describe('pull', () => {
     await s.edit('a', { name: 'Ada Vell' }); // waits for the PIN
     keel.resyncOnce = true;
     keel.beforePage = async () => {
-      setSessionPin(s.rec, keel.pin);
+      setPin(s.rec, keel.pin);
       await s.flush();
     };
     await s.pull();
@@ -294,7 +295,7 @@ describe('pull', () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada', description: 'A smith.' });
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, keel.pin);
+    setPin(s.rec, keel.pin);
     // The player opens the description: the base is taken now.
     const atOpen = s.serverCopy('a');
     // The game master changes the same field; the poll brings it in while the sheet is open.
@@ -334,7 +335,7 @@ describe('outbox', () => {
     const mine = await freshWorld('owner');
     const alsoMine = await freshWorld('collaborator');
     const keyed = await freshWorld();
-    setSessionPin(mine.rec, keel.pin);
+    setPin(mine.rec, keel.pin);
     expect(alsoMine.pinKnown()).toBe(true);
     expect(keyed.pinKnown()).toBe(false);
     await alsoMine.pull();
@@ -358,7 +359,7 @@ describe('outbox', () => {
     expect(s.get('a')?.name).toBe('Ada Vell');
     expect(s.needPin).toBe(true);
     expect(s.waitingCount()).toBe(1);
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(s.waitingCount()).toBe(0);
     expect(keel.els.get('a')?.name).toBe('Ada Vell');
@@ -373,7 +374,7 @@ describe('outbox', () => {
     await s.edit('a', {}, s.serverCopy('a'), photo);
     expect(String(s.get('a')?.image_url)).toMatch(/^blob:/);
     expect(s.pending('a').has('image_url')).toBe(true);
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(keel.uploads).toBe(1);
     expect(keel.els.get('a')?.image_url).toBe('https://media.onlyworlds.com/w/1.webp');
@@ -395,7 +396,7 @@ describe('outbox', () => {
     await s.edit('a', { image_url: '' }, s.serverCopy('a'));
     expect(s.outbox[0].photo).toBeUndefined();
     expect(s.get('a')?.image_url).toBe('');
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(keel.uploads).toBe(0);
     expect(keel.els.get('a')?.image_url).toBe('');
@@ -411,7 +412,7 @@ describe('outbox', () => {
     await s.edit('a', {}, s.serverCopy('a'), photo);
     await s.edit('b', { name: 'Bo Vell' });
     const caught = await s.create('narrative', { name: 'A page', supertype: 'Unsorted' }, photo);
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(keel.els.get('b')?.name).toBe('Bo Vell');
     expect(keel.els.get(caught)?.name).toBe('A page');
@@ -445,7 +446,7 @@ describe('outbox', () => {
     await s.pull();
     await s.edit('a', { name: 'Ada Vell' });
     keel.put({ ...keel.els.get('a')!, age: 51 }); // someone else, another field
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(s.waitingCount()).toBe(0);
     expect(s.needsYouCount()).toBe(0);
@@ -458,7 +459,7 @@ describe('outbox', () => {
     await s.pull();
     await s.edit('a', { name: 'Ada Vell' });
     keel.put({ ...keel.els.get('a')!, name: 'Ada of Tharn' });
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(s.needsYouCount()).toBe(1);
     const row = s.outbox[0];
@@ -476,7 +477,7 @@ describe('outbox', () => {
     await s.pull();
     await s.edit('a', { name: 'Ada Vell' });
     keel.put({ ...keel.els.get('a')!, name: 'Ada of Tharn' });
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     await s.resolve(s.outbox[0], []);
     expect(s.outbox.length).toBe(0);
@@ -490,7 +491,7 @@ describe('outbox', () => {
     await s.pull();
     await s.edit('a', { friends: ['x', 'y', 'z'] });
     keel.put({ ...keel.els.get('a')!, friends: ['y', 'x'] });
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     expect(s.needsYouCount()).toBe(0);
     expect(keel.els.get('a')?.friends).toEqual(['x', 'y', 'z']);
@@ -501,7 +502,7 @@ describe('outbox', () => {
     const s = await freshWorld();
     await s.pull();
     await s.edit('a', { name: 'Ada Vell' });
-    setSessionPin(s.rec, '9999');
+    setPin(s.rec, '9999');
     await s.flush();
     expect(s.needPin).toBe(true);
     expect(s.waitingCount()).toBe(1);
@@ -513,7 +514,7 @@ describe('outbox', () => {
     const s = await freshWorld();
     await s.pull();
     keel.offline = true;
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.edit('a', { name: 'Ada Vell' });
     await s.flush();
     expect(s.waitingCount()).toBe(1);
@@ -527,7 +528,7 @@ describe('outbox', () => {
     const s = await freshWorld();
     await s.pull();
     keel.offline = true;
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     const id = await s.create('narrative', { name: 'A page', supertype: 'Unsorted' });
     expect(s.get(id)?.supertype).toBe('Unsorted');
     keel.offline = false;
@@ -539,7 +540,7 @@ describe('outbox', () => {
   it('a create whose answer was lost (409 id_conflict) takes the server copy', async () => {
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     keel.offline = true;
     const id = await s.create('narrative', { name: 'A page' });
     keel.offline = false;
@@ -555,7 +556,7 @@ describe('outbox', () => {
     await s.pull();
     await s.edit('a', { name: 'Ada Vell' });
     keel.els.delete('a');
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.flush();
     const row = s.outbox[0];
     expect(row.state).toBe('gone');
@@ -570,7 +571,7 @@ describe('outbox', () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     setBuildBehind(true);
     await s.edit('a', { name: 'Ada Vell' });
     await s.flush();
@@ -597,7 +598,7 @@ describe('outbox', () => {
   it('an edit made while its create is in flight follows it, and both land', async () => {
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     let release!: () => void;
     keel.gate = new Promise((r) => (release = r));
     const id = await s.create('narrative', { name: 'A page' });
@@ -619,7 +620,7 @@ describe('outbox', () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     let release!: () => void;
     keel.gate = new Promise((r) => (release = r));
     await s.edit('a', { name: 'Ada Vell' });
@@ -637,7 +638,7 @@ describe('outbox', () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     keel.dropAnswerOnce = true;
     await s.edit('a', { name: 'Ada Vell' });
     await s.flush();
@@ -653,7 +654,7 @@ describe('outbox', () => {
   it('a create that landed but lost its answer, then edited: the edit is sent as a patch', async () => {
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     keel.dropAnswerOnce = true;
     const id = await s.create('narrative', { name: 'A page' });
     await s.flush();
@@ -672,7 +673,7 @@ describe('outbox', () => {
     keel.put({ id: 'b', type: 'character', name: 'Bo' });
     const s = await freshWorld();
     await s.pull();
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     for (const status of [429, 503, 502]) {
       keel.offline = true;
       await s.edit('a', { name: `Ada ${status}` });
@@ -696,7 +697,7 @@ describe('outbox', () => {
     const s = await freshWorld();
     await s.pull();
     const theirs = keel.put({ ...keel.els.get('a')!, age: 51 });
-    setSessionPin(s.rec, '1234');
+    setPin(s.rec, '1234');
     await s.edit('a', { name: 'Ada Vell' });
     await s.flush();
     expect(s.get('a')).toMatchObject({ name: 'Ada Vell', change_seq: 3 });

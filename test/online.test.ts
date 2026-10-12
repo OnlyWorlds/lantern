@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const store = new Map<string, string>();
 Object.assign(globalThis, {
   window: globalThis,
-  sessionStorage: {
+  localStorage: {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, v),
     removeItem: (k: string) => void store.delete(k),

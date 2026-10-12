@@ -3,7 +3,8 @@ import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
-import { API_BASE, setSessionPin, type WorldSession } from '../world';
+import { API_BASE, type WorldSession } from '../world';
+import { setPin } from '../pin';
 import {
   fieldInfo,
   fieldLabel,
@@ -80,7 +81,7 @@ export function pinSheet(s: WorldSession): void {
       try {
         // keel checks a PIN sent on a read too: one read proves it before anything is written.
         await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE }).getWorld();
-        setSessionPin(s.rec, pin.value.trim());
+        setPin(s.rec, pin.value.trim());
         s.needPin = false;
         close();
         void s.flush();
@@ -97,8 +98,8 @@ export function pinSheet(s: WorldSession): void {
         'p',
         { class: 'dim', style: 'margin:0' },
         s.rec.role
-          ? 'The four digits you set on onlyworlds.com. Lantern keeps it for all your worlds until you close the app.'
-          : 'The four digits that came with this world\'s key. Lantern keeps it until you close the app.',
+          ? 'The four digits you set on onlyworlds.com. Lantern keeps it on this phone for all your worlds, until you sign out.'
+          : 'The four digits that came with this world\'s key. Lantern keeps it on this phone for this world.',
       ),
       form,
     ];

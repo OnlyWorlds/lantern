@@ -17,31 +17,9 @@ import * as db from './db';
 import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
 import { isEmptyValue } from './schema';
+import { pinFor, setPin } from './pin';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
-
-/**
- * The PIN is asked once and kept for the session (DESIGN: Keys and sign-in), never stored. A PIN
- * is the account's, not the world's: every world from your account (a record with a role) shares
- * one, asked once (the Captain, h37 #3660). A world opened with someone's key keeps its own.
- */
-type PinOwner = { id: string; role?: string };
-const pinKey = (w: PinOwner) => (w.role ? 'lantern-pin-account' : `lantern-pin-${w.id}`);
-function sessionPin(w: PinOwner): string | undefined {
-  try {
-    return sessionStorage.getItem(pinKey(w)) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-export function setSessionPin(w: PinOwner, pin: string | undefined): void {
-  try {
-    if (pin) sessionStorage.setItem(pinKey(w), pin);
-    else sessionStorage.removeItem(pinKey(w));
-  } catch {
-    /* private mode: the PIN is asked again next time */
-  }
-}
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -300,14 +278,14 @@ export class WorldSession {
 
   /** A PIN is held for this world now (one entered on another of your worlds counts). */
   pinKnown(): boolean {
-    return !!sessionPin(this.rec);
+    return !!pinFor(this.rec);
   }
 
   // ---------- the client ----------
 
   private client(withPin: boolean): OwV2Client {
     if (!this.rec.apiKey) throw new Error('This world has no key.');
-    const pin = withPin ? sessionPin(this.rec) : undefined;
+    const pin = withPin ? pinFor(this.rec) : undefined;
     return new OwV2Client({ apiKey: this.rec.apiKey, apiPin: pin, baseUrl: API_BASE });
   }
 
@@ -583,7 +561,7 @@ export class WorldSession {
     if (buildBehind) return;
     const rows = this.outbox.filter((r) => r.state === 'waiting').sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     if (!rows.length) return;
-    if (!sessionPin(this.rec)) {
+    if (!pinFor(this.rec)) {
       this.needPin = true;
       this.emit();
       return;
@@ -733,7 +711,7 @@ export class WorldSession {
       }
       if (e.status === 401) {
         // A wrong PIN: stop and ask again; keel throttles wrong PINs, so never loop.
-        setSessionPin(this.rec, undefined);
+        setPin(this.rec, undefined);
         this.needPin = true;
         await keep('waiting');
         return true;

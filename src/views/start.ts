@@ -15,7 +15,8 @@ import {
   signOut,
   type AccountWorld,
 } from '../account';
-import { setSessionPin, forgetSession } from '../world';
+import { forgetSession } from '../world';
+import { setPin } from '../pin';
 import { pendingJoin } from '../join';
 import { uuid7 } from '../uuid7';
 import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
@@ -206,7 +207,7 @@ export function keyView(): HTMLElement {
     btn.disabled = true;
     try {
       const rec = await openWithKey(key.value, pin.value.trim() || undefined);
-      if (pin.value.trim()) setSessionPin(rec, pin.value.trim());
+      if (pin.value.trim()) setPin(rec, pin.value.trim());
       go(`#/w/${rec.id}`, true);
     } catch (ex) {
       const m = errorText(ex);
@@ -587,5 +588,7 @@ export function settingsView(): HTMLElement {
 
 export async function removeWorldFromPhone(id: string): Promise<void> {
   forgetSession(id);
+  // A world opened with a key takes its own PIN with it; your account's PIN stays for your other worlds.
+  setPin({ id }, undefined);
   await db.removeWorld(id);
 }

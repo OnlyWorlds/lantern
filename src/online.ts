@@ -5,7 +5,8 @@
 import { OwApiError, OwV2Client } from '@onlyworlds/sdk';
 import * as db from './db';
 import { accountToken } from './account';
-import { API_BASE, openWorld, setSessionPin, forgetSession } from './world';
+import { API_BASE, openWorld, forgetSession } from './world';
+import { setPin } from './pin';
 import { uuid7 } from './uuid7';
 import { moveDraft } from './draft';
 
@@ -89,7 +90,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     addedAt: new Date().toISOString(),
   };
   await db.putWorldRecord(online);
-  setSessionPin(online, pin);
+  setPin(online, pin);
   forgetSession(online.id);
   const s = await openWorld(online.id);
   await s.pull();

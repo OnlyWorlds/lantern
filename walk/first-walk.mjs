@@ -131,6 +131,13 @@ async function walk(engine, tag) {
   await page.locator('.tabbar [data-tab=world]').tap();
   await page.waitForSelector('[data-screen="home"] .type-tile');
   check(tag, true, 'World in the tab bar lands on the world home');
+  // On the home itself, the tab goes up a level and says so (#3675).
+  const up = page.locator('.tabbar [data-tab=world]');
+  check(tag, (await up.innerText()).trim() === 'Worlds' && (await up.getAttribute('href')) === '#/worlds', 'on the world home, the tab reads Worlds and goes to Your worlds');
+  await up.tap();
+  await page.waitForSelector('[data-screen="worlds"]');
+  await page.goBack();
+  await page.waitForSelector('[data-screen="home"] .type-tile');
   await page.locator('.tabbar [data-tab=ask]').tap();
   await page.waitForSelector('[data-screen="ask"]');
   await page.locator('[data-screen="ask"] input').fill('the king of the north');

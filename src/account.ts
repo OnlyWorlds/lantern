@@ -4,6 +4,7 @@
 import { OwV2Client, detectKeyKind, isDemoKey, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE } from './world';
+import { forgetAccountPin } from './pin';
 
 export interface AccountWorld {
   id: string;
@@ -80,6 +81,7 @@ export async function signOut(): Promise<void> {
   // An invite waiting for this account is not the next account's.
   await db.kvSet('pendingJoin', undefined);
   await db.kvSet('accountWorlds', undefined);
+  forgetAccountPin();
 }
 
 export async function fetchAccountWorlds(token?: string): Promise<AccountWorld[]> {
