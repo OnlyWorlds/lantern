@@ -7,6 +7,12 @@
 const BUILD = '__BUILD_ID__';
 const PRECACHE = __PRECACHE__;
 const SHELL_SCRIPTS = __SHELL_SCRIPTS__;
+const DIGESTS = __DIGESTS__;
+
+async function sha256(res) {
+  const bytes = await crypto.subtle.digest('SHA-256', await res.clone().arrayBuffer());
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 const CACHE = `lantern-${BUILD}`;
 const SHELL = new Set(['/', '/index.html']);
 
@@ -24,6 +30,8 @@ self.addEventListener('install', (event) => {
           const html = await res.clone().text();
           if (!SHELL_SCRIPTS.every((src) => html.includes(src))) throw new Error(`precache refused ${path}: another build's shell`);
         }
+        // An unhashed file this build names by its digest (the manifest): the same cutover check.
+        if (DIGESTS[path] && (await sha256(res)) !== DIGESTS[path]) throw new Error(`precache refused ${path}: another build's copy`);
         await cache.put(path, res);
       }
     })(),

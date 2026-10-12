@@ -84,6 +84,12 @@ async function cutover(engine, deviceName, tag) {
   const during = await nextWorker(page);
   check(tag, during === 'redundant', `a new worker meeting the previous shell at "/" refuses to install (${during})`);
   writeFileSync('dist/index.html', newShell);
+  // The manifest has no hash in its name: a previous build's copy (here, one changed byte) refuses too.
+  const manifest = readFileSync('dist/manifest.webmanifest', 'utf8');
+  writeFileSync('dist/manifest.webmanifest', manifest.replace('"Lantern"', '"Lantern "'));
+  const oldManifest = await nextWorker(page);
+  check(tag, oldManifest === 'redundant', `a new worker meeting another build's manifest refuses to install (${oldManifest})`);
+  writeFileSync('dist/manifest.webmanifest', manifest);
   const after = await nextWorker(page);
   check(tag, after === 'installed', `with the new shell at "/" it installs (${after})`);
   await browser.close();

@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
@@ -47,10 +48,17 @@ function lanternWorker(): Plugin {
       // deploy's cutover can serve the previous shell for a moment, Boss h37 #3518).
       const shellScripts = [...readFileSync(join(outDir, 'index.html'), 'utf8').matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
       if (!shellScripts.length) throw new Error('lantern-worker: the shell loads no script');
+      // The manifest has no hash in its name, so the same cutover can serve the previous one: the
+      // worker checks its digest (the S397 gate's F4). Images are left out on purpose: a zone that
+      // recompresses pictures would fail every install.
+      const digests = Object.fromEntries(
+        files.filter((p) => p.endsWith('.webmanifest')).map((p) => [p, createHash('sha256').update(readFileSync(join(outDir, p.slice(1)))).digest('hex')]),
+      );
       const sw = readFileSync('sw/sw.js', 'utf8')
         .replace('__BUILD_ID__', BUILD_ID)
         .replace('__PRECACHE__', JSON.stringify(files))
-        .replace('__SHELL_SCRIPTS__', JSON.stringify(shellScripts));
+        .replace('__SHELL_SCRIPTS__', JSON.stringify(shellScripts))
+        .replace('__DIGESTS__', JSON.stringify(digests));
       writeFileSync(join(outDir, 'sw.js'), sw);
       writeFileSync(join(outDir, 'version.json'), JSON.stringify({ build: BUILD_ID }) + '\n');
     },
