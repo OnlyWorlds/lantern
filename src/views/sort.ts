@@ -31,6 +31,8 @@ interface Kept {
   /** Once Write is tapped: the writes, fixed, and how many are done, so a retry resumes and never writes twice. */
   plan?: Write[];
   step?: number;
+  /** The photos were not read (refused, or unreadable to the model): this sort used the notes' words. */
+  wordsOnly?: boolean;
   /** The cards' ticks, edits and picks, by row index: a reload mid-review keeps them. */
   ticks?: Record<string, RowState>;
 }
@@ -155,14 +157,17 @@ export function sortView(s: WorldSession): View {
         const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id));
         const payload = notesPayload(fit).notes;
         let result: Sorted;
+        let wordsOnly = false;
         try {
           result = await sortNotes(s.id, payload, slice);
         } catch (e) {
-          // keel refuses a picture it will not read (422, nothing counted): the words go alone.
-          if (!(e instanceof SortRefused && e.status === 422 && payload.some((n) => typeof n !== 'string'))) throw e;
+          // keel refuses a picture it will not take (422), or the model could not read one (502):
+          // nothing was counted either way, so the words go once alone, and the review says so.
+          if (!(e instanceof SortRefused && (e.status === 422 || e.status === 502) && payload.some((n) => typeof n !== 'string'))) throw e;
           result = await sortNotes(s.id, payload.map((n) => (typeof n === 'string' ? n : n.text)), slice);
+          wordsOnly = true;
         }
-        kept = { notes: fit.map((n) => n.id), sent: slice.map((x) => x.id), result: clean(result), at: new Date().toISOString() };
+        kept = { notes: fit.map((n) => n.id), sent: slice.map((x) => x.id), result: clean(result), at: new Date().toISOString(), wordsOnly };
         writeKept(s.id, kept);
         state.clear();
         phase = 'review';
@@ -428,6 +433,7 @@ export function sortView(s: WorldSession): View {
         rows.length ? `${plural(rows.length, 'proposal')} from ${plural(kept.notes.length, 'note')}. Tick what is true.` : 'Nothing to propose from these notes.',
         typeof remaining === 'number' ? h('span', { class: 'muted small' }, ` ${remaining} AI answers left today.`) : '',
       ),
+      kept.wordsOnly ? h('p', { class: 'muted small', style: 'margin:0', 'data-words-only': '' }, 'The photos could not be read, so this sort used the words of your notes.') : '',
       started ? h('p', { class: 'muted small', style: 'margin:0', role: 'status' }, `Writing what you ticked: ${Math.min(kept.step ?? 0, (kept.plan?.length ?? 0) + kept.notes.length)} of ${(kept.plan?.length ?? 0) + kept.notes.length} done.`) : '',
       ...rows.map(card),
       leftOut,

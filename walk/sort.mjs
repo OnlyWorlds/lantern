@@ -99,14 +99,19 @@ async function walk(engine, deviceName, tag) {
   const sent = [];
   let answer = json(429, { error: { code: 'quota_exceeded', message: 'quota_exceeded', type: 'rate_limit_error' } });
   await page.route('**/api/v2/**', (r) => r.abort());
-  // keel refuses a picture once (422, nothing counted), as it would one outside the world's prefix.
+  // keel refuses a picture once, nothing counted: on Chromium a 422, as for one outside the world's
+  // prefix; on WebKit a 502 ask_failed, as when the model cannot fetch the picture.
   let refusePictureOnce = false;
+  const pictureRefusal =
+    tag === 'webkit'
+      ? json(502, { error: { code: 'ask_failed', message: 'The notes could not be sorted; try again in a moment.', type: 'api_error' } })
+      : json(422, { error: { code: 'validation_error', message: 'notes.0.image_url: not under this world', type: 'invalid_request_error' } });
   await page.route('**/api/v2/account/sort', (r) => {
     const body = JSON.parse(r.request().postData());
     sent.push(body);
     if (refusePictureOnce && body.notes.some((n) => typeof n !== 'string')) {
       refusePictureOnce = false;
-      return r.fulfill(json(422, { error: { code: 'validation_error', message: 'notes.0.image_url: not under this world', type: 'invalid_request_error' } }));
+      return r.fulfill(pictureRefusal);
     }
     return r.fulfill(answer);
   });
@@ -161,7 +166,8 @@ async function walk(engine, deviceName, tag) {
     first.world_id === worldId && first.notes.length === 2 && pictured.length === 1 && /fire-page\.webp$/.test(pictured[0].image_url) && /Ember/.test(pictured[0].text),
     'the notes go as their words, the photographed one with its picture, to this world',
   );
-  check(tag, body.notes.length === 2 && body.notes.every((x) => typeof x === 'string') && /Ember/.test(body.notes.join(' ')), 'a picture keel refuses: the sort goes again as words alone');
+  check(tag, body.notes.length === 2 && body.notes.every((x) => typeof x === 'string') && /Ember/.test(body.notes.join(' ')), `a picture refused (${pictureRefusal.status}): the sort goes again as words alone`);
+  check(tag, (await page.locator('[data-words-only]').count()) === 1, 'and the review says the photos were not read');
   check(tag, sliceIds.includes(a.id) && sliceIds.includes(place.id), `the slice holds what the notes name (${body.slice.length} elements)`);
   check(tag, !sliceIds.some((id) => notes.some((n) => n.id === id)), 'and never the notes');
   check(tag, (await page.locator('.sort-card').count()) === 4, 'four cards');

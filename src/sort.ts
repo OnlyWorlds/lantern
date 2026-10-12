@@ -20,7 +20,7 @@ export interface Sorted {
 export class SortRefused extends Error {
   constructor(
     message: string,
-    /** keel's status, when it answered (422: a param it would not take). */
+    /** keel's status, when it answered (422: a param it would not take; 502: the model gave no usable answer, nothing counted). */
     readonly status?: number,
   ) {
     super(message);
@@ -48,7 +48,7 @@ export async function sortNotes(worldId: string, notes: SortNote[], slice: Slice
     if (!(e instanceof OwApiError)) throw new SortRefused('Nothing came back. Try again.');
     if (e.isQuotaExceeded) throw new SortRefused("Today's AI answers are used up. Your notes wait here until tomorrow.");
     if (e.isAskUnavailable) throw new SortRefused('Sorting is paused for now. Your notes wait here.');
-    if (e.isAskFailed) throw new SortRefused('Nothing came back. Try again; nothing was counted.');
+    if (e.isAskFailed) throw new SortRefused('Nothing came back. Try again; nothing was counted.', 502);
     if (e.status === 404 || e.status === 403) throw new SortRefused('Your account is not in this world any more.');
     if (e.status === 401) throw new SortRefused('Sign in again to sort.');
     if (e.status === 422) throw new SortRefused(`The notes were not taken: ${e.message}`, 422);

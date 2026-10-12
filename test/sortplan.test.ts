@@ -36,6 +36,29 @@ describe('buildSlice', () => {
     expect(slice.find((s) => s.id === 'dot')?.anchor).toBe('The Swoop');
     expect(slice.find((s) => s.id === 'pipit')?.anchor).toBe('Keeps foxes.');
   });
+
+  it("keeps every item within keel's rules, which refuse the whole sort for one bad item: a name of 1 to 200, an anchor to 120", () => {
+    const odd: OwElement[] = [
+      ...els,
+      { id: 'blank', type: 'character', name: '   ', description: 'Dot was at the fire with Pipit' },
+      { id: 'long', type: 'character', name: `Dot ${'of the long name '.repeat(12)}` },
+      { id: 'wide', type: 'character', name: 'Pipit the Younger', supertype: 'Keeper of the foxes of the eastern hills '.repeat(4), location: 'swoop' },
+      { id: 'pad', type: 'character', name: '  Dot Padded  ' },
+    ];
+    const m = new Map(odd.map((e) => [e.id, e]));
+    const s = buildSlice([m.get('n1')!], buildWorldIndex(odd), (id) => m.get(id));
+    const ids = s.map((x) => x.id);
+    expect(ids).toContain('wide');
+    expect(ids).not.toContain('long');
+    expect(ids).not.toContain('blank');
+    for (const x of s) {
+      expect(x.name.trim().length).toBeGreaterThan(0);
+      expect([...x.name].length).toBeLessThanOrEqual(200);
+      expect([...(x.anchor ?? '')].length).toBeLessThanOrEqual(120);
+    }
+    expect(s.find((x) => x.id === 'wide')?.anchor?.endsWith('…')).toBe(true);
+    expect(s.find((x) => x.id === 'pad')?.name).toBe('Dot Padded');
+  });
 });
 
 describe('notesPayload', () => {

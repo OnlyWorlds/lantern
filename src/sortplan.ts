@@ -123,8 +123,15 @@ export function anchorOf(el: OwElement, get: (id: string) => OwElement | undefin
     const cps = [...el.description.trim().split(/\n/)[0]];
     parts.push(cps.length > 48 ? cps.slice(0, 46).join('').trimEnd() + '…' : cps.join(''));
   }
-  return parts.length ? parts.join(', ') : undefined;
+  if (!parts.length) return undefined;
+  const cps = [...parts.join(', ')];
+  return cps.length > ANCHOR_MAX ? cps.slice(0, ANCHOR_MAX - 1).join('').trimEnd() + '…' : cps.join('');
 }
+
+// keel refuses the whole sort (422) for one slice item with a name outside 1 to 200 characters
+// or an anchor past 120 (keel accounts/sort.py, `clean`): the phone keeps to both.
+export const SLICE_NAME_MAX = 200;
+export const ANCHOR_MAX = 120;
 
 const NOT_IN_SLICE = new Set(['pin', 'marker']);
 
@@ -147,6 +154,9 @@ export function buildSlice(
         const el = hit.element;
         if (noteIds.has(el.id) || NOT_IN_SLICE.has(el.type)) continue;
         if (el.type === 'narrative' && (el.supertype === 'Unsorted' || el.supertype === SORTED)) continue;
+        // An element with no name, or one past keel's limit, cannot be named in a row: left out.
+        const len = [...sliceName(el)].length;
+        if (!len || len > SLICE_NAME_MAX) continue;
         best.set(el.id, Math.max(best.get(el.id) ?? 0, hit.score));
       }
     }
@@ -157,9 +167,11 @@ export function buildSlice(
     .map(([id]) => {
       const el = get(id)!;
       const anchor = anchorOf(el, get);
-      return { id, type: el.type, name: String(el.name ?? ''), ...(anchor ? { anchor } : {}) };
+      return { id, type: el.type, name: sliceName(el), ...(anchor ? { anchor } : {}) };
     });
 }
+
+const sliceName = (el: OwElement): string => (typeof el.name === 'string' ? el.name.trim() : '');
 
 // ---------- from ticked rows to writes ----------
 
