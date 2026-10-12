@@ -763,6 +763,92 @@ body:has(main textarea:focus, main input:focus) .tabbar {
   cursor: pointer;
 }
 
+/* ---------- the morning after (src/views/sort.ts) ---------- */
+
+.note-pick {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid var(--lan-border);
+  border-radius: 12px;
+  background: var(--lan-surface);
+  color: var(--lan-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-pick .label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.note-pick .tick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--lan-border);
+}
+
+.note-pick[aria-checked='true'] {
+  border-color: var(--lan-accent);
+}
+
+.note-pick[aria-checked='true'] .tick {
+  background: var(--lan-accent);
+  border-color: var(--lan-accent);
+  color: var(--lan-bg);
+}
+
+.sort-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--lan-border);
+  border-left: 3px solid var(--type, var(--lan-border));
+  border-radius: 14px;
+  background: var(--lan-surface);
+}
+
+.sort-card.on {
+  border-color: var(--lan-accent);
+  border-left-color: var(--type, var(--lan-accent));
+}
+
+.sort-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-head .btn-pill.on {
+  background: var(--lan-accent);
+  border-color: var(--lan-accent);
+  color: var(--lan-bg);
+  font-weight: 700;
+}
+
+.source-line {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--lan-border);
+  color: var(--lan-ink-faint);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+select.input {
+  appearance: auto;
+}
+
 /* "What is it?" on the catch screen: one choice, the type's own colour once chosen. */
 .kind-chip {
   min-height: 40px;

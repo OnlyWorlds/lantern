@@ -16,6 +16,7 @@ import { elementView, homeView, notFound, setBehindReload, typeView, type View }
 import { captureView } from './views/capture';
 import { outboxView } from './views/outbox';
 import { askView } from './views/ask';
+import { sortView } from './views/sort';
 import { mapView } from './views/map';
 import { shareView } from './views/share';
 import { consumeShared, peekShared, takeShared } from './share';
@@ -72,6 +73,7 @@ async function route(): Promise<void> {
     else if (sub === 'capture' && s.canWrite) mount(captureView(s, query === 'shared'), s);
     else if (sub === 'outbox') mount(outboxView(s), s);
     else if (sub === 'ask') mount(askView(s), s);
+    else if (sub === 'sort') mount(sortView(s), s);
     else if (sub === 'map' && parts[3]) {
       const q = new URLSearchParams(query);
       mount(mapView(s, { map: parts[3], pin: q.get('pin') ?? undefined, marker: q.get('marker') ?? undefined, zone: q.get('zone') ?? undefined }), s);

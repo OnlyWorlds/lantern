@@ -18,6 +18,7 @@ const PATHS: Record<string, string> = {
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
   home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
   install: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 22, stroke = 1.8): SVGSVGElement {

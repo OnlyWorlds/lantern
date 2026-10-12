@@ -257,7 +257,12 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
     if (shown.length > 400) list.appendChild(h('p', { class: 'muted small' }, `Showing 400 of ${shown.length}. Search to narrow it.`));
   };
   input.addEventListener('input', refresh);
-  const add = s.canWrite && !MAP_TYPES.has(type)
+  // Unsorted: the notes can be sorted into the world (the morning after, src/views/sort.ts).
+  const add = onlyUnsorted
+    ? s.canWrite
+      ? h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/sort`, 'data-action': 'sort' }, icon('spark', 16), 'Sort')
+      : null
+    : s.canWrite && !MAP_TYPES.has(type)
     ? (() => {
         const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('plus', 16), `New`);
         b.addEventListener('click', () => newElementSheet(s, type));
