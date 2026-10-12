@@ -234,6 +234,34 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.evaluate((id) => localStorage.getItem(`lantern-sort-${id}`), worldId)) === null, 'the kept sort is let go once written');
   await shot('after');
 
+  // 7. A started sort that cannot finish is never stuck (the S399 merge gate): a plan half written
+  // (step 1 of 2, its edit's element gone), reloaded, offers Stop here; stopping lets it go.
+  await page.evaluate(
+    ([id, a]) =>
+      localStorage.setItem(
+        `lantern-sort-${id}`,
+        JSON.stringify({
+          notes: [],
+          sent: [a.id],
+          at: new Date().toISOString(),
+          result: { rows: [], not_proposed: [], remaining: 47 },
+          plan: [
+            { op: 'edit', id: a.id, values: { description: 'x' } },
+            { op: 'edit', id: '0190a000-0000-7000-8000-00000000dead', values: { description: 'y' } },
+          ],
+          step: 1,
+        }),
+      ),
+    [worldId, a],
+  );
+  await page.goto(`${BASE}/#/w/${worldId}/sort`);
+  await page.waitForSelector('[data-action=write]');
+  const stop = page.locator('[data-action=let-go]');
+  check(tag, (await page.locator('[data-action=write]').innerText()) === 'Finish writing' && (await stop.isVisible()) && (await stop.innerText()) === 'Stop here: what is written stays', 'a half-written sort offers Finish writing and Stop here');
+  await stop.tap();
+  await page.waitForSelector('[data-screen="sort"] [data-action=sort], [data-screen="sort"] .empty');
+  check(tag, (await page.evaluate((id) => localStorage.getItem(`lantern-sort-${id}`), worldId)) === null, 'Stop here lets the sort go, so a new one can start');
+
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }

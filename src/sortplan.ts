@@ -171,13 +171,24 @@ export function buildSlice(
     });
 }
 
-const sliceName = (el: OwElement): string => (typeof el.name === 'string' ? el.name.trim() : '');
+// Trimmed as keel's Python strips: JS trim() keeps \x1c-\x1f and \x85, which Python counts as
+// whitespace, so a name of only those passed here and was refused there (the S399 merge gate).
+const PY_EDGES = /^[\s\x1c-\x1f\x85]+|[\s\x1c-\x1f\x85]+$/g;
+const sliceName = (el: OwElement): string => (typeof el.name === 'string' ? el.name.replace(PY_EDGES, '') : '');
 
 // ---------- from ticked rows to writes ----------
 
 export type Write =
   | { op: 'create'; key: string; type: string; values: Record<string, unknown> }
-  | { op: 'edit'; id: string; values: Record<string, unknown> };
+  /** `base`: keel's copy when the plan was fixed. The edit is judged against it, so a change made
+   * elsewhere before a late Finish writing is a conflict, never overwritten (the S399 merge gate). */
+  | { op: 'edit'; id: string; values: Record<string, unknown>; base?: OwElement };
+
+/** What the plan reads beside the view: keel's copy now, and whether a change to an element waits on the person. */
+export interface PlanContext {
+  base?: (id: string) => OwElement | undefined;
+  waitsOnYou?: (id: string) => boolean;
+}
 
 export interface Planned {
   writes: Write[];
@@ -199,6 +210,8 @@ export interface Ticked {
 const IDENTITY = new Set(['name', 'type', 'id']);
 /** A kind word: set when empty, never appended to ("Brewer\n\nSmuggler" is not a kind). */
 const KIND_FIELDS = new Set(['supertype', 'subtype']);
+/** Text fields that hold a setting, not prose: a map's colour Atlas paints, a pin's element type (the S399 merge gate). */
+const NOT_PROSE = new Set(['background_color', 'element_type']);
 
 function lower(t: string): string {
   return (t || '').trim().toLowerCase();
@@ -211,7 +224,7 @@ function lower(t: string): string {
  */
 function addable(type: string, field: string): boolean {
   if (field === 'description' || KIND_FIELDS.has(field)) return true;
-  if (BASE_FIELDS.includes(field)) return false;
+  if (BASE_FIELDS.includes(field) || NOT_PROSE.has(field)) return false;
   return fieldInfo(type, field)?.type === 'text';
 }
 
@@ -257,6 +270,7 @@ export function planWrites(
   get: (id: string) => OwElement | undefined,
   /** The ids sent in the slice: a row may name no other (keel filters too; the page does not rely on it). */
   sent?: Set<string>,
+  ctx: PlanContext = {},
 ): Planned {
   const writes: Write[] = [];
   const skipped: Planned['skipped'] = [];
@@ -280,6 +294,10 @@ export function planWrites(
       return skipped.push({ row: t.row, reason: 'It names something this phone did not send.' });
     const target = get(row.target.id);
     if (!target) return skipped.push({ row: t.row, reason: 'It is not in this world on this phone.' });
+    // The view holds the person's own change waiting on a conflict: adding to it would carry that
+    // text back even if they then take theirs (the S399 merge gate). Settle it first.
+    if (ctx.waitsOnYou?.(target.id))
+      return skipped.push({ row: t.row, reason: `A change to ${target.name} waits for you: settle it in Waiting to send, then write this.` });
     if (IDENTITY.has(row.field)) return skipped.push({ row: t.row, reason: 'A name is changed by hand, on its page.' });
     if (row.kind === 'add_to') {
       if (!addable(target.type, row.field)) return skipped.push({ row: t.row, reason: `${row.field} is set by hand, not added to.` });
@@ -341,6 +359,9 @@ export function planWrites(
       apply({ ...row.then, source_line: row.source_line, target: cand } as AddToRow | LinkRow, t);
     }
   }
-  for (const id of order) writes.push({ op: 'edit', id, values: working.get(id)! });
+  for (const id of order) {
+    const base = ctx.base?.(id);
+    writes.push({ op: 'edit', id, values: working.get(id)!, ...(base ? { base } : {}) });
+  }
   return { writes, skipped };
 }

@@ -8,8 +8,9 @@ import { icon } from '../icons';
 import { accountToken, cachedAccountWorlds } from '../account';
 import { MAP_TYPES } from '../maps';
 import { fieldLabel, TYPES, typeColor, typeLabel } from '../schema';
-import { buildSlice, fitNotes, notesPayload, noteText, planWrites, sanitizeRows, SORTED, tooLong, type SortRow, type Target, type Ticked, type Write } from '../sortplan';
+import { buildSlice, fitNotes, notesPayload, noteText, planWrites, sanitizeRows, tooLong, type SortRow, type Target, type Ticked, type Write } from '../sortplan';
 import { sortNotes, SortRefused, type Sorted } from '../sort';
+import { runWrites, type WriteRun } from '../sortwrite';
 import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
@@ -59,6 +60,8 @@ function readKept(worldId: string): Kept | null {
 
 /** A sort under way, per world: leaving and coming back waits for it instead of spending a second answer. */
 const inFlight = new Map<string, Promise<void>>();
+/** A write run under way, per world: one at a time, joined by a screen that comes back to it. */
+const writingRun = new Map<string, Promise<void>>();
 function writeKept(worldId: string, k: Kept | null): void {
   try {
     if (k) localStorage.setItem(keepKey(worldId), JSON.stringify(k));
@@ -88,14 +91,31 @@ function afterName(n: OwElement): string {
   return name && t.startsWith(name) ? t.slice(name.length).trim() : t;
 }
 
-const KIND_WORD:Record<SortRow['kind'], string> = { make: 'New', add_to: 'Add to', link: 'Link', ask: 'Which one?' };
+const KIND_WORD: Record<SortRow['kind'], string> = { make: 'New', add_to: 'Add to', link: 'Link', ask: 'Which one?' };
 
 export function sortView(s: WorldSession): View {
   const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'sort' });
   let phase: 'choose' | 'asking' | 'review' = 'choose';
   let kept = readKept(s.id);
   if (kept) phase = 'review';
-  let writing = false;
+  // The last write run here stopped on an error: say so, and offer to stop.
+  let failed = false;
+  const running = writingRun.get(s.id);
+  if (running) {
+    // Back while a write run is under way: wait for it, then show what it left.
+    void running.then(
+      () => {
+        kept = readKept(s.id);
+        loadTicks();
+        phase = kept ? 'review' : 'choose';
+        if (main.isConnected) render();
+      },
+      () => {
+        failed = true;
+        if (main.isConnected) render();
+      },
+    );
+  }
   const pending = inFlight.get(s.id);
   if (pending) {
     phase = 'asking';
@@ -338,7 +358,11 @@ export function sortView(s: WorldSession): View {
   // tap while it runs does nothing, and a retry after a failure resumes where it stopped, so nothing
   // is made or appended twice (the S398 sort gate).
   const write = async () => {
-    if (!kept || writing) return;
+    if (!kept || writingRun.has(s.id)) return;
+    if (!s.canWrite) {
+      toast('This world is read only here now, so nothing more can be written to it.');
+      return;
+    }
     if (!kept.plan) {
       const ticked: Ticked[] = [];
       kept.result.rows.forEach((row, i) => {
@@ -347,7 +371,11 @@ export function sortView(s: WorldSession): View {
       });
       let plan: ReturnType<typeof planWrites>;
       try {
-        plan = planWrites(ticked, (id) => s.get(id), new Set(kept.sent));
+        plan = planWrites(ticked, (id) => s.get(id), new Set(kept.sent), {
+          // Each edit is judged against keel's copy as the plan was fixed, however late it is finished.
+          base: (id) => s.serverCopy(id),
+          waitsOnYou: (id) => [...s.pending(id).values()].some((r) => r.state === 'needs-you' || r.state === 'gone'),
+        });
       } catch {
         toast('A ticked card could not be read. Untick it and write the rest.');
         return;
@@ -360,34 +388,35 @@ export function sortView(s: WorldSession): View {
       kept.step = 0;
       writeKept(s.id, kept);
     }
-    writing = true;
-    render();
-    const plan = kept.plan!;
-    const steps = plan.length + kept.notes.length;
-    try {
-      while ((kept.step ?? 0) < steps) {
-        const i = kept.step ?? 0;
-        if (i < plan.length) {
-          const w = plan[i];
-          if (w.op === 'create') await s.create(w.type, w.values);
-          else await s.edit(w.id, w.values, s.serverCopy(w.id));
-        } else {
-          // The notes are filed, not deleted: every written row points at its note.
-          const id = kept.notes[i - plan.length];
-          if (s.get(id)) await s.edit(id, { supertype: SORTED }, s.serverCopy(id));
-        }
-        kept.step = i + 1;
-        writeKept(s.id, kept);
-      }
+    const k = kept;
+    const plan = k.plan!;
+    let gone = 0;
+    // One write run per world, wherever the screen is: leaving and coming back joins this run
+    // instead of starting a second one over the same steps (the S399 merge gate).
+    const run = (async () => {
+      // The kept sort is the run's state: its step moves with each write and is saved after it.
+      ({ gone } = await runWrites(s, k as Kept & WriteRun, () => writeKept(s.id, k)));
       writeKept(s.id, null);
+    })();
+    writingRun.set(s.id, run);
+    failed = false;
+    render();
+    try {
+      await run;
       kept = null;
-      writing = false;
-      toast(plan.length ? `${plural(plan.length, 'change')} written. The notes are filed as Sorted.` : 'The notes are filed as Sorted.');
-      go(`#/w/${s.id}/t/narrative?unsorted`, true);
+      const done = plan.length - gone;
+      toast(
+        (done ? `${plural(done, 'change')} written. ` : '') +
+          (gone ? `${plural(gone, 'element')} had been removed elsewhere, so nothing was added to it. ` : '') +
+          'The notes are filed as Sorted.',
+      );
+      if (main.isConnected) go(`#/w/${s.id}/t/narrative?unsorted`, true);
     } catch (e) {
-      writing = false;
-      toast(`${errorText(e)} What was written stays written: tap again to finish.`);
-      render();
+      failed = true;
+      toast(`${errorText(e)} What was written stays written: tap again to finish, or stop here.`);
+    } finally {
+      writingRun.delete(s.id);
+      if (main.isConnected) render();
     }
   };
 
@@ -396,6 +425,7 @@ export function sortView(s: WorldSession): View {
     const { rows, not_proposed, remaining } = kept.result;
     const count = [...state.values()].filter((x) => x.on).length;
     const started = !!kept.plan;
+    const writing = writingRun.has(s.id);
     const writeBtn = h(
       'button',
       { class: 'btn btn-primary', type: 'button', 'data-action': 'write' },
@@ -403,8 +433,14 @@ export function sortView(s: WorldSession): View {
     );
     writeBtn.disabled = writing;
     writeBtn.addEventListener('click', () => void write());
-    // Once writing has begun, the sort is no longer the person's to let go: finish it.
-    const letGo = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center', hidden: started }, 'Keep the notes in Unsorted');
+    // Before writing: let the sort go. Once started and stopped (a failure, a reload, a target that
+    // cannot be written), stopping keeps what was written and leaves the unfiled notes in Unsorted,
+    // so a sort can never be stuck for good (the S399 merge gate).
+    const letGo = h(
+      'button',
+      { class: 'btn btn-quiet', type: 'button', style: 'align-self:center', hidden: writing, 'data-action': 'let-go' },
+      started ? 'Stop here: what is written stays' : 'Keep the notes in Unsorted',
+    );
     letGo.addEventListener('click', () => {
       writeKept(s.id, null);
       kept = null;
@@ -435,6 +471,7 @@ export function sortView(s: WorldSession): View {
       ),
       kept.wordsOnly ? h('p', { class: 'muted small', style: 'margin:0', 'data-words-only': '' }, 'The photos could not be read, so this sort used the words of your notes.') : '',
       started ? h('p', { class: 'muted small', style: 'margin:0', role: 'status' }, `Writing what you ticked: ${Math.min(kept.step ?? 0, (kept.plan?.length ?? 0) + kept.notes.length)} of ${(kept.plan?.length ?? 0) + kept.notes.length} done.`) : '',
+      failed && !writing ? h('p', { class: 'error', role: 'alert', 'data-stopped': '' }, 'Writing stopped. Finish writing goes on from there; Stop here keeps what is written.') : '',
       ...rows.map(card),
       leftOut,
       writeBtn,
