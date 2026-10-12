@@ -16,7 +16,7 @@ import {
 } from '../schema';
 import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
 import { editField, newElementSheet } from './edit';
-import { placesOf, type Place } from '../maps';
+import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
 
@@ -142,17 +142,30 @@ export function homeView(s: WorldSession): View {
     // Pins and markers are map furniture, mostly unnamed: they go last, after the world's things.
     const furniture = (t: string) => (t === 'pin' || t === 'marker' ? 1 : 0);
     const present = TYPES.filter((t) => counts.get(t)).sort((a, b) => furniture(a) - furniture(b) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
-    if (!present.length) {
-      body.replaceChildren(
-        h(
-          'p',
-          { class: 'empty' },
-          s.status === 'syncing' ? 'Fetching the world…' : s.canWrite ? 'Nothing here yet. Tap the + to catch the first idea.' : 'This world is empty.',
-        ),
+    // A world you can write offers every type but the map ones, the empty last: "New" lives on a type's list,
+    // so a type with no tile could never get its first element (S397).
+    const all = s.canWrite ? [...present, ...TYPES.filter((t) => !counts.get(t) && !MAP_TYPES.has(t))] : present;
+    if (!present.length && (!s.canWrite || s.status === 'syncing' || !showAll)) {
+      const empty = h(
+        'p',
+        { class: 'empty' },
+        s.status === 'syncing' ? 'Fetching the world…' : s.canWrite ? 'Nothing here yet. Tap the + to catch the first idea.' : 'This world is empty.',
       );
+      const types =
+        s.canWrite && s.status !== 'syncing'
+          ? (() => {
+              const b = h('button', { class: 'btn btn-quiet', type: 'button' }, 'Or choose a type to start with');
+              b.addEventListener('click', () => {
+                showAll = true;
+                renderBody();
+              });
+              return b;
+            })()
+          : '';
+      body.replaceChildren(empty, h('div', { style: 'text-align:center' }, types));
       return;
     }
-    const shown = showAll ? present : present.slice(0, 9);
+    const shown = showAll ? all : present.slice(0, 9);
     const tiles = shown.map((t) =>
       h(
         'a',
@@ -162,9 +175,9 @@ export function homeView(s: WorldSession): View {
       ),
     );
     const more =
-      present.length > 9
+      all.length > 9
         ? (() => {
-            const b = h('button', { class: 'btn btn-quiet', type: 'button' }, showAll ? 'Fewer types' : `All ${present.length} types`);
+            const b = h('button', { class: 'btn btn-quiet', type: 'button' }, showAll ? 'Fewer types' : `All ${all.length} types`);
             b.addEventListener('click', () => {
               showAll = !showAll;
               renderBody();
@@ -247,7 +260,7 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
     if (shown.length > 400) list.appendChild(h('p', { class: 'muted small' }, `Showing 400 of ${shown.length}. Search to narrow it.`));
   };
   input.addEventListener('input', refresh);
-  const add = s.canWrite
+  const add = s.canWrite && !MAP_TYPES.has(type)
     ? (() => {
         const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('plus', 16), `New`);
         b.addEventListener('click', () => newElementSheet(s, type));

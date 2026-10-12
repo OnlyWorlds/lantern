@@ -215,6 +215,18 @@ async function walk(engine, deviceName, tag) {
   await page.getByRole('button', { name: 'Start the world' }).tap();
   await page.waitForSelector('[data-screen="home"]');
   await shot('local-home');
+  // An empty world's first Character (S397: a type with no tile had no "New" anywhere).
+  await page.getByRole('button', { name: 'Or choose a type to start with' }).tap();
+  const offered = await page.locator('.type-tile b').allInnerTexts();
+  check(tag, offered.includes('Characters') && !offered.includes('Pins') && !offered.includes('Maps'), `an empty world offers ${offered.length} types, none of the map ones`);
+  await page.locator('.type-tile', { hasText: 'Characters' }).tap();
+  await page.getByRole('button', { name: 'New' }).tap();
+  await page.locator('.sheet input[aria-label="Name"]').fill('Oskar');
+  await page.getByRole('button', { name: 'Make it' }).tap();
+  await page.waitForFunction(() => document.querySelector('[data-screen="element"] h1')?.textContent === 'Oskar');
+  check(tag, /Character/.test(await page.locator('.el-head .muted').innerText()), 'the first Character is made from the type list');
+  await page.goto(`${BASE}/?online2${(await page.evaluate(() => location.hash)).replace(/\/e\/.*$/, '')}`);
+  await page.waitForSelector('[data-screen="home"] .type-tile');
   await page.locator('.fab').tap();
   await page.waitForSelector('[data-screen="capture"]');
   await page.locator('textarea').tap();
@@ -248,7 +260,7 @@ async function walk(engine, deviceName, tag) {
   ]);
   if (download) {
     const saved = await download.path().then((p) => readWorldFile(new Uint8Array(readFileSync(p))));
-    check(tag, saved.name === 'Bus stop ideas' && saved.files.length === 2, `Save a copy gives a world file (${download.suggestedFilename()}, ${saved.files.length} files)`);
+    check(tag, saved.name === 'Bus stop ideas' && saved.files.length === 3, `Save a copy gives a world file (world, the note, Oskar) (${download.suggestedFilename()}, ${saved.files.length} files)`);
   } else check(tag, true, 'Save a copy went to the share sheet (no download to read)');
   const sample = 'C:/Users/Titus/Desktop/TESTOWFOLDER/onlyworlds-atlas/moppetopia-sample-55a9b4d5';
   const filesOf = (d, rel = '') =>

@@ -5,6 +5,9 @@
 import type { OwElement } from '@onlyworlds/sdk';
 
 /** A map is shown only with a picture online: pins on a blank canvas are not a map. */
+/** Types that live on a map's picture: Lantern reads maps and never draws one, so it makes none of these. */
+export const MAP_TYPES: ReadonlySet<string> = new Set(['map', 'pin', 'marker', 'zone']);
+
 export function mapPicture(map: OwElement | undefined): string {
   const u = map?.image_url;
   return typeof u === 'string' && u.startsWith('https://') ? u : '';
