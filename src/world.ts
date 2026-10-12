@@ -63,17 +63,6 @@ export function movedFields(row: OutboxRow, current: OwElement): string[] {
 
 const sessions = new Map<string, Promise<WorldSession>>();
 
-/** Whether this phone can change the world: one on this phone, or a write key (not the demo). */
-/**
- * The view epoch in a guest's feed cursor ("<seq>:<id>:<epoch>"), or null for any other shape.
- * The one place Lantern reads inside the opaque cursor, for the poll's "did my view change?"
- * (keel's own documented tip format, core/changes.py; asked of Skeld to bless or replace).
- */
-export function cursorEpoch(cursor: unknown): string | null {
-  if (cursor === undefined || cursor === null) return null;
-  const parts = String(cursor).split(':');
-  return parts.length === 3 ? parts[2] : null;
-}
 
 /** keel's head is a change_seq; one below the head this phone applied means a rewind. */
 export function headBehind(head: unknown, applied: unknown): boolean {
@@ -82,6 +71,7 @@ export function headBehind(head: unknown, applied: unknown): boolean {
   return head != null && applied != null && Number.isFinite(h) && Number.isFinite(a) && h < a;
 }
 
+/** Whether this phone can change the world: one on this phone, or a write key (not the demo). */
 export function recordCanWrite(rec: WorldRecord): boolean {
   if (rec.kind === 'local') return true;
   if (rec.kind === 'demo' || !rec.apiKey || isDemoKey(rec.apiKey)) return false;
@@ -119,8 +109,13 @@ export class WorldSession {
     const take = this.isNewer(el);
     await db.settleOutboxRow(this.id, row.seq!, take ? el : null);
     this.outbox = this.outbox.filter((r) => r !== row);
-    if (take) this.truth.set(el.id, el);
+    if (take) {
+      this.truth.set(el.id, el);
+      this.settledDuringWalk?.add(el.id);
+    }
   }
+  /** Ids whose send settled while a fresh read was walking; the swap keeps their answers. */
+  private settledDuringWalk: Set<string> | null = null;
   outbox: OutboxRow[] = [];
   /** What the screen shows: truth with the outbox laid on top. */
   view = new Map<string, OwElement>();
@@ -343,10 +338,10 @@ export class WorldSession {
       if (quiet && !resynced && this.rec.appliedHead !== undefined) {
         const tip = await c.changesHead();
         // A guest's view can change with no change in the world (a Character given or taken, a
-        // role, the membership gone: keel bumps the view's epoch, not the head). The tip cursor
-        // carries that epoch (keel core/changes.py: "<seq>:<max uuid>:<epoch>"); a different
-        // one walks, and the walk meets resync_required (the S396 gate).
-        const sameView = cursorEpoch(tip.cursor) === cursorEpoch(this.rec.cursor);
+        // role, the membership gone): keel moves the view's epoch, not the head, and says it beside
+        // the head (Skeld h29 #3525). A different one, or one not yet known, walks; a stale view's
+        // walk meets resync_required.
+        const sameView = this.rec.appliedEpoch !== undefined && tip.epoch === this.rec.appliedEpoch;
         if (String(tip.head) === String(this.rec.appliedHead) && sameView) {
           this.status = 'idle';
           this.statusText = '';
@@ -365,6 +360,7 @@ export class WorldSession {
       // After resync_required the walk goes into a fresh copy, swapped in only when it completes:
       // a walk that fails halfway leaves the old copy standing, not half a world.
       const fresh = resynced ? new Map<string, OwElement>() : null;
+      if (fresh) this.settledDuringWalk = new Set();
       const flushBatch = async () => {
         if (fresh) {
           for (const el of puts) fresh.set(el.id, el);
@@ -388,6 +384,14 @@ export class WorldSession {
           if (!fresh && headBehind(r.value.head, this.rec.appliedHead)) return this.doPull(true);
           await flushBatch();
           if (fresh) {
+            // A send that settled while this walk ran is newer than the page that carried its element
+            // (the S397 gate). Only those: after a rewind every older copy has the higher change_seq.
+            for (const id of this.settledDuringWalk ?? []) {
+              const held = this.truth.get(id);
+              const page = fresh.get(id);
+              if (held && (!page || (held.change_seq ?? 0) >= (page.change_seq ?? 0))) fresh.set(id, held);
+            }
+            this.settledDuringWalk = null;
             await db.clearElements(this.id);
             await db.applyElements(this.id, [...fresh.values()]);
             this.truth = fresh;
@@ -395,6 +399,7 @@ export class WorldSession {
           const rec2 = await db.updateWorldRecord(this.id, {
             cursor: r.value.cursor,
             appliedHead: r.value.head,
+            appliedEpoch: r.value.epoch,
             lastSync: new Date().toISOString(),
             count: this.truth.size,
           });
@@ -416,6 +421,7 @@ export class WorldSession {
       this.keyRefused = false;
       this.statusText = '';
     } catch (e) {
+      this.settledDuringWalk = null;
       if (e instanceof OwApiError && e.isResyncRequired && !resynced) {
         // What this key may see changed: walk from zero and replace the copy (not merge into it).
         return this.doPull(true);

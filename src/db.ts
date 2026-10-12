@@ -25,6 +25,9 @@ export interface WorldRecord {
   cursor?: string;
   /** The feed's head when the last walk finished: the quiet poll's "anything new?" compares with it. */
   appliedHead?: number | string;
+  /** keel's view epoch (a guest's; null for everyone else) the last walk ran under (SDK changesAll's return);
+   * unknown on a copy from before S397, which costs its next poll one walk. */
+  appliedEpoch?: number | null;
   lastSync?: string;
   /** Put it online, under way: the account world already made, and the bulk's key, so a retry repeats nothing. */
   pendingOnline?: { serverId: string; key: string; bulkKey: string };

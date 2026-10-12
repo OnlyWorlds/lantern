@@ -402,7 +402,7 @@ export function elementView(s: WorldSession, id: string): View {
     const links = [...s.backlinks(id)].sort((a, b) => {
       const ea = s.get(a);
       const eb = s.get(b);
-      return (ea?.type ?? '').localeCompare(eb?.type ?? '') || elName(ea).localeCompare(elName(eb));
+      return (ea?.type ?? '').localeCompare(eb?.type ?? '') || elName(ea).localeCompare(elName(eb)) || (a < b ? -1 : a > b ? 1 : 0);
     });
     let backNode: HTMLElement | null = null;
     if (links.length) {

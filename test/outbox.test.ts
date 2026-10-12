@@ -36,6 +36,8 @@ class FakeKeel {
   nextError: { status: number; code: string } | null = null;
   /** A walk from zero fails (a resync whose walk drops). */
   failZeroWalk = false;
+  /** Runs once while a feed page is in flight, after the page was built (something landing mid-walk). */
+  beforePage: (() => Promise<void>) | null = null;
   idem = new Map<string, string>();
 
   put(el: Omit<El, 'change_seq'>): El {
@@ -65,10 +67,10 @@ class FakeKeel {
 
     if (path === '/world') return this.json(200, { id: 'w1', name: 'Fake world' });
     if (path === '/changes') {
-      // keel's head read: the world's current change_seq, no bodies (core/changes.py).
+      // keel's head read: the world's current change_seq and view epoch, no bodies (core/changes.py).
       // A guest's cursors carry the view epoch: "<seq>:<id>:<epoch>" (keel 4b R2).
       const cur = (seq: number) => (this.epoch === null ? String(seq) : `${seq}:ffffffff:${this.epoch}`);
-      if (url.searchParams.get('head') === 'true') return this.json(200, { head: this.seq, cursor: cur(this.seq) });
+      if (url.searchParams.get('head') === 'true') return this.json(200, { head: this.seq, cursor: cur(this.seq), changes: [], has_more: false, epoch: this.epoch });
       if (this.failZeroWalk && !url.searchParams.get('since')) throw new TypeError('Failed to fetch');
       const sinceRaw = url.searchParams.get('since');
       const staleEpoch = this.epoch !== null && sinceRaw && sinceRaw.split(':')[2] !== String(this.epoch);
@@ -81,7 +83,14 @@ class FakeKeel {
         ...[...this.els.values()].filter((e) => e.change_seq > since).map((e) => ({ op: 'upsert', id: e.id, type: e.type, element: e, change_seq: e.change_seq })),
         ...this.deleted.filter((d) => d.seq > since).map((d) => ({ op: 'delete', id: d.id, type: d.type, change_seq: d.seq })),
       ].sort((a, b) => a.change_seq - b.change_seq);
-      return this.json(200, { cursor: cur(this.seq), changes, has_more: false, head: this.seq });
+      if (this.beforePage) {
+        const run = this.beforePage;
+        this.beforePage = null;
+        await run(); // the page above was built before this ran: it carries the older state
+      }
+      // An empty page echoes the caller's own cursor, as keel does (core/changes.py): after a
+      // rewind that cursor sits past the head (the S397 gate).
+      return this.json(200, { cursor: changes.length || !sinceRaw ? cur(this.seq) : sinceRaw, changes, has_more: false, head: this.seq, epoch: this.epoch });
     }
     const m = path.match(/^\/([a-z]+)\/?([^/]*)\/?$/);
     if (!m) return this.err(404, 'not_found');
@@ -251,6 +260,23 @@ describe('pull', () => {
     await s.pull();
     expect(s.get('c')).toBeUndefined();
     expect(s.status).toBe('idle');
+  });
+
+  it('a send that settles while a fresh read walks keeps its answer through the swap', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    await s.edit('a', { name: 'Ada Vell' }); // waits for the PIN
+    keel.resyncOnce = true;
+    keel.beforePage = async () => {
+      setSessionPin(s.id, keel.pin);
+      await s.flush();
+    };
+    await s.pull();
+    expect(keel.els.get('a')?.name).toBe('Ada Vell');
+    expect(s.waitingCount()).toBe(0);
+    expect(s.serverCopy('a')?.name).toBe('Ada Vell');
+    expect(s.get('a')?.name).toBe('Ada Vell');
   });
 
   it('a change that arrives while an edit sheet is open is a conflict, never silently overwritten', async () => {
