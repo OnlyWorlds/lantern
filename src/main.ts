@@ -21,7 +21,7 @@ import { consumeShared, peekShared, takeShared } from './share';
 import { joinCode } from './join';
 import { joinView } from './views/join';
 import { isType } from './schema';
-import { errorText } from './ui';
+import { elName, errorText, toast } from './ui';
 
 applyTheme(currentTheme());
 
@@ -173,7 +173,14 @@ window.setInterval(() => {
   if (s.keyRefused) return;
   // Changes still waiting go with it: a send that failed while the phone thought it had signal
   // is tried again here, so its banner comes back instead of the poll quietly clearing it.
-  void s.pull(true).then(() => (s.waitingCount() && !s.needPin ? s.flush() : undefined));
+  void s.pull(true).then(() => {
+    // A player told of what just arrived (a reveal at the table), wherever they are in the app.
+    const fresh = s.arrived.splice(0).filter((e) => e.type !== 'pin' && e.type !== 'marker');
+    if (fresh.length && s.rec.memberRole === 'guest' && s === activeSession) {
+      toast(fresh.length === 1 ? `New: ${elName(fresh[0])}` : `${fresh.length} new things you know`);
+    }
+    return s.waitingCount() && !s.needPin ? s.flush() : undefined;
+  });
 }, POLL_MS);
 
 document.addEventListener('visibilitychange', () => {

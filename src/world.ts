@@ -366,6 +366,7 @@ export class WorldSession {
           // A page fetched before a send settled must not put back the older copy.
           puts = puts.filter((el) => this.isNewer(el));
           await db.applyElements(this.id, puts, dels);
+          if (quiet) for (const el of puts) if (!this.truth.has(el.id)) this.arrived.push(el);
           for (const el of puts) this.truth.set(el.id, el);
           for (const id of dels) this.truth.delete(id);
         }
@@ -416,6 +417,9 @@ export class WorldSession {
     this.rebuild();
     this.emit();
   }
+
+  /** Elements new to this phone that a quiet poll brought in; the app takes them to say so. */
+  arrived: OwElement[] = [];
 
   /** The last read was refused for the key itself (401/403): the poll stops asking until a full pull. */
   keyRefused = false;

@@ -81,12 +81,15 @@ async function walk(engine, deviceName, tag) {
   await page.waitForTimeout(300);
   check(tag, heads === atOpen.heads + 1 && walks === atOpen.walks, `twenty seconds in front: one head read, no walk (${heads - atOpen.heads}, ${walks - atOpen.walks})`);
   check(tag, banners === 0, 'the look is quiet: no banner');
+  check(tag, (await page.locator('.toast').count()) === 0, 'nothing new: nothing said');
 
   // 2. The game master gives it: the next look brings it to the player's home, no tap
   reveal = true;
   await page.clock.runFor(20_000);
   await page.waitForFunction(() => /A rusted sword/.test(document.querySelector('main')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {});
   check(tag, /A rusted sword/.test(await page.locator('main').innerText()), 'the reveal appears on the player\'s home by itself');
+  const said = await page.locator('.toast').innerText().catch(() => '');
+  check(tag, said === 'New: A rusted sword', `and the player is told: ${JSON.stringify(said)}`);
   check(tag, banners === 0, 'still no banner');
 
   // 3. Hidden (the phone locked, another app in front): no looks
