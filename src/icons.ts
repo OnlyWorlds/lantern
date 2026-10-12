@@ -14,6 +14,10 @@ const PATHS: Record<string, string> = {
   map: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+  home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
+  install: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 22, stroke = 1.8): SVGSVGElement {

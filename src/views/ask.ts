@@ -7,7 +7,7 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { fieldLabel } from '../schema';
 import { elRow, tabbar } from '../ui';
-import { accountToken } from '../account';
+import { accountToken, cachedAccountWorlds } from '../account';
 import { askInASentence } from '../ask';
 import type { WorldSession } from '../world';
 import type { View } from './world';
@@ -51,12 +51,32 @@ export function askView(s: WorldSession): View {
   const out = h('div', { class: 'stack' });
   // A sentence needs an account world (keel checks the account owns or is in it) and a sign-in.
   let signedIn = false;
-  const accountWorld = s.rec.kind === 'online' && !!s.rec.role;
-  void accountToken().then((t) => {
+  // A world first opened with a key has no role on this phone; signed in later, the account's own
+  // list says whether it is one of yours (the Captain's walk: Ask stayed a search after sign-in).
+  let accountWorld = s.rec.kind === 'online' && !!s.rec.role;
+  let known = false; // until the sign-in is read, no reason is given (it would flash "Sign in")
+  void Promise.all([accountToken(), cachedAccountWorlds()]).then(([t, mine]) => {
     signedIn = !!t;
-    if (signedIn && accountWorld && input.value.trim()) run();
+    if (s.rec.kind === 'online' && mine.some((w) => w.id === s.id)) accountWorld = true;
+    known = true;
+    run();
   });
-  const sentence = (q: string, hits: OwLookupHit<OwElement>[]): HTMLElement | '' => {
+  const aiReady = () => signedIn && accountWorld && navigator.onLine;
+  // Why there is no sentence, said once under the question (the Captain's walk: Ask read as a
+  // search bar, because a world opened with a key never shows the AI half).
+  const whyNot = (): HTMLElement | '' => {
+    if (!known || aiReady()) return '';
+    if (s.rec.kind === 'demo')
+      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'demo' }, 'Answers in a sentence come with a world from your account.');
+    if (s.rec.kind === 'local')
+      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'local' }, 'Answers in a sentence come once this world is online, in your account.');
+    if (!accountWorld)
+      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'key' }, 'Answers in a sentence come with a world from your account, signed in. This one was opened with a key.');
+    if (!signedIn)
+      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'signin' }, h('a', { href: '#/signin' }, 'Sign in'), ' to get answers in a sentence.');
+    return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'offline' }, 'With signal, the answer comes in a sentence too.');
+  };
+  const sentence = (q: string, hits: OwLookupHit<OwElement>[], askNow: boolean): HTMLElement | '' => {
     if (!signedIn || !accountWorld) return '';
     // The elements on screen, in their order (the SDK's buildAskContext, keel's limits).
     const { context } = buildAskContext(hits, s.lookupIndex());
@@ -64,7 +84,11 @@ export function askView(s: WorldSession): View {
     // the same box (never a second spend); elements that changed make a new one.
     const key = `${s.id}|${q}|${context.join('|')}`;
     const kept = answered.get(key);
-    if (kept) return kept;
+    if (kept) {
+      // Enter on a question shown with its button: ask now (a box that asked already has no button).
+      if (askNow) kept.querySelector<HTMLButtonElement>('button:not(:disabled)')?.click();
+      return kept;
+    }
     const box = h('div', { class: 'stack', 'data-sentence': '' });
     answered.set(key, box);
     const btn = h('button', { class: 'btn', type: 'button' }, icon('spark', 18), 'Answer it in a sentence');
@@ -86,28 +110,46 @@ export function askView(s: WorldSession): View {
       }
     });
     box.append(btn, hint);
+    if (askNow) btn.click();
     return box;
   };
-  const run = () => {
+  /** `askNow`: the question was sent (Enter), so a sentence is asked for at once; typing only looks up. */
+  const run = (askNow = false) => {
     const q = input.value.trim();
     lastQuestion.set(s.id, q);
+    input.setAttribute('enterkeyhint', aiReady() ? 'send' : 'search');
     if (!q) {
       out.replaceChildren(
         h(
           'p',
           { class: 'muted', style: 'margin:0' },
-          'Ask about anything in this world. The answer comes from what is written here, on this phone, with or without signal.',
+          aiReady()
+            ? 'Ask about anything in this world. Send it for an answer in a sentence, made only from what is written here.'
+            : 'Ask about anything in this world. The answer comes from what is written here, on this phone, with or without signal.',
         ),
+        whyNot(),
       );
       return;
     }
     const hits = lookupWorld(s.lookupIndex(), q, { limit: 8 });
     if (!hits.length) {
-      out.replaceChildren(h('p', { class: 'empty', 'data-answer': 'none' }, 'Your world does not say.'));
+      // Said whole: the sentence is made only from what the phone finds, so nothing found means no AI.
+      out.replaceChildren(
+        h('p', { class: 'empty', 'data-answer': 'none' }, 'Your world does not say.'),
+        h(
+          'p',
+          { class: 'muted small', style: 'margin:0' },
+          aiReady()
+            ? 'Nothing here is named or written with those words, so there was nothing to answer from. Try a name from your world.'
+            : 'Nothing here is named or written with those words. Try a name from your world.',
+        ),
+        whyNot(),
+      );
       return;
     }
     out.replaceChildren(
-      navigator.onLine ? sentence(q, hits) : '',
+      navigator.onLine ? sentence(q, hits, askNow) : '',
+      whyNot(),
       h('p', { class: 'section-label' }, 'What your world says'),
       h(
         'div',
@@ -127,13 +169,14 @@ export function askView(s: WorldSession): View {
   const form = h('form', { class: 'search', role: 'search' }, icon('spark', 20), input);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    clearTimeout(t);
     input.blur();
-    run();
+    run(aiReady());
   });
   let t: number | undefined;
   input.addEventListener('input', () => {
     clearTimeout(t);
-    t = window.setTimeout(run, 250);
+    t = window.setTimeout(() => run(), 250);
   });
   run();
   return {
@@ -143,7 +186,7 @@ export function askView(s: WorldSession): View {
       h('div', { class: 'topbar' }, h('h1', null, 'Ask')),
       form,
       out,
-      tabbar(s.id, 'ask'),
+      tabbar(s, 'ask'),
     ),
     // A sync that lands mid-question changes the index: answer again.
     refresh: () => input.value.trim() && run(),

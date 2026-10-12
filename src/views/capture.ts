@@ -1,35 +1,33 @@
-// Catch it: a line, a ramble from the keyboard's microphone, or a photographed page. It lands as
-// a Narrative with supertype Unsorted, the photo as its picture: material not yet turned into
-// elements (Skeld's convention, #3409).
+// Catch it: a line, a ramble from the keyboard's microphone, or a photographed page. By default it
+// lands as a Narrative with supertype Unsorted, the photo as its picture: material not yet turned
+// into elements (Skeld's convention, #3409). "What is it?" makes it an element of a type at once
+// instead: the first line its name, the rest its description (the Captain's walk, 2026-10-12).
 import { h } from '../dom';
-import { icon } from '../icons';
-import { preparePhoto } from '@onlyworlds/sdk';
-import { errorText, go, toast, topbar } from '../ui';
+import { errorText, go, tabbar, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 import { consumeShared } from '../share';
 import { readDraft, writeDraft } from '../draft';
+import { MAP_TYPES } from '../maps';
+import { TYPES, typeColor, typeLabel } from '../schema';
+import { photoPicker } from './photo';
+import { elementFromNote, titleFrom } from '../note';
 
 export const UNSORTED = 'Unsorted';
 
-function titleFrom(text: string, hasPhoto: boolean): string {
-  const first = text.trim().split(/\n/)[0]?.trim() ?? '';
-  if (first) {
-    const cps = [...first];
-    return cps.length > 60 ? cps.slice(0, 57).join('').trimEnd() + '…' : first;
-  }
-  const when = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
-  return hasPhoto ? `A page, ${when}` : `A note, ${when}`;
-}
+/** The kinds offered first; the rest of the types (map furniture aside) behind "More". */
+const FIRST_KINDS = ['character', 'location', 'object', 'creature', 'event'];
 
 export function captureView(s: WorldSession, fromShare = false): View {
   let photo: Blob | null = null;
   let photoUrl: string | null = null;
+  let kind = UNSORTED;
+  let showAllKinds = false;
   const text = h('textarea', {
     class: 'textarea',
     'aria-label': 'What to keep',
     placeholder: 'An idea, a name, what just happened at the table…',
-    style: 'min-height:200px',
+    style: 'min-height:180px',
   });
   // A draft from before comes back first (src/draft.ts), and a note shared from another app lands under it.
   const shared = fromShare ? consumeShared() : null;
@@ -53,18 +51,24 @@ export function captureView(s: WorldSession, fromShare = false): View {
     kept.remove();
     text.focus();
   });
-  const file = h('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none', 'aria-hidden': 'true' });
   const preview = h('div', { class: 'stack' });
-  const photoBtn = h('button', { class: 'btn', type: 'button' }, icon('camera', 20), 'Add a photo');
-  photoBtn.addEventListener('click', () => file.click());
   const err = h('p', { class: 'error', role: 'alert' });
+  const picker = photoPicker(
+    (p) => {
+      err.textContent = '';
+      photo = p;
+      showPhoto();
+    },
+    (m) => {
+      err.textContent = m;
+    },
+  );
 
   const showPhoto = () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     photoUrl = photo ? URL.createObjectURL(photo) : null;
     if (!photo || !photoUrl) {
       preview.replaceChildren();
-      photoBtn.lastChild!.textContent = 'Add a photo';
       return;
     }
     const remove = h('button', { class: 'btn btn-quiet', type: 'button' }, 'Remove the photo');
@@ -73,43 +77,89 @@ export function captureView(s: WorldSession, fromShare = false): View {
       showPhoto();
     });
     preview.replaceChildren(h('img', { class: 'photo-preview', src: photoUrl, alt: 'The photo to keep' }), remove);
-    photoBtn.lastChild!.textContent = 'Take another';
   };
 
-  file.addEventListener('change', async () => {
-    const f = file.files?.[0];
-    file.value = '';
-    if (!f) return;
-    err.textContent = '';
-    photoBtn.disabled = true;
-    try {
-      photo = (await preparePhoto(f)).blob;
-      showPhoto();
-    } catch (e) {
-      err.textContent = errorText(e);
-    } finally {
-      photoBtn.disabled = false;
-    }
-  });
+  // What is it? Unsorted first (the catch is fast by default), then the common kinds, then More.
+  const kinds = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'What is it?' });
+  const kindHint = h('p', { class: 'muted small', style: 'margin:0' });
+  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' });
+  const renderKinds = () => {
+    const rest = TYPES.filter((t) => !MAP_TYPES.has(t) && !FIRST_KINDS.includes(t));
+    const offered = [UNSORTED, ...FIRST_KINDS, ...(showAllKinds || rest.includes(kind as never) ? rest : [])];
+    const chip = (k: string) => {
+      const on = k === kind;
+      const b = h(
+        'button',
+        {
+          class: 'kind-chip',
+          type: 'button',
+          role: 'radio',
+          'aria-checked': String(on),
+          style: k === UNSORTED ? null : `--type:${typeColor(k)}`,
+          'data-kind': k,
+        },
+        k === UNSORTED ? UNSORTED : typeLabel(k),
+      );
+      b.addEventListener('click', () => {
+        kind = k;
+        renderKinds();
+      });
+      return b;
+    };
+    const more =
+      offered.length < rest.length + FIRST_KINDS.length + 1
+        ? (() => {
+            const b = h('button', { class: 'kind-chip more', type: 'button' }, 'More');
+            b.addEventListener('click', () => {
+              showAllKinds = true;
+              renderKinds();
+            });
+            return b;
+          })()
+        : null;
+    kinds.replaceChildren(...offered.map(chip), more ?? '');
+    kindHint.textContent =
+      kind === UNSORTED ? 'Sort it later, into elements.' : 'The first line is its name, the rest its description.';
+    saveBtn.textContent = kind === UNSORTED ? 'Keep it in Unsorted' : `Make the ${typeLabel(kind).toLowerCase()}`;
+  };
+  renderKinds();
 
-  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Keep it in Unsorted');
-  const form = h('form', { class: 'stack' }, text, draft.trim() ? kept : '', h('div', { class: 'row-gap' }, photoBtn), preview, err, saveBtn, file);
+  const form = h(
+    'form',
+    { class: 'stack' },
+    text,
+    draft.trim() ? kept : '',
+    picker.row,
+    preview,
+    h('div', { class: 'stack', style: 'gap:8px' }, h('p', { class: 'section-label' }, 'What is it?'), kinds, kindHint),
+    err,
+    saveBtn,
+  );
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = text.value.trim();
-    if (!body && !photo) {
-      err.textContent = 'Write something or add a photo first.';
+    if (kind === UNSORTED ? !body && !photo : !body) {
+      err.textContent = kind === UNSORTED ? 'Write something or add a photo first.' : 'Write its name on the first line.';
       return;
     }
     saveBtn.disabled = true;
     try {
-      const values: Record<string, unknown> = { name: titleFrom(body, !!photo), supertype: UNSORTED };
-      if (body) values.description = body;
-      const id = await s.create('narrative', values, photo ?? undefined);
+      let values: Record<string, unknown>;
+      let type: string;
+      if (kind === UNSORTED) {
+        type = 'narrative';
+        values = { name: titleFrom(body, !!photo), supertype: UNSORTED };
+        if (body) values.description = body;
+      } else {
+        type = kind;
+        values = elementFromNote(body);
+      }
+      const id = await s.create(type, values, photo ?? undefined);
       writeDraft(s.id, '');
-      toast(s.isLocal || navigator.onLine ? 'Kept in Unsorted.' : 'Kept on this phone. It sends when you have signal.');
+      const where = kind === UNSORTED ? 'Kept in Unsorted.' : `Made the ${typeLabel(kind).toLowerCase()}.`;
+      toast(s.isLocal || navigator.onLine ? where : 'Kept on this phone. It sends when you have signal.');
       if (photoUrl) URL.revokeObjectURL(photoUrl);
-      go(`#/w/${s.id}/e/${id}`, true);
+      go(`#/w/${s.id}/e/${id}${kind === UNSORTED ? '' : '?fill'}`, true);
     } catch (ex) {
       err.textContent = errorText(ex);
       saveBtn.disabled = false;
@@ -119,10 +169,11 @@ export function captureView(s: WorldSession, fromShare = false): View {
   return {
     el: h(
       'main',
-      { class: 'screen', 'data-screen': 'capture' },
+      { class: 'screen has-tabbar', 'data-screen': 'capture' },
       topbar('Catch it', `#/w/${s.id}`),
       h('p', { class: 'muted small', style: 'margin:0' }, "To speak it, use your keyboard's microphone."),
       form,
+      tabbar(s, 'catch'),
     ),
   };
 }

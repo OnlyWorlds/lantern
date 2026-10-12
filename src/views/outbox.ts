@@ -3,7 +3,7 @@
 import type { OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { fieldInfo, fieldLabel, isEmptyValue } from '../schema';
-import { elName, topbar } from '../ui';
+import { elName, tabbar, topbar } from '../ui';
 import { movedFields, type WorldSession } from '../world';
 import type { OutboxRow } from '../db';
 import { pinSheet, type View } from './world';
@@ -98,7 +98,7 @@ function refusedCard(s: WorldSession, row: OutboxRow): HTMLElement {
 }
 
 export function outboxView(s: WorldSession): View {
-  const main = h('main', { class: 'screen', 'data-screen': 'outbox' });
+  const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'outbox' });
   const refresh = () => {
     const rows = [...s.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     const needs = rows.filter((r) => r.state === 'needs-you');
@@ -129,7 +129,7 @@ export function outboxView(s: WorldSession): View {
                   h(
                     'span',
                     { class: 'muted' },
-                    `· ${r.op === 'create' ? 'new' : Object.keys(r.values).map(fieldLabel).join(', ')}${r.photo ? ' · a photo' : ''}${r.state === 'sending' ? ' · sending' : ''}`,
+                    `· ${[r.op === 'create' ? 'new' : Object.keys(r.values).map(fieldLabel).join(', '), r.photo ? 'a photo' : '', r.state === 'sending' ? 'sending' : ''].filter(Boolean).join(' · ')}`,
                   ),
                 ),
               ),
@@ -138,6 +138,7 @@ export function outboxView(s: WorldSession): View {
         : '',
       pinBtn ?? "",
       !rows.length ? h('p', { class: 'empty' }, 'Everything is sent.') : '',
+      tabbar(s, null),
     );
   };
   refresh();

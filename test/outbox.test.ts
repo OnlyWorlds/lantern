@@ -39,6 +39,9 @@ class FakeKeel {
   /** Runs once while a feed page is in flight, after the page was built (something landing mid-walk). */
   beforePage: (() => Promise<void>) | null = null;
   idem = new Map<string, string>();
+  uploads = 0;
+  /** keel refuses the picture's ticket (storage_full is a 403, quota_exceeded a 429). */
+  refuseTicket: { status: number; code: string } | null = null;
 
   put(el: Omit<El, 'change_seq'>): El {
     const full = { ...el, change_seq: ++this.seq } as El;
@@ -61,10 +64,18 @@ class FakeKeel {
     const headers = new Headers(init.headers);
     const path = url.pathname.replace('/api/v2', '').replace(/\/+$/, '');
     this.calls.push(`${method} ${path}`);
+    // The media edge (its own host, the ticket is its pass) and, below, keel's ticket for it, as
+    // test/online.test.ts fakes them.
+    if (url.host === 'edge.test') {
+      this.uploads++;
+      return this.json(200, { url: `https://media.onlyworlds.com/w/${this.uploads}.webp`, key: `w/${this.uploads}.webp`, bytes: 1, type: 'image/webp', etag: 'x' });
+    }
     const sentPin = headers.get('API-Pin');
     if (sentPin && sentPin !== this.pin) return this.err(401, 'invalid_credentials');
     if (method !== 'GET' && !sentPin) return this.err(401, 'invalid_credentials');
 
+    if (path === '/media/ticket' && this.refuseTicket) return this.err(this.refuseTicket.status, this.refuseTicket.code);
+    if (path === '/media/ticket') return this.json(200, { ticket: 't', upload_url: 'https://edge.test/up', prefix: 'w/', max_bytes: 15e6, exp: 0 });
     if (path === '/world') return this.json(200, { id: 'w1', name: 'Fake world' });
     if (path === '/changes') {
       // keel's head read: the world's current change_seq and view epoch, no bodies (core/changes.py).
@@ -332,6 +343,70 @@ describe('outbox', () => {
     expect(s.waitingCount()).toBe(0);
     expect(keel.els.get('a')?.name).toBe('Ada Vell');
     expect((await db.outboxRows(s.id)).length).toBe(0);
+  });
+
+  it('a picture added later shows at once from the phone, is uploaded, then set as image_url with If-Match', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    const photo = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' });
+    await s.edit('a', {}, s.serverCopy('a'), photo);
+    expect(String(s.get('a')?.image_url)).toMatch(/^blob:/);
+    expect(s.pending('a').has('image_url')).toBe(true);
+    setSessionPin(s.id, '1234');
+    await s.flush();
+    expect(keel.uploads).toBe(1);
+    expect(keel.els.get('a')?.image_url).toBe('https://media.onlyworlds.com/w/1.webp');
+    expect(keel.els.get('a')?.name).toBe('Ada');
+    expect(s.get('a')?.image_url).toBe('https://media.onlyworlds.com/w/1.webp');
+    expect((await db.outboxRows(s.id)).length).toBe(0);
+  });
+
+  it('the newest picture wins: a photo replaces a removal still waiting, and a removal replaces a waiting photo', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada', image_url: 'https://media.onlyworlds.com/old.webp' });
+    const s = await freshWorld();
+    await s.pull();
+    const photo = new Blob([new Uint8Array([1])], { type: 'image/webp' });
+    await s.edit('a', { image_url: '' }, s.serverCopy('a'));
+    await s.edit('a', {}, s.serverCopy('a'), photo);
+    expect(s.outbox.length).toBe(1);
+    expect('image_url' in s.outbox[0].values).toBe(false);
+    expect(s.outbox[0].photo).toBe(photo);
+    await s.edit('a', { image_url: '' }, s.serverCopy('a'));
+    expect(s.outbox[0].photo).toBeUndefined();
+    expect(s.get('a')?.image_url).toBe('');
+    setSessionPin(s.id, '1234');
+    await s.flush();
+    expect(keel.uploads).toBe(0);
+    expect(keel.els.get('a')?.image_url).toBe('');
+  });
+
+  it('a full picture store refuses the picture alone: other changes and a caught note still land', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    keel.refuseTicket = { status: 403, code: 'storage_full' };
+    const photo = new Blob([new Uint8Array([1])], { type: 'image/webp' });
+    await s.edit('a', {}, s.serverCopy('a'), photo);
+    await s.edit('b', { name: 'Bo Vell' });
+    const caught = await s.create('narrative', { name: 'A page', supertype: 'Unsorted' }, photo);
+    setSessionPin(s.id, '1234');
+    await s.flush();
+    expect(keel.els.get('b')?.name).toBe('Bo Vell');
+    expect(keel.els.get(caught)?.name).toBe('A page');
+    expect(keel.els.get(caught)?.image_url).toBeUndefined();
+    const refused = s.outbox.filter((r) => r.state === 'refused');
+    expect(refused.map((r) => r.id).sort()).toEqual(['a', caught].sort());
+    expect(refused.every((r) => r.photo && /storage is full/.test(r.error ?? ''))).toBe(true);
+    expect(s.outbox.filter((r) => r.state !== 'refused').length).toBe(0);
+    // Room again: tried again, the picture lands on its own.
+    keel.refuseTicket = null;
+    for (const r of refused) await s.retryRefused(r);
+    await s.flush();
+    expect(keel.els.get('a')?.image_url).toMatch(/^https:\/\/media\.onlyworlds\.com\//);
+    expect(keel.els.get(caught)?.image_url).toMatch(/^https:\/\/media\.onlyworlds\.com\//);
+    expect(s.outbox.length).toBe(0);
   });
 
   it('two edits to one element while waiting become one row', async () => {

@@ -64,7 +64,7 @@ async function walk(engine, deviceName, tag) {
   await shot('home');
   const tiles = await page.locator('.type-tile').count();
   check(tag, tiles > 0, `home shows ${tiles} type tiles`);
-  check(tag, (await page.locator('.fab').count()) === 0, 'a read-only demo has no capture button');
+  check(tag, (await page.locator('.tabbar [data-tab=catch]').count()) === 0, 'a read-only demo has no capture button');
   const pill = await page.locator('.pill').first().innerText().catch(() => '');
   check(tag, /Read only/.test(pill), `the head says read only (${JSON.stringify(pill)})`);
 
@@ -227,7 +227,7 @@ async function walk(engine, deviceName, tag) {
   check(tag, /Character/.test(await page.locator('.el-head .muted').innerText()), 'the first Character is made from the type list');
   await page.goto(`${BASE}/?online2${(await page.evaluate(() => location.hash)).replace(/\/e\/.*$/, '')}`);
   await page.waitForSelector('[data-screen="home"] .type-tile');
-  await page.locator('.fab').tap();
+  await page.locator('.tabbar [data-tab=catch]').tap();
   await page.waitForSelector('[data-screen="capture"]');
   await page.locator('textarea').tap();
   await page.keyboard.type('The ferryman owes the bell-founder three years of crossings.\nHe pays in fish.');

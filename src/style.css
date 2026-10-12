@@ -117,13 +117,17 @@ h2 {
   gap: 10px;
 }
 
+/* Equal halves while both labels fit on one line; a label that would wrap moves the pair onto two
+   rows instead (the Captain's walk: buttons on two lines; walk/fit.mjs measures it at 360 wide). */
 .row-gap {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .row-gap > * {
   flex: 1 1 0;
+  min-width: max-content;
 }
 
 /* ---------- buttons ---------- */
@@ -252,6 +256,20 @@ h2 {
 .note svg {
   flex-shrink: 0;
   color: var(--lan-accent);
+}
+
+.note .btn svg {
+  color: inherit;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--lan-ink-dim);
+  line-height: 1.45;
 }
 
 /* ---------- forms ---------- */
@@ -473,6 +491,13 @@ h2 {
   gap: 8px;
 }
 
+/* Below 360 three tiles clip "Characters" by a few pixels (walk/fit.mjs at 320): two across. */
+@media (max-width: 359px) {
+  .type-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .type-tile {
   display: flex;
   flex-direction: column;
@@ -515,23 +540,6 @@ h2 {
   flex-shrink: 0;
 }
 
-.fab {
-  position: fixed;
-  right: max(20px, calc(50vw - 300px));
-  bottom: calc(env(safe-area-inset-bottom) + 84px);
-  width: 64px;
-  height: 64px;
-  border-radius: 32px;
-  border: 0;
-  background: var(--lan-accent);
-  color: var(--lan-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 24px var(--lan-accent-glow);
-  z-index: 5;
-}
-
 .tabbar {
   position: fixed;
   left: 0;
@@ -561,6 +569,29 @@ h2 {
 .tabbar a.on {
   color: var(--lan-accent);
   font-weight: 700;
+}
+
+/* Catch, in the middle: the accent circle the + used to be, raised a little above the bar. */
+.tabbar a.catch {
+  color: var(--lan-ink-dim);
+}
+
+.catch-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-top: -22px;
+  border-radius: 26px;
+  background: var(--lan-accent);
+  color: var(--lan-bg);
+  box-shadow: 0 4px 18px var(--lan-accent-glow);
+}
+
+/* While the keyboard is up the bar would ride on it: typing hides it. */
+body:has(main textarea:focus, main input:focus) .tabbar {
+  display: none;
 }
 
 /* ---------- element page ---------- */
@@ -710,6 +741,50 @@ h2 {
   color: var(--lan-ink-faint);
   background: transparent;
   border: 1px dashed var(--lan-border);
+}
+
+/* The pencil beside a linked field's label: a finger-sized target around a small mark. */
+.frow .k {
+  display: inline-flex;
+  align-items: center;
+}
+
+.edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -8px 0 -8px 2px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--lan-action);
+  cursor: pointer;
+}
+
+/* "What is it?" on the catch screen: one choice, the type's own colour once chosen. */
+.kind-chip {
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--lan-border);
+  background: transparent;
+  color: var(--lan-ink-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.kind-chip[aria-checked='true'] {
+  border-color: var(--type, var(--lan-accent));
+  background: color-mix(in srgb, var(--type, var(--lan-accent)) 18%, var(--lan-bg));
+  color: color-mix(in srgb, var(--type, var(--lan-accent)) 70%, var(--lan-ink));
+  font-weight: 700;
+}
+
+.kind-chip.more {
+  border-style: dashed;
+  color: var(--lan-action);
 }
 
 /* ---------- sheets ---------- */

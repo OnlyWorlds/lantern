@@ -20,7 +20,8 @@ import { pendingJoin } from '../join';
 import { uuid7 } from '../uuid7';
 import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
-import { errorText, go, isStandalone, sheet, toast, topbar } from '../ui';
+import { errorText, go, sheet, toast, topbar } from '../ui';
+import { installButton, onHomeScreen } from '../install';
 import { applyTheme, currentTheme, BUILD_ID } from '../app-state';
 
 export function welcomeView(): HTMLElement {
@@ -58,13 +59,18 @@ export function welcomeView(): HTMLElement {
       h('p', null, 'Your worlds in your pocket. Works with Atlas and every OnlyWorlds tool.'),
     ),
     h('div', { class: 'spacer' }),
-    isStandalone()
+    onHomeScreen()
       ? null
       : h(
           'div',
           { class: 'note' },
           icon('phone', 22),
-          h('span', null, 'First, add Lantern to your home screen: it opens without signal, and a world you start stays with it.'),
+          h(
+            'div',
+            { class: 'stack', style: 'gap:10px;flex-grow:1' },
+            h('span', null, 'First, add Lantern to your home screen: it opens without signal, and a world you start stays with it.'),
+            installButton(),
+          ),
         ),
     h(
       'div',
@@ -80,7 +86,7 @@ export function welcomeView(): HTMLElement {
         'a',
         { class: 'choice', href: '#/new' },
         h('b', null, 'Start a world on this phone'),
-        h('span', null, 'No account needed. Put it online whenever you like'),
+        h('span', null, 'No account needed. Put it online later'),
       ),
       h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'I have an invite link'),
       h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'I have a world key'),
@@ -527,6 +533,7 @@ export function settingsView(): HTMLElement {
             : 'This browser does not say whether it keeps your worlds.',
       ),
       persisted === false ? keep : '',
+      installButton() ?? h('p', { class: 'dim', style: 'margin:0' }, 'Lantern is on your home screen.'),
       h('div', { class: 'spacer' }),
       h('p', { class: 'muted small', style: 'margin:0' }, `Lantern · build ${BUILD_ID}`),
     );

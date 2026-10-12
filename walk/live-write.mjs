@@ -51,7 +51,7 @@ try {
   check(true, 'opened the world with a write key and its PIN');
 
   // 1. Catch a line: a create through the outbox, with its own id
-  await page.locator('.fab').tap();
+  await page.locator('.tabbar [data-tab=catch]').tap();
   await page.locator('textarea').tap();
   await page.keyboard.type('Lantern probe, delete me\nA scratch element from the overnight walk.');
   await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();

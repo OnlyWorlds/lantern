@@ -41,15 +41,25 @@ export function topbar(title: string | Node, backHref?: string, ...actions: Node
   );
 }
 
-/** The world's two places: its home (find, the types) and Ask. */
-export function tabbar(worldId: string, on: 'world' | 'ask'): HTMLElement {
-  const tab = (id: 'world' | 'ask', label: string, href: string, ic: string) =>
-    h('a', { href, class: on === id ? 'on' : null, 'aria-current': on === id ? 'page' : null }, icon(ic, 22), label);
+/**
+ * The world's places, on every screen inside it: its home (find, the types), Catch (a world you can
+ * write) and Ask. World is the way home from anywhere: mobile apps keep a tab bar, not breadcrumbs
+ * (the Captain's walk, 2026-10-12). `on` is null on a screen that is none of the three (an element).
+ */
+export function tabbar(s: { id: string; canWrite: boolean }, on: 'world' | 'catch' | 'ask' | null): HTMLElement {
+  const tab = (id: 'world' | 'catch' | 'ask', label: string, href: string, ic: string) =>
+    h(
+      'a',
+      { href, class: [id === 'catch' ? 'catch' : '', on === id ? 'on' : ''].filter(Boolean).join(' ') || null, 'aria-current': on === id ? 'page' : null, 'data-tab': id },
+      id === 'catch' ? h('span', { class: 'catch-dot' }, icon(ic, 26, 2.2)) : icon(ic, 22),
+      label,
+    );
   return h(
     'nav',
     { class: 'tabbar', 'aria-label': 'World' },
-    tab('world', 'World', `#/w/${worldId}`, 'search'),
-    tab('ask', 'Ask', `#/w/${worldId}/ask`, 'spark'),
+    tab('world', 'World', `#/w/${s.id}`, 'home'),
+    s.canWrite ? tab('catch', 'Catch', `#/w/${s.id}/capture`, 'plus') : null,
+    tab('ask', 'Ask', `#/w/${s.id}/ask`, 'spark'),
   );
 }
 

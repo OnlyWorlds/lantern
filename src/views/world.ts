@@ -15,7 +15,7 @@ import {
   TYPES,
 } from '../schema';
 import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
-import { editField, newElementSheet } from './edit';
+import { editField, newElementSheet, pictureSheet } from './edit';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
@@ -149,7 +149,7 @@ export function homeView(s: WorldSession): View {
       const empty = h(
         'p',
         { class: 'empty' },
-        s.status === 'syncing' ? 'Fetching the world…' : s.canWrite ? 'Nothing here yet. Tap the + to catch the first idea.' : 'This world is empty.',
+        s.status === 'syncing' ? 'Fetching the world…' : s.canWrite ? 'Nothing here yet. Tap Catch to keep the first idea.' : 'This world is empty.',
       );
       const types =
         s.canWrite && s.status !== 'syncing'
@@ -229,10 +229,7 @@ export function homeView(s: WorldSession): View {
     banner,
     h('label', { class: 'search' }, icon('search', 20), input),
     body,
-    s.canWrite
-      ? h('a', { class: 'fab', href: `#/w/${s.id}/capture`, 'aria-label': 'Catch an idea' }, icon('plus', 30, 2.2))
-      : null,
-    tabbar(s.id, 'world'),
+    tabbar(s, 'world'),
   );
   return { el, refresh };
 }
@@ -271,12 +268,13 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
   return {
     el: h(
       'main',
-      { class: 'screen', 'data-screen': 'type' },
+      { class: 'screen has-tabbar', 'data-screen': 'type' },
       topbar(onlyUnsorted ? 'Unsorted' : typePlural(type), `#/w/${s.id}`, ...(add ? [add] : [])),
       banner,
       h('label', { class: 'search' }, icon('search', 20), input),
       count,
       list,
+      tabbar(s, null),
     ),
     refresh,
   };
@@ -304,9 +302,10 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
   return document.createTextNode(String(v));
 }
 
-export function elementView(s: WorldSession, id: string): View {
-  const main = h('main', { class: 'screen', 'data-screen': 'element' });
-  let showEmpty = false;
+/** `fill`: just made from Catch, so its empty fields show at once, ready to fill in (the Captain, h37 #3555). */
+export function elementView(s: WorldSession, id: string, fill = false): View {
+  const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'element' });
+  let showEmpty = fill;
   let showAllBacklinks = false;
 
   const refresh = () => {
@@ -322,6 +321,7 @@ export function elementView(s: WorldSession, id: string): View {
       main.replaceChildren(
         h('div', { class: 'topbar' }, back),
         h('p', { class: 'empty' }, s.status === 'syncing' ? 'Fetching…' : 'This element is not on this phone.'),
+        tabbar(s, null),
       );
       return;
     }
@@ -344,9 +344,20 @@ export function elementView(s: WorldSession, id: string): View {
       row.style.cursor = 'pointer';
       return row;
     };
+    // A linked field's chips open what they name, so changing the links has its own pencil
+    // (the Captain's walk: the only way in was the empty space beside the chips).
+    const pencil = (f: string) => {
+      if (!editable) return null;
+      const b = h('button', { class: 'edit-btn', type: 'button', 'aria-label': `Change ${fieldLabel(f).toLowerCase()}` }, icon('edit', 18));
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        editField(s, el, f);
+      });
+      return b;
+    };
 
     const avatar = h('div', { class: 'avatar', style: `--type:${typeColor(el.type)}`, 'aria-hidden': 'true' });
-    if (typeof el.image_url === 'string' && /^(https:|data:image\/)/.test(el.image_url)) {
+    if (typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url)) {
       avatar.style.backgroundImage = `url("${el.image_url}")`;
     } else avatar.textContent = initials(elName(el));
 
@@ -380,24 +391,26 @@ export function elementView(s: WorldSession, id: string): View {
         continue;
       }
       const isBlock = info.type === 'multi_link' || (info.type === 'text' && String(v).length > 28);
+      const isLink = info.type === 'single_link' || info.type === 'multi_link';
       rows.push(
         tapRow(
           field,
           h(
             'div',
             { class: `frow${isBlock ? ' block' : ''}`, 'data-field': field },
-            h('span', { class: 'k' }, fieldLabel(field), wait(field)),
+            h('span', { class: 'k' }, fieldLabel(field), wait(field), isLink ? pencil(field) : null),
             h('span', { class: 'v' }, valueNode(s, el.type, field, v)),
           ),
         ),
       );
     }
+    // Before the empty rows are built: a description is an empty field too (the S398 gate).
+    if (!desc && editable) empty.unshift('description');
     const emptyRows = showEmpty
       ? empty.map((f) =>
           tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f)), h('span', { class: 'v muted' }, '·'))),
         )
       : [];
-    if (!desc && editable) empty.unshift('description');
 
     // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,
     // and the first eight shown must not change with it (S397).
@@ -450,12 +463,13 @@ export function elementView(s: WorldSession, id: string): View {
           )
         : '',
       h('div', { class: 'el-head' }, avatar, headText),
-      actionRow(s, el),
+      actionRow(s, el, wait('image_url')),
       picture(el),
       descNode ?? '',
       h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? ''),
       toggle ?? '',
       editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap a value to change it.') : '',
+      tabbar(s, null),
     );
   };
   refresh();
@@ -503,22 +517,33 @@ export function mapHref(worldId: string, p: Place): string {
  * online), and "Give it to the party", a game master's tap on a thing the party found (not on a
  * phone-only world: it has no players).
  */
-function actionRow(s: WorldSession, el: OwElement): HTMLElement | '' {
+function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | null): HTMLElement | '' {
   const places = placesOf(s, el);
   const label = (p: Place) =>
     el.type === 'map' ? 'Open the map' : places.length > 1 ? `On ${elName(s.get(p.map))}` : 'Show on map';
-  const acts: HTMLElement[] = places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p)));
+  const acts: (HTMLElement | null)[] = places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p)));
   if (s.canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
     const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('spark', 16), 'Give it to the party');
     b.addEventListener('click', () => giveToParty(s, el));
     acts.push(b);
   }
-  return acts.length ? h('div', { class: 'chips map-links' }, ...acts) : '';
+  // A picture any time after the element is made (the Captain's walk). A map's picture is its
+  // map, set where the map is drawn (Atlas), not here.
+  if (s.canWrite && !MAP_TYPES.has(el.type)) {
+    const has = typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url);
+    const b = h('button', { class: 'btn btn-pill', type: 'button', 'data-action': 'picture' }, icon('image', 16), has ? 'Change the picture' : 'Add a picture');
+    b.addEventListener('click', () => pictureSheet(s, el, has));
+    acts.push(b, pictureWait);
+  }
+  return acts.some(Boolean) ? h('div', { class: 'chips map-links' }, ...acts) : '';
 }
+
+/** What the page shows as a picture: online, held in a local world, or a photo waiting to send. */
+const SHOWN_PICTURE = /^(https:|data:image\/|blob:)/;
 
 /** An element's picture, large: a photographed page has to be readable. Tap opens it whole. */
 function picture(el: { image_url?: unknown; name?: string }): HTMLElement | '' {
-  const src = typeof el.image_url === 'string' && /^(https:|data:image\/)/.test(el.image_url) ? el.image_url : '';
+  const src = typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url) ? el.image_url : '';
   if (!src) return '';
   const img = h('img', { class: 'picture', src, alt: el.name ? `The picture of ${el.name}` : 'The picture', loading: 'lazy' });
   if (src.startsWith('https:')) return h('a', { href: src, target: '_blank', rel: 'noopener' }, img);

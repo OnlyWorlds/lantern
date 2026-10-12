@@ -63,13 +63,13 @@ async function walk(engine, deviceName, tag) {
   await page.goto(`${BASE}/#/worlds`);
   await page.locator('.world-card', { hasText: 'Market' }).tap();
   await page.waitForSelector('[data-screen="home"]');
-  await page.locator('.fab').tap();
+  await page.locator('.tabbar [data-tab=catch]').tap();
   await page.waitForSelector('[data-screen="capture"]');
   check(tag, (await page.locator('textarea').inputValue()) === '', 'a later catch in another world starts empty');
   await page.goto(`${BASE}/#/worlds`);
   await page.locator('.world-card', { hasText: 'Harbour' }).tap();
   await page.waitForSelector('[data-screen="home"]');
-  await page.locator('.fab').tap();
+  await page.locator('.tabbar [data-tab=catch]').tap();
   await page.waitForSelector('[data-screen="capture"]');
   check(tag, (await page.locator('textarea').inputValue()) === NOTE && /Your note from before/.test(await page.locator('main').innerText()), 'back in Harbour, the walked-away share is its note from before, said as such');
   await page.getByRole('button', { name: 'Clear it' }).tap();
@@ -81,7 +81,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('[data-screen="worlds"]');
   await page.locator('.world-card', { hasText: 'Market' }).tap();
   await page.waitForSelector('[data-screen="home"]');
-  await page.locator('.fab').tap();
+  await page.locator('.tabbar [data-tab=catch]').tap();
   await page.waitForSelector('[data-screen="capture"]');
   const leaked = await page.locator('textarea').inputValue();
   check(tag, leaked === '', `a share walked away from fills no later note (${JSON.stringify(leaked)})`);
@@ -100,7 +100,7 @@ async function walk(engine, deviceName, tag) {
   await page.goto(`${BASE}/#/worlds`);
   await page.locator('.world-card', { hasText: 'Market' }).tap();
   await page.waitForSelector('[data-screen="home"]');
-  await page.locator('.fab').tap();
+  await page.locator('.tabbar [data-tab=catch]').tap();
   await page.waitForSelector('[data-screen="capture"]');
   check(tag, (await page.locator('textarea').inputValue()) === '', 'once kept, the next catch starts empty');
 

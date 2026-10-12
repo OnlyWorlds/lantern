@@ -215,7 +215,10 @@ export class WorldSession {
     for (const row of [...this.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
       if (row.state === 'refused') continue;
       const cur = this.view.get(row.id) ?? ({ id: row.id, type: row.type, name: '' } as OwElement);
-      this.view.set(row.id, { ...cur, ...row.values, type: row.type, id: row.id });
+      const next = { ...cur, ...row.values, type: row.type, id: row.id };
+      // A photo waiting to be uploaded shows as itself, from the phone.
+      if (row.photo) next.image_url = photoUrl(row.photo);
+      this.view.set(row.id, next);
     }
     this.backlinkCache = null;
     this.lookupCache = null;
@@ -253,6 +256,7 @@ export class WorldSession {
     for (const row of this.outbox) {
       if (row.id !== id || row.state === 'refused') continue;
       for (const f of Object.keys(row.values)) m.set(f, row);
+      if (row.photo) m.set('image_url', row);
       if (row.op === 'create') m.set('*', row);
     }
     return m;
@@ -466,11 +470,12 @@ export class WorldSession {
    * server's copy when the user started the edit: a change that arrived since then is a conflict
    * for the 412 rule to judge, never a silent base.
    */
-  async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement): Promise<void> {
+  async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement, photo?: Blob): Promise<void> {
     if (!this.canWrite) throw new Error('This world is read-only here.');
     if (this.isLocal) {
       const cur = this.truth.get(id) ?? ({ id, type: values.type as string, name: '' } as OwElement);
       const next = { ...cur, ...values, updated_at: new Date().toISOString() } as OwElement;
+      if (photo) next.image_url = await blobToDataUrl(photo);
       await db.applyElements(this.id, [next]);
       this.truth.set(id, next);
       this.rebuild();
@@ -480,6 +485,12 @@ export class WorldSession {
     const open = this.outbox.find((r) => r.id === id && r.state === 'waiting');
     if (open) {
       open.values = { ...open.values, ...values };
+      // The newest picture wins: a photo replaces a picture set or cleared before it, and the
+      // reverse (sent as image_url once the photo is uploaded, send()).
+      if (photo) {
+        open.photo = photo;
+        delete open.values.image_url;
+      } else if ('image_url' in values) delete open.photo;
       await db.putOutboxRow(this.id, open);
     } else {
       const el = this.view.get(id);
@@ -495,6 +506,7 @@ export class WorldSession {
         base,
         lateBase: behind || undefined,
         values,
+        photo,
         state: 'waiting',
         createdAt: new Date().toISOString(),
       };
@@ -596,10 +608,42 @@ export class WorldSession {
     this.emit();
     try {
       if (row.photo) {
-        const up = await c.uploadImage(row.photo);
-        row.values = { ...row.values, image_url: up.url };
-        delete row.photo;
-        await db.putOutboxRow(this.id, { ...row, state: 'waiting' });
+        let up: Awaited<ReturnType<OwV2Client['uploadImage']>> | undefined;
+        try {
+          up = await c.uploadImage(row.photo);
+        } catch (e) {
+          // A refusal about pictures is about the picture alone: it is set aside with its reason and
+          // every other change keeps going (the S398 gate: a full store froze the whole outbox).
+          const why = e instanceof OwApiError ? PICTURE_REFUSED[e.code ?? ''] : undefined;
+          if (!why) throw e;
+          // The picture alone becomes the refused row (tried again on its own, its base taken then);
+          // the rest of this row (a caught note, an edit) still goes now.
+          const photoRow: OutboxRow = {
+            op: 'patch',
+            type: row.type,
+            id: row.id,
+            lateBase: true,
+            values: {},
+            photo: row.photo,
+            state: 'refused',
+            error: why,
+            createdAt: new Date().toISOString(),
+          };
+          photoRow.seq = await db.putOutboxRow(this.id, photoRow);
+          this.outbox.push(photoRow);
+          delete row.photo;
+          await db.putOutboxRow(this.id, { ...row, state: 'waiting' });
+          if (row.op === 'patch' && !Object.keys(row.values).length) {
+            await db.settleOutboxRow(this.id, row.seq!, null);
+            this.outbox = this.outbox.filter((r) => r !== row);
+            return false;
+          }
+        }
+        if (up) {
+          row.values = { ...row.values, image_url: up.url };
+          delete row.photo;
+          await db.putOutboxRow(this.id, { ...row, state: 'waiting' });
+        }
       }
       let el: OwElement;
       if (row.op === 'create') {
@@ -770,6 +814,24 @@ export class WorldSession {
     this.emit();
     void this.flush();
   }
+}
+
+/** keel's and the media edge's refusals of a picture, said in a sentence; the row can be tried again or let go. */
+const PICTURE_REFUSED: Record<string, string> = {
+  storage_full: 'Your picture storage is full. Free some on onlyworlds.com, then try again.',
+  quota_exceeded: "Today's picture limit for this world is reached. Try again tomorrow.",
+  too_large: 'This picture is too large to send.',
+};
+
+/** One object URL per queued photo for the life of the page (a photo is a few hundred KB, and few wait). */
+const photoUrls = new WeakMap<Blob, string>();
+function photoUrl(b: Blob): string {
+  let u = photoUrls.get(b);
+  if (!u) {
+    u = URL.createObjectURL(b);
+    photoUrls.set(b, u);
+  }
+  return u;
 }
 
 function blobToDataUrl(b: Blob): Promise<string> {

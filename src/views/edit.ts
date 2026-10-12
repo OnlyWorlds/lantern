@@ -6,6 +6,7 @@ import { search } from '../search';
 import { fieldInfo, fieldLabel, typeColor, typeLabel } from '../schema';
 import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
+import { photoPicker } from './photo';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
@@ -160,6 +161,48 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
   }, fieldLabel(field));
 }
 
+/**
+ * The element's picture: a new one from the camera or the gallery, or none. A photo goes to the
+ * outbox like any change (uploaded first, then set as image_url); "none" writes the empty string,
+ * which is what keel serves for no picture.
+ */
+export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void {
+  const base = s.serverCopy(el.id);
+  sheet((close) => {
+    const err = h('p', { class: 'error', role: 'alert' });
+    const done = (text: string) => {
+      close();
+      toast(s.isLocal ? text : navigator.onLine ? `${text} Sending…` : `${text} It sends when you have signal.`);
+    };
+    const picker = photoPicker(
+      (photo) => {
+        // Shrinking a big photo takes a moment: a sheet closed meanwhile was a no (the S398 gate).
+        if (!picker.row.isConnected) return;
+        s.edit(el.id, {}, base, photo).then(
+          () => done('Picture saved.'),
+          (e) => (err.textContent = errorText(e)),
+        );
+      },
+      (m) => (err.textContent = m),
+    );
+    const remove = has
+      ? (() => {
+          const b = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Remove the picture');
+          b.addEventListener('click', () => {
+            s.edit(el.id, { image_url: '' }, base).then(
+              () => done('Picture removed.'),
+              (e) => (err.textContent = errorText(e)),
+            );
+          });
+          return b;
+        })()
+      : '';
+    const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');
+    cancel.addEventListener('click', close);
+    return [h('h2', null, has ? 'The picture' : 'Add a picture'), picker.row, err, ...(remove ? [remove] : []), cancel];
+  }, 'The picture');
+}
+
 export function newElementSheet(s: WorldSession, type: string): void {
   sheet((close) => {
     const name = h('input', { class: 'input', type: 'text', 'aria-label': 'Name', placeholder: 'Name' });
@@ -175,7 +218,7 @@ export function newElementSheet(s: WorldSession, type: string): void {
       try {
         const id = await s.create(type, { name: name.value.trim() });
         close();
-        go(`#/w/${s.id}/e/${id}`);
+        go(`#/w/${s.id}/e/${id}?fill`);
       } catch (ex) {
         err.textContent = errorText(ex);
       }
