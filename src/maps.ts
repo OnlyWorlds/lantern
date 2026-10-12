@@ -104,6 +104,55 @@ export function pinsToLabel<T>(inView: T[], nameOf: (p: T) => string | null): { 
   return named.length <= LABELS_AT_MOST ? named : [];
 }
 
+export interface DrawnZone {
+  id: string;
+  /** Its outline on screen, in px. */
+  pts: [number, number][];
+  line: boolean;
+}
+
+function distToSegment(p: [number, number], a: [number, number], b: [number, number]): number {
+  const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+  const len = dx * dx + dy * dy;
+  const t = len ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len)) : 0;
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+function inside(p: [number, number], poly: [number, number][]): boolean {
+  let yes = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) yes = !yes;
+  }
+  return yes;
+}
+
+function area(poly: [number, number][]): number {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) a += (poly[j][0] + poly[i][0]) * (poly[j][1] - poly[i][1]);
+  return Math.abs(a / 2);
+}
+
+/**
+ * The zone a tap is on: inside an area, or within a finger of a line or an area's edge. Where
+ * several hold the tap, the smallest wins (a town's ward inside a province); a line counts as none.
+ */
+export function zoneAt(at: [number, number], zones: DrawnZone[], reach = 14): string | null {
+  let best: { id: string; size: number } | null = null;
+  for (const z of zones) {
+    if (z.pts.length < 2) continue;
+    const ring = z.line || z.pts.length < 3 ? z.pts : [...z.pts, z.pts[0]];
+    let near = false;
+    for (let i = 1; i < ring.length && !near; i++) near = distToSegment(at, ring[i - 1], ring[i]) <= reach;
+    const isArea = !z.line && z.pts.length >= 3;
+    if (!near && !(isArea && inside(at, z.pts))) continue;
+    const size = isArea ? area(z.pts) : 0;
+    if (!best || size < best.size) best = { id: z.id, size };
+  }
+  return best?.id ?? null;
+}
+
 export interface LabelSpot<T> {
   pin: T;
   name: string;

@@ -6,7 +6,7 @@ import type * as Leaflet from 'leaflet';
 import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
-import { CLUSTER_ABOVE, mapPicture, maxZoomFor, pinsToLabel, placeLabels, zoneColor, zonePoints, zoneShape, type Place } from '../maps';
+import { CLUSTER_ABOVE, mapPicture, maxZoomFor, pinsToLabel, placeLabels, zoneAt, zoneColor, zonePoints, zoneShape, type Place } from '../maps';
 import { typeColor, typeLabel } from '../schema';
 import { elName, typeChip } from '../ui';
 import type { WorldSession } from '../world';
@@ -115,6 +115,8 @@ export function mapView(s: WorldSession, place: Place): View {
   let pins: OwElement[] = [];
   let L: L | null = null;
   let labels: Leaflet.LayerGroup | null = null;
+  /** The zones as drawn, for a tap to find (in map units, [lat, lng]). */
+  let zones: { id: string; ll: [number, number][]; line: boolean }[] = [];
 
   /** Names beside the pins in view, when few enough are there to read; redrawn as the map moves. */
   const drawLabels = () => {
@@ -142,7 +144,27 @@ export function mapView(s: WorldSession, place: Place): View {
     labels = g;
   };
 
+  let lit: Leaflet.Layer | null = null;
+  const zoneCard = (zoneId: string) => {
+    const zone = s.get(zoneId);
+    // The tapped zone's outline drawn bold (no fill: it sits above the pins): among nested zones, the one the card names.
+    lit?.remove();
+    const d = zones.find((z) => z.id === zoneId);
+    if (d && map && L) {
+      const o = { color: zoneColor(zone), weight: 4, opacity: 1, interactive: false };
+      lit = (d.line ? L.polyline(d.ll, o) : L.polygon(d.ll, { ...o, fill: false })).addTo(map);
+    }
+    card.replaceChildren(
+      typeChip('zone'),
+      h('span', { class: 'label' }, h('b', null, elName(zone)), ' ', h('span', { class: 'muted' }, '· zone')),
+      zone ? h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/e/${zone.id}` }, 'Open') : '',
+    );
+    card.hidden = false;
+  };
+
   const showCard = (drawn: OwElement | null) => {
+    lit?.remove();
+    lit = null;
     // The pin as it is now: a pull may have renamed it since it was drawn.
     const pin = drawn ? s.get(drawn.id) ?? drawn : null;
     if (!pin) {
@@ -235,13 +257,16 @@ export function mapView(s: WorldSession, place: Place): View {
       else byZone.set(z, [mk]);
     }
     let focusZone: Leaflet.LatLngBounds | null = null;
+    zones = [];
     for (const [zid, mks] of byZone) {
       const zone = s.get(zid);
       const ll = zonePoints(mks).map(([x, y]) => [y, x] as [number, number]);
       if (ll.length < 2) continue;
       const on = place.zone === zid;
+      const line = zoneShape(zone) === 'line' || ll.length < 3;
+      zones.push({ id: zid, ll, line });
       const o = { renderer, color: zoneColor(zone), weight: on ? 3 : 1.5, opacity: 0.9, interactive: false };
-      const shape = zoneShape(zone) === 'line' || ll.length < 3 ? L.polyline(ll, o) : L.polygon(ll, { ...o, fillOpacity: on ? 0.3 : 0.15 });
+      const shape = line ? L.polyline(ll, o) : L.polygon(ll, { ...o, fillOpacity: on ? 0.3 : 0.15 });
       g.addLayer(shape);
       if (on) focusZone = shape.getBounds();
     }
@@ -350,6 +375,15 @@ export function mapView(s: WorldSession, place: Place): View {
             bestD = d;
             best = p;
           }
+        }
+        // No pin under the finger: a zone, if the tap is on one (the smallest that holds it).
+        if (!best) {
+          const px = (ll: [number, number]): [number, number] => {
+            const q = map!.latLngToContainerPoint(ll);
+            return [q.x, q.y];
+          };
+          const z = zoneAt([at.x, at.y], zones.map((d) => ({ id: d.id, line: d.line, pts: d.ll.map(px) })));
+          if (z) return zoneCard(z);
         }
         showCard(best);
       });

@@ -101,12 +101,52 @@ async function walk(engine, deviceName, tag) {
   check(tag, clash.length === 0, `no name covers another name or a pin, as drawn${clash.length ? ': ' + clash.join('; ') : ''}`);
   await shot('map-focus');
 
-  // 3. A tap on empty water closes the card; a tap on another pin opens its own
+  // 3. A tap on empty water closes the card: a point clear of every drawn pin and zone by a
+  // finger (zones answer taps since S396, so "empty" is measured, not assumed).
   const box = await page.locator('.map-box').boundingBox();
-  await page.touchscreen.tap(box.x + 8, box.y + box.height / 2);
+  const empty = await page.evaluate(() => {
+    const rects = [...document.querySelectorAll('.leaflet-overlay-pane path')].map((p) => p.getBoundingClientRect());
+    for (let y = innerHeight - 160; y > 90; y -= 20)
+      for (let x = 12; x < innerWidth - 12; x += 20)
+        if (rects.every((r) => x < r.left - 30 || x > r.right + 30 || y < r.top - 30 || y > r.bottom + 30)) return { x, y };
+    return null;
+  });
+  check(tag, !!empty, `an empty point is on screen (${JSON.stringify(empty)})`);
+  await page.touchscreen.tap(empty?.x ?? box.x + 8, empty?.y ?? box.y + box.height / 2);
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => document.querySelector('.map-card:not([hidden])')?.textContent ?? '');
   check(tag, !after, `a tap far from any pin closes the card (${JSON.stringify(after)})`);
+
+  // 3b. A tap inside a zone, away from every pin, opens the zone's card (the drawn area itself
+  // says where it is: a point its own fill holds, at least a finger from any pin).
+  const inZone = await page.evaluate(() => {
+    const paths = [...document.querySelectorAll('.leaflet-overlay-pane path')];
+    const dots = paths.filter((p) => /a\d/.test(p.getAttribute('d') ?? '')).map((p) => {
+      const r = p.getBoundingClientRect();
+      return [r.x + r.width / 2, r.y + r.height / 2];
+    });
+    const areas = paths.filter((p) => /z/i.test(p.getAttribute('d') ?? '') && !/a\d/.test(p.getAttribute('d') ?? ''));
+    for (const a of areas) {
+      const r = a.getBoundingClientRect();
+      const inv = a.getScreenCTM().inverse();
+      for (let gy = 0.1; gy < 1; gy += 0.1)
+        for (let gx = 0.1; gx < 1; gx += 0.1) {
+          const x = r.x + r.width * gx, y = r.y + r.height * gy;
+          if (x < 10 || y < 80 || x > innerWidth - 10 || y > innerHeight - 140) continue;
+          const p = new DOMPoint(x, y).matrixTransform(inv);
+          if (a.isPointInFill(p) && dots.every(([dx, dy]) => Math.hypot(dx - x, dy - y) > 40)) return { x, y };
+        }
+    }
+    return null;
+  });
+  check(tag, !!inZone, 'a point inside a zone, away from the pins, is on screen');
+  if (inZone) {
+    await page.touchscreen.tap(inZone.x, inZone.y);
+    await page.waitForTimeout(300);
+    const zc = await page.evaluate(() => document.querySelector('.map-card:not([hidden])')?.textContent ?? '');
+    check(tag, /· zone/.test(zc) && /Open$/.test(zc), `a tap inside a zone opens its card: ${JSON.stringify(zc)}`);
+    await shot('map-zone');
+  }
 
   // 4. Zoom to the ceiling: the zoom-in button stops
   for (let i = 0; i < 12; i++) {

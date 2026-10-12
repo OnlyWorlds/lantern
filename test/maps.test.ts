@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OwElement } from '@onlyworlds/sdk';
-import { LABELS_AT_MOST, mapPicture, maxZoomFor, pinsToLabel, placeLabels, placesOf, zoneColor, zonePoints, zoneShape } from '../src/maps';
+import { LABELS_AT_MOST, mapPicture, maxZoomFor, pinsToLabel, placeLabels, placesOf, zoneAt, zoneColor, zonePoints, zoneShape } from '../src/maps';
 
 const el = (o: Partial<OwElement> & { id: string; type: string }): OwElement => o as OwElement;
 
@@ -120,6 +120,29 @@ describe('the zoom ceiling', () => {
 
   it('a sharper picture on a plainer screen goes further', () => {
     expect(maxZoomFor(3840, 1920, 1, -2.25)).toBeCloseTo(1.5);
+  });
+});
+
+describe('a tap on a zone', () => {
+  const square = (id: string, x: number, y: number, s: number) => ({ id, line: false, pts: [[x, y], [x + s, y], [x + s, y + s], [x, y + s]] as [number, number][] });
+  it('inside an area finds it; outside and far from it, nothing', () => {
+    expect(zoneAt([50, 50], [square('a', 0, 0, 100)])).toBe('a');
+    expect(zoneAt([300, 300], [square('a', 0, 0, 100)])).toBeNull();
+  });
+  it('the smallest area holding the tap wins (a ward inside a province)', () => {
+    expect(zoneAt([50, 50], [square('province', 0, 0, 400), square('ward', 40, 40, 20)])).toBe('ward');
+    expect(zoneAt([200, 200], [square('province', 0, 0, 400), square('ward', 40, 40, 20)])).toBe('province');
+  });
+  it('a line (a road, a river) within a finger, and not further', () => {
+    const road = { id: 'road', line: true, pts: [[0, 100], [400, 100]] as [number, number][] };
+    expect(zoneAt([200, 110], [road])).toBe('road');
+    expect(zoneAt([200, 130], [road])).toBeNull();
+    // A road through a province: on the road, the road.
+    expect(zoneAt([200, 105], [square('province', 0, 0, 400), road])).toBe('road');
+  });
+  it("an area's edge counts from just outside, within a finger", () => {
+    expect(zoneAt([108, 50], [square('a', 0, 0, 100)])).toBe('a');
+    expect(zoneAt([120, 50], [square('a', 0, 0, 100)])).toBeNull();
   });
 });
 
