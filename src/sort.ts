@@ -1,7 +1,7 @@
 // The morning after's call: keel's sorting route (Skeld, h37 #3591, POST /account/sort), on the
 // same account check, model and allowance as Ask. The notes and the world's slice go in; rows in
-// Simmer's shape come back (src/sortplan.ts). The key and the meter are keel's.
-// Until the SDK has the call (Kael), it goes through the client's own request().
+// Simmer's shape come back (src/sortplan.ts). The key and the meter are keel's. The call is the
+// SDK's `sort()` (4.18, Kael h37 #3664); its rows are checked again on arrival (`sanitizeRows`).
 import { OwApiError, OwNetworkError, OwV2Client } from '@onlyworlds/sdk';
 import { accountToken } from './account';
 import { API_BASE } from './world';
@@ -30,15 +30,10 @@ export class SortRefused extends Error {
 export async function sortNotes(worldId: string, notes: SortNote[], slice: SliceItem[]): Promise<Sorted> {
   const token = await accountToken();
   if (!token) throw new SortRefused('Sign in to sort with OnlyWorlds.');
-  const body = {
-    world_id: worldId,
-    notes,
-    slice,
-  };
   try {
-    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE }).request<Sorted>('POST', '/account/sort', { body });
+    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE }).sort({ worldId, notes, slice });
     return {
-      rows: Array.isArray(r?.rows) ? r.rows : [],
+      rows: Array.isArray(r?.rows) ? (r.rows as SortRow[]) : [],
       not_proposed: Array.isArray(r?.not_proposed) ? r.not_proposed : [],
       remaining: r?.remaining,
       usage: r?.usage,
