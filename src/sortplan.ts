@@ -3,7 +3,7 @@
 // Fold/magelet/work/2026-10-12-lantern-row-shape-reply.md); the route is Skeld's (h37 #3591,
 // POST /account/sort). Nothing here writes: the screen hands the plan to the outbox.
 import { lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
-import { fieldInfo, isType } from './schema';
+import { BASE_FIELDS, fieldInfo, isType } from './schema';
 
 /** One element the notes may be about, as the route takes it. */
 export interface SliceItem {
@@ -87,11 +87,17 @@ export function noteText(note: OwElement): string {
   return [...t].slice(0, NOTE_CHARS).join('');
 }
 
+/** A note longer than one sort reads: never cut and filed (its tail would never be read). */
+export function tooLong(note: OwElement): boolean {
+  const d = typeof note.description === 'string' ? note.description.trim() : '';
+  return [...d].length > NOTE_CHARS;
+}
+
 /** The notes' texts within the route's total, oldest dropped last: a note that does not fit is left for the next sort. */
 export function fitNotes(notes: OwElement[]): OwElement[] {
   const out: OwElement[] = [];
   let total = 0;
-  for (const n of notes.slice(0, NOTES_MAX)) {
+  for (const n of notes.filter((x) => !tooLong(x)).slice(0, NOTES_MAX)) {
     const len = [...noteText(n)].length;
     if (!len || total + len > NOTES_CHARS) continue;
     total += len;
@@ -179,15 +185,53 @@ export interface Ticked {
 }
 
 const IDENTITY = new Set(['name', 'type', 'id']);
-const TEXT_BASE = new Set(['description', 'supertype', 'subtype']);
+/** A kind word: set when empty, never appended to ("Brewer\n\nSmuggler" is not a kind). */
+const KIND_FIELDS = new Set(['supertype', 'subtype']);
 
 function lower(t: string): string {
   return (t || '').trim().toLowerCase();
 }
 
-function textField(type: string, field: string): boolean {
-  if (TEXT_BASE.has(field)) return true;
+/**
+ * The fields a row may add to: the description, the kind words, and the type's own text fields.
+ * Never a base field the person sets by hand: image_url above all (the S398 sort gate: the model
+ * could have set any address as a picture every viewer's phone then loads).
+ */
+function addable(type: string, field: string): boolean {
+  if (field === 'description' || KIND_FIELDS.has(field)) return true;
+  if (BASE_FIELDS.includes(field)) return false;
   return fieldInfo(type, field)?.type === 'text';
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isRef = (v: unknown): v is Target => isObj(v) && isStr(v.id) && isStr(v.type) && isStr(v.name);
+
+/**
+ * Rows as they must be to be shown at all: a row of another shape is left out with a reason
+ * instead of breaking the screen (a kept sort is reopened, so a bad row would break it every time).
+ */
+export function sanitizeRows(rows: unknown): { rows: SortRow[]; dropped: { source_line: string; reason: string }[] } {
+  const ok: SortRow[] = [];
+  const dropped: { source_line: string; reason: string }[] = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const line = isObj(r) && isStr(r.source_line) ? r.source_line : '';
+    const good =
+      isObj(r) &&
+      isStr(r.source_line) &&
+      ((r.kind === 'make' && isObj(r.proposal) && isStr(r.proposal.name) && isStr(r.proposal.type)) ||
+        (r.kind === 'add_to' && isRef(r.target) && isStr(r.field) && isStr(r.value)) ||
+        (r.kind === 'link' && isRef(r.target) && isStr(r.field) && isStr(r.value_id)) ||
+        (r.kind === 'ask' &&
+          isStr(r.question) &&
+          Array.isArray(r.candidates) &&
+          r.candidates.every(isRef) &&
+          (r.then === undefined ||
+            (isObj(r.then) && isStr(r.then.field) && ((r.then.kind === 'add_to' && isStr(r.then.value)) || (r.then.kind === 'link' && isStr(r.then.value_id)))))));
+    if (good) ok.push(r as unknown as SortRow);
+    else dropped.push({ source_line: line, reason: 'It came back in a shape this phone cannot show.' });
+  }
+  return { rows: ok, dropped };
 }
 
 /**
@@ -196,7 +240,12 @@ function textField(type: string, field: string): boolean {
  * Every check the route already makes is made again here: the page writes only what it can see is
  * sound (the target exists, the field is the type's, a link points at the field's own type).
  */
-export function planWrites(ticked: Ticked[], get: (id: string) => OwElement | undefined): Planned {
+export function planWrites(
+  ticked: Ticked[],
+  get: (id: string) => OwElement | undefined,
+  /** The ids sent in the slice: a row may name no other (keel filters too; the page does not rely on it). */
+  sent?: Set<string>,
+): Planned {
   const writes: Write[] = [];
   const skipped: Planned['skipped'] = [];
   const working = new Map<string, Record<string, unknown>>();
@@ -214,16 +263,20 @@ export function planWrites(ticked: Ticked[], get: (id: string) => OwElement | un
   };
 
   const apply = (row: AddToRow | LinkRow, t: Ticked) => {
+    const notSent = (id: string) => !!sent && !sent.has(id);
+    if (notSent(row.target.id) || (row.kind === 'link' && notSent(row.value_id)))
+      return skipped.push({ row: t.row, reason: 'It names something this phone did not send.' });
     const target = get(row.target.id);
     if (!target) return skipped.push({ row: t.row, reason: 'It is not in this world on this phone.' });
     if (IDENTITY.has(row.field)) return skipped.push({ row: t.row, reason: 'A name is changed by hand, on its page.' });
     if (row.kind === 'add_to') {
-      if (!textField(target.type, row.field)) return skipped.push({ row: t.row, reason: `${row.field} is not a text field of a ${target.type}.` });
+      if (!addable(target.type, row.field)) return skipped.push({ row: t.row, reason: `${row.field} is set by hand, not added to.` });
       const value = String(row.value ?? '').trim();
       if (!value) return skipped.push({ row: t.row, reason: 'Nothing to add.' });
       const cur = current(target.id, row.field);
       const had = typeof cur === 'string' ? cur.trim() : '';
-      if (row.op === 'set' && had) return skipped.push({ row: t.row, reason: `${target.name} already has a ${row.field}: it is added to, never replaced.` });
+      if (had && (row.op === 'set' || KIND_FIELDS.has(row.field)))
+        return skipped.push({ row: t.row, reason: `${target.name} already has a ${row.field}: it is added to, never replaced.` });
       touch(target.id)[row.field] = had ? `${had}\n\n${value}` : value;
       return;
     }

@@ -1,7 +1,7 @@
 // The morning after's pure part: what a sort sends, and what the ticked rows write.
 import { describe, expect, it } from 'vitest';
 import { buildWorldIndex, type OwElement } from '@onlyworlds/sdk';
-import { buildSlice, fitNotes, notesPayload, planWrites, type SortRow, type Ticked } from '../src/sortplan';
+import { buildSlice, fitNotes, notesPayload, planWrites, sanitizeRows, tooLong, type SortRow, type Ticked } from '../src/sortplan';
 
 const els: OwElement[] = [
   { id: 'swoop', type: 'location', name: 'The Swoop' },
@@ -62,7 +62,28 @@ describe('notesPayload', () => {
   });
 });
 
+describe('sanitizeRows', () => {
+  it('keeps rows of the contract\'s shape and leaves out the rest with a reason', () => {
+    const { rows, dropped } = sanitizeRows([
+      { kind: 'make', source_line: 'a', proposal: { type: 'Character', name: 'Ember', description: '' } },
+      { kind: 'ask', source_line: 'b', question: 'Which?' },
+      { kind: 'add_to', source_line: 'c', target: { id: 'dot', type: 'character', name: 'Dot' }, value: 'x' },
+      { kind: 'link', source_line: 'd', target: { id: 'dot', type: 'character', name: 'Dot' }, field: 'location', value_id: 'swoop' },
+      { kind: 'ask', source_line: 'e', question: 'Which?', candidates: [], then: { kind: 'make' } },
+      'not a row',
+    ]);
+    expect(rows.map((r) => r.source_line)).toEqual(['a', 'd']);
+    expect(dropped.map((d) => d.source_line)).toEqual(['b', 'c', 'e', '']);
+  });
+});
+
 describe('fitNotes', () => {
+  it('never takes a note longer than a sort reads: it is not cut and filed', () => {
+    const long = { id: 'long', type: 'narrative', name: 'long', description: 'y'.repeat(4001) } as OwElement;
+    expect(tooLong(long)).toBe(true);
+    expect(fitNotes([long, byId.get('n1')!]).map((n) => n.id)).toEqual(['n1']);
+  });
+
   it('keeps notes within the route\'s total, leaving the rest for the next sort', () => {
     const big = (id: string) => ({ id, type: 'narrative', name: id, description: 'x'.repeat(4000) }) as OwElement;
     const fit = fitNotes([big('a'), big('b'), big('c'), big('d'), big('e')]);
@@ -128,6 +149,27 @@ describe('planWrites', () => {
     expect(writes).toEqual([{ op: 'edit', id: 'dot', values: { location: 'swoop' } }]);
     expect(skipped.map((s) => s.row.source_line)).toEqual(['1', '3', '4', '5', '6']);
     expect(skipped.every((s) => s.reason.length > 5)).toBe(true);
+  });
+
+  it('never a picture address, a kind word added onto another, or a target the phone did not send (the S398 sort gate)', () => {
+    const { writes, skipped } = planWrites(
+      [
+        tick({ kind: 'add_to', source_line: 'pic', target: t('pipit'), field: 'image_url', op: 'set', value: 'https://evil.example/x.png' }),
+        tick({ kind: 'add_to', source_line: 'kind', target: t('dotma'), field: 'supertype', value: 'Smuggler' }),
+        tick({ kind: 'add_to', source_line: 'kind-empty', target: t('pipit'), field: 'supertype', value: 'Fox keeper' }),
+        tick({ kind: 'add_to', source_line: 'unsent', target: t('fox'), field: 'description', value: 'x' }),
+        tick({ kind: 'link', source_line: 'sent-value', target: t('dotma'), field: 'friends', value_id: 'pipit' }),
+      ],
+      get,
+      new Set(['pipit', 'dotma', 'dot', 'swoop']),
+    );
+    expect(writes).toEqual([
+      { op: 'edit', id: 'pipit', values: { supertype: 'Fox keeper' } },
+      { op: 'edit', id: 'dotma', values: { friends: ['pipit'] } },
+    ]);
+    expect(skipped.map((s) => s.row.source_line)).toEqual(['pic', 'kind', 'unsent']);
+    // pipit was sent: friends -> pipit is fine; only what was never sent is refused.
+    expect(planWrites([tick({ kind: 'link', source_line: 'x', target: t('dotma'), field: 'friends', value_id: 'fox' })], get, new Set(['dotma'])).skipped.length).toBe(1);
   });
 
   it('an ask writes only through its pick and the row it stands for', () => {

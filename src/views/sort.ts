@@ -8,7 +8,7 @@ import { icon } from '../icons';
 import { accountToken, cachedAccountWorlds } from '../account';
 import { MAP_TYPES } from '../maps';
 import { fieldLabel, TYPES, typeColor, typeLabel } from '../schema';
-import { buildSlice, fitNotes, notesPayload, noteText, planWrites, SORTED, type SortRow, type Target, type Ticked } from '../sortplan';
+import { buildSlice, fitNotes, notesPayload, noteText, planWrites, sanitizeRows, SORTED, tooLong, type SortRow, type Target, type Ticked, type Write } from '../sortplan';
 import { sortNotes, SortRefused, type Sorted } from '../sort';
 import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
@@ -24,8 +24,19 @@ interface RowState {
 
 interface Kept {
   notes: string[];
+  /** The ids sent in the slice: a row naming any other is refused here too. */
+  sent: string[];
   result: Sorted;
   at: string;
+  /** Once Write is tapped: the writes, fixed, and how many are done, so a retry resumes and never writes twice. */
+  plan?: Write[];
+  step?: number;
+}
+
+/** Rows checked on arrival and again on reopen: a row the screen cannot show is left out with its reason. */
+function clean(result: Sorted): Sorted {
+  const { rows, dropped } = sanitizeRows(result.rows);
+  return { ...result, rows, not_proposed: [...dropped, ...(Array.isArray(result.not_proposed) ? result.not_proposed : [])] };
 }
 
 // A sort spends an answer: what came back is kept on this phone until written or let go.
@@ -33,11 +44,16 @@ const keepKey = (worldId: string) => `lantern-sort-${worldId}`;
 function readKept(worldId: string): Kept | null {
   try {
     const raw = localStorage.getItem(keepKey(worldId));
-    return raw ? (JSON.parse(raw) as Kept) : null;
+    if (!raw) return null;
+    const k = JSON.parse(raw) as Kept;
+    return { ...k, sent: Array.isArray(k.sent) ? k.sent : [], result: clean(k.result) };
   } catch {
     return null;
   }
 }
+
+/** A sort under way, per world: leaving and coming back waits for it instead of spending a second answer. */
+const inFlight = new Map<string, Promise<void>>();
 function writeKept(worldId: string, k: Kept | null): void {
   try {
     if (k) localStorage.setItem(keepKey(worldId), JSON.stringify(k));
@@ -67,6 +83,16 @@ export function sortView(s: WorldSession): View {
   let phase: 'choose' | 'asking' | 'review' = 'choose';
   let kept = readKept(s.id);
   if (kept) phase = 'review';
+  let writing = false;
+  const pending = inFlight.get(s.id);
+  if (pending) {
+    phase = 'asking';
+    void pending.then(() => {
+      kept = readKept(s.id);
+      phase = kept ? 'review' : 'choose';
+      render();
+    });
+  }
   let chosen = new Set(fitNotes(unsortedNotes(s)).map((n) => n.id));
   let refusal = '';
   let signedIn = false;
@@ -95,21 +121,34 @@ export function sortView(s: WorldSession): View {
   const run = async () => {
     const notes = unsortedNotes(s).filter((n) => chosen.has(n.id));
     const fit = fitNotes(notes);
-    if (!fit.length) return;
+    if (!fit.length || inFlight.has(s.id)) return;
     phase = 'asking';
     refusal = '';
     render();
-    try {
-      const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id));
-      const result = await sortNotes(s.id, notesPayload(fit).notes, slice);
-      kept = { notes: fit.map((n) => n.id), result, at: new Date().toISOString() };
-      writeKept(s.id, kept);
-      state.clear();
-      phase = 'review';
-    } catch (e) {
-      refusal = e instanceof SortRefused ? e.message : errorText(e);
-      phase = 'choose';
-    }
+    const job = (async () => {
+      try {
+        const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id));
+        const payload = notesPayload(fit).notes;
+        let result: Sorted;
+        try {
+          result = await sortNotes(s.id, payload, slice);
+        } catch (e) {
+          // keel refuses a picture it will not read (422, nothing counted): the words go alone.
+          if (!(e instanceof SortRefused && e.status === 422 && payload.some((n) => typeof n !== 'string'))) throw e;
+          result = await sortNotes(s.id, payload.map((n) => (typeof n === 'string' ? n : n.text)), slice);
+        }
+        kept = { notes: fit.map((n) => n.id), sent: slice.map((x) => x.id), result: clean(result), at: new Date().toISOString() };
+        writeKept(s.id, kept);
+        state.clear();
+        phase = 'review';
+      } catch (e) {
+        refusal = e instanceof SortRefused ? e.message : errorText(e);
+        phase = 'choose';
+      }
+    })();
+    inFlight.set(s.id, job);
+    await job;
+    inFlight.delete(s.id);
     render();
   };
 
@@ -123,7 +162,12 @@ export function sortView(s: WorldSession): View {
         'button',
         { class: 'note-pick', type: 'button', role: 'checkbox', 'aria-checked': String(on), 'data-note': n.id },
         h('span', { class: 'tick' }, on ? icon('check', 18, 2.4) : ''),
-        h('span', { class: 'label' }, h('b', null, String(n.name ?? 'A note')), h('span', { class: 'muted small', style: 'display:block' }, snippet(noteText(n)))),
+        h(
+          'span',
+          { class: 'label' },
+          h('b', null, String(n.name ?? 'A note')),
+          h('span', { class: 'muted small', style: 'display:block' }, tooLong(n) ? 'Too long for one sort (4,000 characters): split it on its page first.' : snippet(noteText(n))),
+        ),
         typeof n.image_url === 'string' && n.image_url ? icon('image', 18) : '',
       );
       b.addEventListener('click', () => {
@@ -131,6 +175,7 @@ export function sortView(s: WorldSession): View {
         else chosen.add(n.id);
         render();
       });
+      b.disabled = tooLong(n);
       return b;
     });
     const fit = fitNotes(notes.filter((n) => chosen.has(n.id)));
@@ -160,10 +205,13 @@ export function sortView(s: WorldSession): View {
   const card = (row: SortRow, i: number): HTMLElement => {
     const st = state.get(i) ?? { on: false };
     state.set(i, st);
+    // Once writing has begun, the plan is fixed: the cards are shown, not changed.
+    const locked = !!kept?.plan;
     const body: (Node | string)[] = [];
     if (row.kind === 'make') {
       const name = h('input', { class: 'input', type: 'text', 'aria-label': 'Name', value: st.name ?? row.proposal.name });
       name.addEventListener('input', () => (st.name = name.value));
+      name.disabled = locked;
       const type = h('select', { class: 'input', 'aria-label': 'What it is' });
       const want = (st.type ?? row.proposal.type ?? '').toLowerCase();
       for (const t of TYPES.filter((x) => !MAP_TYPES.has(x))) {
@@ -176,6 +224,7 @@ export function sortView(s: WorldSession): View {
         type.prepend(o);
       }
       type.addEventListener('change', () => (st.type = type.value));
+      type.disabled = locked;
       body.push(h('div', { class: 'row-gap' }, name, type));
       if (row.proposal.description) body.push(h('p', { class: 'dim small', style: 'margin:0' }, row.proposal.description));
     } else if (row.kind === 'add_to') {
@@ -195,6 +244,7 @@ export function sortView(s: WorldSession): View {
           st.on = !!st.pick;
           render();
         });
+        b.disabled = locked;
         picks.appendChild(b);
       }
       // Neither: an empty card to make it new, written fresh (Simmer h37 #3598: never a model's guess behind a tap).
@@ -212,6 +262,7 @@ export function sortView(s: WorldSession): View {
         writeKept(s.id, kept);
         render();
       });
+      neither.disabled = locked;
       body.push(picks, neither);
       if (!row.then && row.candidates.length) body.push(h('p', { class: 'muted small', style: 'margin:0' }, 'Picking one only answers the question.'));
     }
@@ -223,6 +274,7 @@ export function sortView(s: WorldSession): View {
             st.on = !st.on;
             render();
           });
+          b.disabled = locked;
           return b;
         })()
       : '';
@@ -243,31 +295,60 @@ export function sortView(s: WorldSession): View {
     );
   };
 
+  // Write is one plan, fixed at the first tap and kept with the sort, done step by step: a second
+  // tap while it runs does nothing, and a retry after a failure resumes where it stopped, so nothing
+  // is made or appended twice (the S398 sort gate).
   const write = async () => {
-    if (!kept) return;
-    const ticked: Ticked[] = [];
-    kept.result.rows.forEach((row, i) => {
-      const st = state.get(i);
-      if (st?.on) ticked.push({ key: String(i), row, name: st.name, type: st.type, pick: st.pick });
-    });
-    const plan = planWrites(ticked, (id) => s.get(id));
-    if (plan.skipped.length) {
-      toast(plan.skipped[0].reason);
-      return;
-    }
-    try {
-      for (const w of plan.writes) {
-        if (w.op === 'create') await s.create(w.type, w.values);
-        else await s.edit(w.id, w.values, s.serverCopy(w.id));
+    if (!kept || writing) return;
+    if (!kept.plan) {
+      const ticked: Ticked[] = [];
+      kept.result.rows.forEach((row, i) => {
+        const st = state.get(i);
+        if (st?.on) ticked.push({ key: String(i), row, name: st.name, type: st.type, pick: st.pick });
+      });
+      let plan: ReturnType<typeof planWrites>;
+      try {
+        plan = planWrites(ticked, (id) => s.get(id), new Set(kept.sent));
+      } catch {
+        toast('A ticked card could not be read. Untick it and write the rest.');
+        return;
       }
-      // The notes are filed, not deleted: every written row points at its note.
-      for (const id of kept.notes) if (s.get(id)) await s.edit(id, { supertype: SORTED }, s.serverCopy(id));
+      if (plan.skipped.length) {
+        toast(plan.skipped[0].reason);
+        return;
+      }
+      kept.plan = plan.writes;
+      kept.step = 0;
+      writeKept(s.id, kept);
+    }
+    writing = true;
+    render();
+    const plan = kept.plan!;
+    const steps = plan.length + kept.notes.length;
+    try {
+      while ((kept.step ?? 0) < steps) {
+        const i = kept.step ?? 0;
+        if (i < plan.length) {
+          const w = plan[i];
+          if (w.op === 'create') await s.create(w.type, w.values);
+          else await s.edit(w.id, w.values, s.serverCopy(w.id));
+        } else {
+          // The notes are filed, not deleted: every written row points at its note.
+          const id = kept.notes[i - plan.length];
+          if (s.get(id)) await s.edit(id, { supertype: SORTED }, s.serverCopy(id));
+        }
+        kept.step = i + 1;
+        writeKept(s.id, kept);
+      }
       writeKept(s.id, null);
       kept = null;
-      toast(plan.writes.length ? `${plural(plan.writes.length, 'change')} written. The notes are filed as Sorted.` : 'The notes are filed as Sorted.');
+      writing = false;
+      toast(plan.length ? `${plural(plan.length, 'change')} written. The notes are filed as Sorted.` : 'The notes are filed as Sorted.');
       go(`#/w/${s.id}/t/narrative?unsorted`, true);
     } catch (e) {
-      toast(errorText(e));
+      writing = false;
+      toast(`${errorText(e)} What was written stays written: tap again to finish.`);
+      render();
     }
   };
 
@@ -275,9 +356,16 @@ export function sortView(s: WorldSession): View {
     if (!kept) return [];
     const { rows, not_proposed, remaining } = kept.result;
     const count = [...state.values()].filter((x) => x.on).length;
-    const writeBtn = h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'write' }, count ? `Write ${count}` : 'File the notes as sorted');
+    const started = !!kept.plan;
+    const writeBtn = h(
+      'button',
+      { class: 'btn btn-primary', type: 'button', 'data-action': 'write' },
+      writing ? 'Writing…' : started ? 'Finish writing' : count ? `Write ${count}` : 'File the notes as sorted',
+    );
+    writeBtn.disabled = writing;
     writeBtn.addEventListener('click', () => void write());
-    const letGo = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Keep the notes in Unsorted');
+    // Once writing has begun, the sort is no longer the person's to let go: finish it.
+    const letGo = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center', hidden: started }, 'Keep the notes in Unsorted');
     letGo.addEventListener('click', () => {
       writeKept(s.id, null);
       kept = null;
@@ -306,6 +394,7 @@ export function sortView(s: WorldSession): View {
         rows.length ? `${plural(rows.length, 'proposal')} from ${plural(kept.notes.length, 'note')}. Tick what is true.` : 'Nothing to propose from these notes.',
         typeof remaining === 'number' ? h('span', { class: 'muted small' }, ` ${remaining} AI answers left today.`) : '',
       ),
+      started ? h('p', { class: 'muted small', style: 'margin:0', role: 'status' }, `Writing what you ticked: ${Math.min(kept.step ?? 0, (kept.plan?.length ?? 0) + kept.notes.length)} of ${(kept.plan?.length ?? 0) + kept.notes.length} done.`) : '',
       ...rows.map(card),
       leftOut,
       writeBtn,

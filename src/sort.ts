@@ -17,7 +17,15 @@ export interface Sorted {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-export class SortRefused extends Error {}
+export class SortRefused extends Error {
+  constructor(
+    message: string,
+    /** keel's status, when it answered (422: a param it would not take). */
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 export async function sortNotes(worldId: string, notes: SortNote[], slice: SliceItem[]): Promise<Sorted> {
   const token = await accountToken();
@@ -43,7 +51,7 @@ export async function sortNotes(worldId: string, notes: SortNote[], slice: Slice
     if (e.isAskFailed) throw new SortRefused('Nothing came back. Try again; nothing was counted.');
     if (e.status === 404 || e.status === 403) throw new SortRefused('Your account is not in this world any more.');
     if (e.status === 401) throw new SortRefused('Sign in again to sort.');
-    if (e.status === 422) throw new SortRefused(`The notes were not taken: ${e.message}`);
+    if (e.status === 422) throw new SortRefused(`The notes were not taken: ${e.message}`, 422);
     throw new SortRefused('Nothing came back. Try again.');
   }
 }

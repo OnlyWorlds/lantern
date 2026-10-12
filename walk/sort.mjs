@@ -99,8 +99,15 @@ async function walk(engine, deviceName, tag) {
   const sent = [];
   let answer = json(429, { error: { code: 'quota_exceeded', message: 'quota_exceeded', type: 'rate_limit_error' } });
   await page.route('**/api/v2/**', (r) => r.abort());
+  // keel refuses a picture once (422, nothing counted), as it would one outside the world's prefix.
+  let refusePictureOnce = false;
   await page.route('**/api/v2/account/sort', (r) => {
-    sent.push(JSON.parse(r.request().postData()));
+    const body = JSON.parse(r.request().postData());
+    sent.push(body);
+    if (refusePictureOnce && body.notes.some((n) => typeof n !== 'string')) {
+      refusePictureOnce = false;
+      return r.fulfill(json(422, { error: { code: 'validation_error', message: 'notes.0.image_url: not under this world', type: 'invalid_request_error' } }));
+    }
     return r.fulfill(answer);
   });
 
@@ -142,16 +149,19 @@ async function walk(engine, deviceName, tag) {
     usage: { input_tokens: 2100, output_tokens: 380 },
     remaining: 48,
   });
+  refusePictureOnce = true;
   await sortBtn.tap();
   await page.waitForSelector('.sort-card', { timeout: 15000 });
+  const first = sent.at(-2);
   const body = sent.at(-1);
   const sliceIds = body.slice.map((x) => x.id);
-  const pictured = body.notes.filter((x) => typeof x !== 'string');
+  const pictured = first.notes.filter((x) => typeof x !== 'string');
   check(
     tag,
-    body.world_id === worldId && body.notes.length === 2 && pictured.length === 1 && /fire-page\.webp$/.test(pictured[0].image_url) && /Ember/.test(pictured[0].text),
+    first.world_id === worldId && first.notes.length === 2 && pictured.length === 1 && /fire-page\.webp$/.test(pictured[0].image_url) && /Ember/.test(pictured[0].text),
     'the notes go as their words, the photographed one with its picture, to this world',
   );
+  check(tag, body.notes.length === 2 && body.notes.every((x) => typeof x === 'string') && /Ember/.test(body.notes.join(' ')), 'a picture keel refuses: the sort goes again as words alone');
   check(tag, sliceIds.includes(a.id) && sliceIds.includes(place.id), `the slice holds what the notes name (${body.slice.length} elements)`);
   check(tag, !sliceIds.some((id) => notes.some((n) => n.id === id)), 'and never the notes');
   check(tag, (await page.locator('.sort-card').count()) === 4, 'four cards');
@@ -162,7 +172,7 @@ async function walk(engine, deviceName, tag) {
   // 5. A reload keeps the spent sort.
   await page.reload();
   await page.waitForSelector('.sort-card', { timeout: 15000 });
-  check(tag, (await page.locator('.sort-card').count()) === 4 && sent.length === 2, 'a reload keeps the sort, and asks nothing again');
+  check(tag, (await page.locator('.sort-card').count()) === 4 && sent.length === 3, 'a reload keeps the sort, and asks nothing again');
 
   // 6. Tick: the make (renamed), the addition, the ask's pick; leave the link.
   // Neither: an empty card to make it new, right under the question, nothing filled in for the person.
@@ -183,10 +193,19 @@ async function walk(engine, deviceName, tag) {
   check(tag, writeLabel === 'Write 3', `three ticked (${JSON.stringify(writeLabel)})`);
   check(tag, (await make.locator('input[aria-label="Name"]').inputValue()) === 'Ember of the Hearth', 'a tick keeps the edited name');
   await shot('ticked');
-  await page.locator('[data-action=write]').tap();
+  // A double tap on Write (two clicks in the same moment): one plan, written once.
+  await page.evaluate(() => {
+    const b = document.querySelector('[data-action=write]');
+    b.click();
+    b.click();
+  });
   await page.waitForSelector('[data-screen="type"]');
   const rows = await readStore(page, worldId, 'outbox');
-  const created = rows.find((r) => r.op === 'create' && r.type === 'character');
+  const creates = rows.filter((r) => r.op === 'create' && r.type === 'character');
+  const created = creates[0];
+  check(tag, creates.length === 1, `a double tap writes once (${creates.length} made)`);
+  const onAOnce = rows.find((r) => r.id === a.id)?.values.description ?? '';
+  check(tag, onAOnce.split('Was at the fire.').length === 2, 'and appends once');
   const onA = rows.find((r) => r.id === a.id);
   const onB = rows.find((r) => r.id === b.id);
   const filed = rows.filter((r) => notes.some((n) => n.id === r.id));
