@@ -326,6 +326,33 @@ h2 {
   text-decoration: none;
 }
 
+/* A world's card and its pin: the card takes the width, the pin a thumb-sized tap beside it. */
+.pin-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pin-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.pin-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--lan-ink-faint);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.pin-btn.on {
+  color: var(--lan-accent);
+}
+
 .world-card .thumb {
   width: 44px;
   height: 44px;
@@ -617,6 +644,32 @@ body:has(main textarea:focus, main input:focus) .tabbar {
   background: color-mix(in srgb, var(--type) 22%, var(--lan-bg)) center / cover no-repeat;
 }
 
+/* An empty picture you can fill: the same square, a small camera in its corner. */
+.avatar-add {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.avatar-box {
+  position: relative;
+  flex-shrink: 0;
+}
+.avatar-cam {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  pointer-events: none; /* the tap goes to the square under it */
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lan-accent);
+  color: var(--lan-bg);
+  box-shadow: 0 0 0 2px var(--lan-bg);
+}
+
 .el-head h1 {
   font-size: 1.65rem;
   overflow-wrap: anywhere;
@@ -693,6 +746,15 @@ body:has(main textarea:focus, main input:focus) .tabbar {
   margin-left: 8px;
   white-space: nowrap;
   vertical-align: middle;
+}
+/* Waiting on the PIN: the same mark, tappable, underlined so it reads as something to tap. */
+button.wait-pin {
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 /* A row in the give sheet whose parts keep their own width (row-gap shares it out). */

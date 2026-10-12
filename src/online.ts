@@ -89,7 +89,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     addedAt: new Date().toISOString(),
   };
   await db.putWorldRecord(online);
-  setSessionPin(online.id, pin);
+  setSessionPin(online, pin);
   forgetSession(online.id);
   const s = await openWorld(online.id);
   await s.pull();

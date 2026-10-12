@@ -180,7 +180,7 @@ window.setInterval(() => {
     if (fresh.length && s.rec.memberRole === 'guest' && s === activeSession) {
       toast(fresh.length === 1 ? `New: ${elName(fresh[0])}` : `${fresh.length} new things you know`);
     }
-    return s.waitingCount() && !s.needPin ? s.flush() : undefined;
+    return s.waitingCount() && (!s.needPin || s.pinKnown()) ? s.flush() : undefined;
   });
 }, POLL_MS);
 

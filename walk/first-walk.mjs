@@ -25,7 +25,8 @@ async function walk(engine, tag) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()));
+  let cutOff = false; // keel cut off on purpose (step 7): its failed loads are expected
+  page.on('console', (m) => m.type() === 'error' && !(cutOff && /Failed to load resource/.test(m.text())) && errors.push('console: ' + m.text()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/first-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
   const screen = () => page.evaluate(() => document.querySelector('main')?.dataset.screen ?? '?');
@@ -91,13 +92,27 @@ async function walk(engine, tag) {
   await shot('pencil-sheet');
   await page.locator('.sheet').getByRole('button', { name: 'Cancel' }).tap();
   await page.waitForFunction(() => !document.querySelector('.sheet'));
+  // His second walk (#3660): a single link laid out like a multi link, the chip under its label line.
+  const lay = await page.evaluate(() => {
+    const row = document.querySelector('.frow[data-field=location]');
+    const k = row?.querySelector('.k')?.getBoundingClientRect();
+    const chip = row?.querySelector('.link-chip')?.getBoundingClientRect();
+    return { block: row?.classList.contains('block'), below: !!k && !!chip && chip.top >= k.bottom - 1 };
+  });
+  check(tag, lay.block && lay.below, `a single link's chip sits under its label, as a multi link's does (${JSON.stringify(lay)})`);
   await page.locator('.frow[data-field=location] .link-chip').tap();
   await page.waitForFunction(() => /Lower Town/.test(document.querySelector('.el-head h1')?.textContent ?? ''));
   check(tag, true, 'the chip still opens the place');
   await page.goBack();
   await page.waitForFunction(() => /Mira/.test(document.querySelector('.el-head h1')?.textContent ?? ''));
 
-  // 4. A picture after the element was made, from the gallery.
+  // 4. A picture after the element was made, from the gallery. The empty picture itself opens the
+  // same sheet (#3660).
+  await page.locator('[data-action=avatar-picture]').tap();
+  await page.waitForSelector('.sheet [data-photo=gallery]', { state: 'attached' });
+  check(tag, (await page.locator('.sheet [data-photo=camera]').count()) === 1, 'tapping the empty picture offers Camera or Gallery');
+  await page.locator('.sheet').getByRole('button', { name: 'Cancel' }).tap();
+  await page.waitForFunction(() => !document.querySelector('.sheet'));
   await page.locator('[data-action=picture]').tap();
   await page.waitForSelector('.sheet [data-photo=gallery]', { state: 'attached' });
   const png = await page.screenshot({ type: 'png' });
@@ -105,6 +120,7 @@ async function walk(engine, tag) {
   await page.waitForFunction(() => /url\("data:image/.test(document.querySelector('.avatar')?.style.backgroundImage ?? ''), null, { timeout: 15000 });
   check(tag, (await page.locator('img.picture').count()) === 1, 'the picture shows on the page');
   check(tag, (await page.locator('[data-action=picture]').innerText()).trim() === 'Change the picture','the button now offers to change it');
+  check(tag, (await page.locator('[data-action=avatar-picture]').count()) === 0, 'and the picture is no longer a button to add one');
   await shot('picture');
   await page.locator('[data-action=picture]').tap();
   await page.locator('.sheet').getByRole('button', { name: 'Remove the picture' }).tap();
@@ -127,6 +143,80 @@ async function walk(engine, tag) {
   check(tag, !(await page.locator('.tabbar').isVisible()), 'typing hides the tab bar');
   await page.locator('[data-screen="ask"] input').blur();
   check(tag, await page.locator('.tabbar').isVisible(), 'and it comes back');
+  const worldId = page.url().match(/#\/w\/([^/?]+)/)[1];
+
+  // 6. Pin a world (#3660): it leads the list under Pinned, through a reload, until unpinned.
+  await page.goto(`${BASE}/#/new`);
+  await page.locator('input[aria-label="World name"]').fill('Second world');
+  await page.getByRole('button', { name: 'Start the world' }).tap();
+  await page.waitForSelector('[data-screen="home"]');
+  await page.goto(`${BASE}/#/worlds`);
+  await page.waitForSelector('[data-screen="worlds"] .world-card');
+  const labels = () => page.locator('[data-screen="worlds"] .section-label').allInnerTexts();
+  check(tag, !(await labels()).includes('Pinned'), 'no Pinned section before a pin');
+  await page.locator(`[data-pin="${worldId}"]`).tap();
+  await page.waitForSelector('[aria-pressed=true][data-pin]');
+  const firstSection = async () =>
+    page.evaluate(() => {
+      const s = document.querySelector('[data-screen="worlds"] .stack');
+      return { label: s?.querySelector('.section-label')?.textContent, worlds: [...(s?.querySelectorAll('[data-world]') ?? [])].map((x) => x.getAttribute('data-world')) };
+    });
+  let first = await firstSection();
+  check(tag, first.label === 'Pinned' && first.worlds.length === 1 && first.worlds[0] === worldId, `a pinned world leads the list under Pinned (${JSON.stringify(first)})`);
+  check(tag, (await page.locator(`[data-world="${worldId}"]`).count()) === 1, 'and is not also in its own section');
+  await shot('pinned');
+  await page.reload();
+  await page.waitForSelector('[data-screen="worlds"] .world-card');
+  first = await firstSection();
+  check(tag, first.label === 'Pinned' && first.worlds[0] === worldId, 'the pin is kept through a reload');
+  await page.locator(`[data-pin="${worldId}"]`).tap();
+  await page.waitForFunction(() => ![...document.querySelectorAll('.section-label')].some((l) => l.textContent === 'Pinned'));
+  check(tag, true, 'unpinned, the Pinned section goes');
+
+  // 7. A change waiting on the PIN says so where it waits, and asks for it there (#3660). The first
+  // world made an owner's account world with a write key; keel cut off, so nothing is sent.
+  cutOff = true;
+  await page.route('**/api/v2/**', (r) => r.abort());
+  await page.evaluate(
+    (id) =>
+      new Promise((res, rej) => {
+        const r = indexedDB.open('lantern');
+        r.onsuccess = () => {
+          const t = r.result.transaction('worlds', 'readwrite');
+          const st = t.objectStore('worlds');
+          const g = st.get(id);
+          g.onsuccess = () => st.put({ ...g.result, kind: 'online', role: 'owner', apiKey: 'ow_w_' + 'x'.repeat(40), keyKind: 'write' });
+          t.oncomplete = () => res(true);
+          t.onerror = () => rej(t.error);
+        };
+      }),
+    worldId,
+  );
+  await page.goto(`${BASE}/#/w/${worldId}`);
+  await page.waitForSelector('[data-screen="home"]');
+  await page.goto(`${BASE}/#/w/${worldId}/t/character`);
+  await page.locator('.el-row').first().tap();
+  await page.waitForSelector('[data-screen="element"] .el-head');
+  await page.locator('.prose').tap();
+  await page.waitForSelector('.sheet textarea');
+  await page.locator('.sheet textarea').fill('A smith in the lower town, and a good one.');
+  await page.locator('.sheet button[type=submit]').tap();
+  const mark = page.locator('.wait-pin');
+  await mark.waitFor({ timeout: 10000 });
+  check(tag, (await mark.innerText()) === 'needs your PIN', 'the waiting change says it needs the PIN');
+  await shot('needs-pin');
+  await mark.tap();
+  await page.waitForSelector('.sheet h2');
+  const sheetText = await page.locator('.sheet').innerText();
+  check(tag, /Your PIN/.test(sheetText) && /all your worlds/.test(sheetText), 'tapping it asks for the PIN, kept for all your worlds');
+  await page.locator('.sheet .sheet-close, .sheet [aria-label=Close]').first().tap().catch(() => page.keyboard.press('Escape'));
+  await page.goto(`${BASE}/#/w/${worldId}/outbox`);
+  await page.waitForSelector('[data-screen="outbox"]');
+  check(
+    tag,
+    (await page.getByRole('button', { name: 'Enter your PIN to send' }).count()) === 1 && (await page.locator('[data-action=send-now]').count()) === 0,
+    'Waiting to send asks for the PIN, and offers no Send now that could not send',
+  );
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();

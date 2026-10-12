@@ -3,10 +3,10 @@
 import type { OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { fieldInfo, fieldLabel, isEmptyValue } from '../schema';
-import { elName, tabbar, topbar } from '../ui';
+import { elName, tabbar, toast, topbar } from '../ui';
 import { movedFields, type WorldSession } from '../world';
 import type { OutboxRow } from '../db';
-import { pinSheet, type View } from './world';
+import { askPin, pinSheet, type View } from './world';
 
 function show(s: WorldSession, type: string, field: string, v: unknown): string {
   if (isEmptyValue(v)) return '(empty)';
@@ -105,8 +105,20 @@ export function outboxView(s: WorldSession): View {
     const gone = rows.filter((r) => r.state === 'gone');
     const refused = rows.filter((r) => r.state === 'refused');
     const waiting = rows.filter((r) => r.state === 'waiting' || r.state === 'sending');
-    const pinBtn = s.needPin && waiting.length ? h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN to send') : null;
+    const pinBtn = askPin(s) ? h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN to send') : null;
     pinBtn?.addEventListener('click', () => pinSheet(s));
+    // Changes send by themselves the moment there is signal and a PIN; Send now is for the doubt
+    // (the Captain's walk: "can we force send?").
+    const sendNow = !pinBtn && waiting.some((r) => r.state === 'waiting') ? h('button', { class: 'btn', type: 'button', 'data-action': 'send-now' }, 'Send now') : null;
+    sendNow?.addEventListener('click', () => {
+      if (!navigator.onLine) return toast('No signal. Your changes send by themselves when the phone has it.');
+      sendNow.disabled = true;
+      sendNow.textContent = 'Sending…';
+      void s.flush().finally(() => refresh());
+    });
+    const when = waiting.length
+      ? h('p', { class: 'muted small', style: 'margin:0' }, pinBtn ? 'They send as soon as the PIN is in.' : 'They send by themselves whenever the phone has signal.')
+      : '';
     main.replaceChildren(
       topbar('Waiting to send', `#/w/${s.id}`),
       ...needs.map((r) => conflictCard(s, r)),
@@ -136,7 +148,9 @@ export function outboxView(s: WorldSession): View {
             ),
           )
         : '',
-      pinBtn ?? "",
+      when,
+      pinBtn ?? '',
+      sendNow ?? '',
       !rows.length ? h('p', { class: 'empty' }, 'Everything is sent.') : '',
       tabbar(s, null),
     );
