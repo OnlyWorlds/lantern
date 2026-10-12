@@ -74,7 +74,8 @@ export async function askInASentence(worldId: string, question: string, context:
     return { answer: a, remaining: body.remaining, none: /^the world doesn.t say\.?$/i.test(a) };
   }
   const code = body?.error?.code;
-  if (res.status === 429) throw new AskRefused("That was today's last question in a sentence. More tomorrow; the list above still works.");
+  if (res.status === 429) throw new AskRefused("Today's questions in a sentence are used up. More tomorrow; the list above still works.");
+  if (res.status === 404 || res.status === 403) throw new AskRefused('Your account is not in this world any more, so it cannot be asked in a sentence.');
   if (res.status === 503 || code === 'ask_unavailable') throw new AskRefused('Answers in a sentence are paused for now. The list above is the world itself.');
   if (res.status === 502 || code === 'ask_failed') throw new AskRefused('No answer came back. Try again.');
   if (res.status === 401) throw new AskRefused('Sign in again to have it answered in a sentence.');

@@ -121,6 +121,24 @@ describe('an invite link', () => {
     expect(await db.getWorldRecord(WORLD)).toBeUndefined();
   });
 
+  it('a dead link is let go, so the next sign-in does not come back to it; a sign-out lets go too (the third gate)', async () => {
+    await join.setPendingJoin('ow_j_nope');
+    await expect(join.previewJoin('ow_j_nope')).rejects.toThrow(/does not work/);
+    expect(await join.pendingJoin()).toBeUndefined();
+    await join.setPendingJoin('ow_j_good');
+    const { signOut } = await import('../src/account');
+    await signOut();
+    expect(await join.pendingJoin()).toBeUndefined();
+  });
+
+  it('joined, but the world did not open: the person is told they are in (the third gate)', async () => {
+    const real = keel.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes(`/account/worlds/${WORLD}/keys`) ? new Response('{}', { status: 500 }) : real(input, init)) as typeof fetch;
+    await expect(join.acceptJoin('ow_j_good')).rejects.toThrow(/You are in The Reach now/);
+    expect(keel.members.has(WORLD)).toBe(true);
+  });
+
   it('a used or agent code, and no account: refused before anything is kept', async () => {
     await expect(join.acceptJoin('ow_j_agent')).rejects.toThrow(/does not work/);
     await db.kvSet('accountToken', undefined);

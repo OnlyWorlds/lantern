@@ -77,6 +77,8 @@ export async function signInWithPassword(email: string, password: string): Promi
 
 export async function signOut(): Promise<void> {
   await db.kvSet('accountToken', undefined);
+  // An invite waiting for this account is not the next account's.
+  await db.kvSet('pendingJoin', undefined);
   await db.kvSet('accountWorlds', undefined);
 }
 

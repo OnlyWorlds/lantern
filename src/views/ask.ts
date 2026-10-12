@@ -58,23 +58,27 @@ export function askView(s: WorldSession): View {
   });
   const sentence = (q: string, els: OwElement[]): HTMLElement | '' => {
     if (!signedIn || !accountWorld) return '';
-    // An answer already given stays with its question: a sync that redraws the list keeps it.
-    const kept = answered.get(`${s.id}|${q}`);
+    const context = contextFor(els, (id) => (s.get(id) ? elName(s.get(id)) : undefined));
+    // One box per world, question and the very text sent: a redraw while it asks, or after, shows
+    // the same box (never a second spend); elements that changed make a new one.
+    const key = `${s.id}|${q}|${context.join('|')}`;
+    const kept = answered.get(key);
     if (kept) return kept;
     const box = h('div', { class: 'stack', 'data-sentence': '' });
+    answered.set(key, box);
     const btn = h('button', { class: 'btn', type: 'button' }, icon('spark', 18), 'Answer it in a sentence');
-    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends these ${els.length === 1 ? 'one' : els.length} to OnlyWorlds to be put into words. It answers from them only.`);
+    const n = context.length;
+    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends ${n === els.length ? 'these' : `the first`} ${n === 1 ? 'one' : n} to OnlyWorlds to be put into words. It answers from them only.`);
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       hint.textContent = 'Asking…';
       try {
-        const a = await askInASentence(s.id, q, contextFor(els, (id) => (s.get(id) ? elName(s.get(id)) : undefined)));
+        const a = await askInASentence(s.id, q, context);
         const left = typeof a.remaining === 'number' ? ` ${a.remaining} left today.` : '';
         box.replaceChildren(
           h('p', { class: a.none ? 'empty' : 'answer', 'data-answer': a.none ? 'none' : 'sentence' }, a.none ? 'Your world does not say.' : a.answer),
           h('p', { class: 'muted small', style: 'margin:0' }, `From the elements below.${left}`),
         );
-        answered.set(`${s.id}|${q}`, box);
       } catch (e) {
         hint.textContent = e instanceof Error ? e.message : String(e);
         btn.disabled = false;

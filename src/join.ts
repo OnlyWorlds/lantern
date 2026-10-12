@@ -46,7 +46,12 @@ export async function previewJoin(code: string): Promise<JoinPreview> {
   const res = await post('/join/preview', { code });
   if (!res.ok) {
     const e = await errorOf(res);
-    throw new Error(res.status === 404 ? 'This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.' : e.message ?? 'The invite could not be read. Try again.');
+    if (res.status === 404) {
+      // A dead link is let go, or every sign-in would come back to it.
+      if ((await pendingJoin()) === code) await setPendingJoin(undefined);
+      throw new Error('This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.');
+    }
+    throw new Error(e.message ?? 'The invite could not be read. Try again.');
   }
   return (await res.json()) as JoinPreview;
 }
@@ -79,13 +84,23 @@ export async function acceptJoin(code: string): Promise<JoinResult> {
     }
     throw new Error(e.message ?? 'Joining did not work. Try again.');
   }
-  if (res.status === 404) throw new Error('This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.');
+  if (res.status === 404) {
+    await setPendingJoin(undefined);
+    throw new Error('This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.');
+  }
   if (!res.ok) throw new Error((await errorOf(res)).message ?? 'Joining did not work. Try again.');
   const m = (await res.json()) as { world_id: string; world_name?: string; role?: AccountWorld['member_role']; roster_character?: string | null };
   await setPendingJoin(undefined);
   const worlds = await fetchAccountWorlds(token).catch(() => [] as AccountWorld[]);
   const w = worlds.find((x) => x.id === m.world_id) ?? { id: m.world_id, name: m.world_name ?? 'A world', role: 'collaborator', member_role: m.role };
-  const rec = await openAccountWorld(w);
+  let rec: db.WorldRecord;
+  try {
+    rec = await openAccountWorld(w);
+  } catch {
+    // The membership is made; only this phone's key for it is not. The world is in Your worlds,
+    // and its Character comes back from /me when it opens there.
+    throw new Error(`You are in ${w.name} now, but it did not open on this phone. Open it from Your worlds.`);
+  }
   if (m.roster_character) await db.updateWorldRecord(rec.id, { characterId: m.roster_character });
   return { worldId: rec.id };
 }

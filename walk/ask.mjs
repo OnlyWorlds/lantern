@@ -95,12 +95,38 @@ async function walk(engine, deviceName, tag) {
   await page.waitForTimeout(1500);
   check(tag, (await page.locator('[data-answer="sentence"]').count()) === 1 && asked.length === 1, 'a redraw keeps the answer, and asks nothing again');
 
+  // 4b. A redraw while it is asking picks up the same box: no second tap, no second spend (the third gate)
+  let release;
+  const held = new Promise((r) => (release = r));
+  await page.unroute('**/api/v2/account/ask');
+  await page.route('**/api/v2/account/ask', async (r) => {
+    asked.push(JSON.parse(r.request().postData()));
+    await held;
+    return r.fulfill(json(200, { answer: 'The USS Fuzzball floats in the Eternal Drip.', remaining: 48 }));
+  });
+  await page.locator('input[aria-label="Ask your world"]').fill('Where does the USS Fuzzball float?');
+  await btn.waitFor({ timeout: 10000 });
+  const before = asked.length;
+  await btn.tap();
+  await page.locator('input[aria-label="Ask your world"]').press('Enter');
+  await page.waitForTimeout(400);
+  const enabled = await page.getByRole('button', { name: 'Answer it in a sentence' }).isEnabled().catch(() => false);
+  check(tag, !enabled, 'while it asks, the redrawn list shows the same box, its button not tappable');
+  release();
+  await page.waitForSelector('[data-answer="sentence"]');
+  check(tag, asked.length === before + 1 && /Eternal Drip/.test(await page.locator('[data-answer="sentence"]').innerText()), `one question sent (${asked.length - before}), and its answer is the one on screen`);
+  await page.unroute('**/api/v2/account/ask');
+  await page.route('**/api/v2/account/ask', (r) => {
+    asked.push(JSON.parse(r.request().postData()));
+    return r.fulfill(answer);
+  });
+
   // 5. Today's allowance spent, and a pause
   answer = json(429, { error: { code: 'quota_exceeded', message: 'quota' } });
   await page.locator('input[aria-label="Ask your world"]').fill('Where is the USS Fuzzball?');
   await btn.waitFor({ timeout: 10000 });
   await btn.tap();
-  await page.waitForFunction(() => /last question/.test(document.querySelector('[data-sentence]')?.textContent ?? ''), null, { timeout: 10000 });
+  await page.waitForFunction(() => /used up/.test(document.querySelector('[data-sentence]')?.textContent ?? ''), null, { timeout: 10000 });
   check(tag, true, 'the allowance spent: its own sentence');
   answer = json(503, { error: { code: 'ask_unavailable', message: 'paused' } });
   await btn.tap();

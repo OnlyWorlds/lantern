@@ -58,7 +58,7 @@ describe("keel's answers", () => {
 
   it('the allowance, a pause, a failed model: each its own sentence', async () => {
     reply = () => json(429, { error: { code: 'quota_exceeded' } });
-    await expect(askInASentence('w1', 'q', ['x'])).rejects.toThrow(/last question/);
+    await expect(askInASentence('w1', 'q', ['x'])).rejects.toThrow(/used up/);
     reply = () => json(503, { error: { code: 'ask_unavailable' } });
     await expect(askInASentence('w1', 'q', ['x'])).rejects.toThrow(/paused/);
     reply = () => json(502, { error: { code: 'ask_failed' } });
