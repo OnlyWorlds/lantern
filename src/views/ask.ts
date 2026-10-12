@@ -1,11 +1,14 @@
 // Ask: a question answered from the phone's own copy, offline and free (Kael's lookup, SDK
 // lookupWorld). It finds what exists and shows why; it never invents. When nothing matches,
-// "your world does not say" is the answer. A model behind keel's proxy comes later (#159).
+// "your world does not say" is the answer. For an account world, with signal, the same elements
+// can be put into a sentence by keel's proxy (#159), on a tap: the sources stay on screen.
 import { lookupWorld, type OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { fieldLabel } from '../schema';
-import { elRow, tabbar } from '../ui';
+import { elName, elRow, tabbar } from '../ui';
+import { accountToken } from '../account';
+import { askInASentence, contextFor } from '../ask';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 
@@ -34,6 +37,7 @@ function snippet(el: OwElement): string {
 }
 
 const lastQuestion = new Map<string, string>();
+const answered = new Map<string, HTMLElement>();
 
 export function askView(s: WorldSession): View {
   const input = h('input', {
@@ -45,6 +49,40 @@ export function askView(s: WorldSession): View {
   });
   input.value = lastQuestion.get(s.id) ?? '';
   const out = h('div', { class: 'stack' });
+  // A sentence needs an account world (keel checks the account owns or is in it) and a sign-in.
+  let signedIn = false;
+  const accountWorld = s.rec.kind === 'online' && !!s.rec.role;
+  void accountToken().then((t) => {
+    signedIn = !!t;
+    if (signedIn && accountWorld && input.value.trim()) run();
+  });
+  const sentence = (q: string, els: OwElement[]): HTMLElement | '' => {
+    if (!signedIn || !accountWorld) return '';
+    // An answer already given stays with its question: a sync that redraws the list keeps it.
+    const kept = answered.get(`${s.id}|${q}`);
+    if (kept) return kept;
+    const box = h('div', { class: 'stack', 'data-sentence': '' });
+    const btn = h('button', { class: 'btn', type: 'button' }, icon('spark', 18), 'Answer it in a sentence');
+    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends these ${els.length === 1 ? 'one' : els.length} to OnlyWorlds to be put into words. It answers from them only.`);
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      hint.textContent = 'Asking…';
+      try {
+        const a = await askInASentence(s.id, q, contextFor(els, (id) => (s.get(id) ? elName(s.get(id)) : undefined)));
+        const left = typeof a.remaining === 'number' ? ` ${a.remaining} left today.` : '';
+        box.replaceChildren(
+          h('p', { class: a.none ? 'empty' : 'answer', 'data-answer': a.none ? 'none' : 'sentence' }, a.none ? 'Your world does not say.' : a.answer),
+          h('p', { class: 'muted small', style: 'margin:0' }, `From the elements below.${left}`),
+        );
+        answered.set(`${s.id}|${q}`, box);
+      } catch (e) {
+        hint.textContent = e instanceof Error ? e.message : String(e);
+        btn.disabled = false;
+      }
+    });
+    box.append(btn, hint);
+    return box;
+  };
   const run = () => {
     const q = input.value.trim();
     lastQuestion.set(s.id, q);
@@ -64,6 +102,7 @@ export function askView(s: WorldSession): View {
       return;
     }
     out.replaceChildren(
+      navigator.onLine ? sentence(q, hits.map((x) => x.element)) : '',
       h('p', { class: 'section-label' }, 'What your world says'),
       h(
         'div',
