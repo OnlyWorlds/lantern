@@ -29,6 +29,10 @@ export function takeShared(): boolean {
   return true;
 }
 
+export function peekShared(): string | null {
+  return pending;
+}
+
 export function hasShared(): boolean {
   return pending !== null;
 }

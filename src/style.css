@@ -944,3 +944,25 @@ h2 {
   color: var(--lan-bg);
   font: 700 12px/30px var(--lan-font-body);
 }
+
+/* ---------- an invite ---------- */
+
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--lan-surface);
+  border: 1px solid var(--lan-border);
+}
+
+/* Ask: the answer in a sentence, above the elements it came from. */
+.answer {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--lan-surface);
+  border-left: 3px solid var(--lan-accent);
+  font-size: 1.05rem;
+}

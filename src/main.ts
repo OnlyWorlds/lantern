@@ -17,7 +17,9 @@ import { outboxView } from './views/outbox';
 import { askView } from './views/ask';
 import { mapView } from './views/map';
 import { shareView } from './views/share';
-import { takeShared } from './share';
+import { consumeShared, peekShared, takeShared } from './share';
+import { joinCode } from './join';
+import { joinView } from './views/join';
 import { isType } from './schema';
 import { errorText } from './ui';
 
@@ -103,6 +105,10 @@ async function route(): Promise<void> {
     case 'share':
       mount(await shareView());
       return;
+    case 'join':
+      mount(await joinView(sharedJoin));
+      sharedJoin = null;
+      return;
     default:
       mount(notFound('That page is not in Lantern.'));
   }
@@ -110,7 +116,16 @@ async function route(): Promise<void> {
 
 window.addEventListener('hashchange', () => void route());
 // replaceState fires no hashchange: one route, so one catch screen takes the note.
-if (takeShared()) history.replaceState(null, '', '/#/share');
+// A shared invite link goes to the join screen instead of becoming a note.
+let sharedJoin: string | null = null;
+if (takeShared()) {
+  const code = joinCode(peekShared() ?? '');
+  if (code) {
+    sharedJoin = code;
+    consumeShared();
+  }
+  history.replaceState(null, '', code ? '/#/join' : '/#/share');
+}
 void route();
 
 // ---------- staying in step ----------
@@ -155,9 +170,11 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- the worker: the app opens without signal ----------
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// The worker itself, not the name: an in-app browser can have the name and no worker. And a
+// registration can come back empty where workers are blocked (Playwright's block does it).
+if (navigator.serviceWorker && import.meta.env.PROD) {
   void navigator.serviceWorker.register('/sw.js').then((reg) => {
-    reg.addEventListener('updatefound', () => {
+    reg?.addEventListener('updatefound', () => {
       const w = reg.installing;
       w?.addEventListener('statechange', () => {
         if (w.state === 'installed' && navigator.serviceWorker.controller) void checkForUpdate(onBehind);

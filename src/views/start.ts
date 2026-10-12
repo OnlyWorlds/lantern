@@ -16,6 +16,7 @@ import {
   type AccountWorld,
 } from '../account';
 import { setSessionPin, forgetSession } from '../world';
+import { pendingJoin } from '../join';
 import { uuid7 } from '../uuid7';
 import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
@@ -81,6 +82,7 @@ export function welcomeView(): HTMLElement {
         h('b', null, 'Start a world on this phone'),
         h('span', null, 'No account needed. Put it online whenever you like'),
       ),
+      h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'I have an invite link'),
       h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'I have a world key'),
     ),
   );
@@ -109,7 +111,7 @@ export function signInView(): HTMLElement {
     btn.disabled = true;
     try {
       await signInWithPassword(email.value, password.value);
-      go('#/worlds', true);
+      go((await pendingJoin()) ? '#/join' : '#/worlds', true);
     } catch (ex) {
       err.textContent = errorText(ex);
     } finally {
@@ -140,7 +142,7 @@ export function signInView(): HTMLElement {
     tokenErr.textContent = '';
     try {
       await signIn(token.value);
-      go('#/worlds', true);
+      go((await pendingJoin()) ? '#/join' : '#/worlds', true);
     } catch (ex) {
       tokenErr.textContent = errorText(ex);
     }
@@ -454,6 +456,7 @@ export function worldsView(): HTMLElement {
         ? h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'Open with a key')
         : h('a', { class: 'btn btn-quiet', href: '#/signin', style: 'align-self:center' }, 'Sign in to OnlyWorlds'),
     );
+    main.appendChild(h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'Join with an invite link'));
     if (!demos.length) {
       const b = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Explore Moppetopia');
       b.addEventListener('click', async () => {
