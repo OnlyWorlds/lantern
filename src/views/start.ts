@@ -55,7 +55,7 @@ export function welcomeView(): HTMLElement {
     h(
       'div',
       { class: 'welcome-mark' },
-      h('span', { style: 'color:var(--lan-accent)' }, icon('lantern', 56, 1.5)),
+      h('img', { src: '/ow-globe.png', width: '64', height: '64', alt: '' }),
       h('h1', null, 'Lantern'),
       h('p', null, 'Your worlds in your pocket. Works with Atlas and every OnlyWorlds tool.'),
     ),

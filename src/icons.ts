@@ -1,7 +1,7 @@
 // Our own icons (constant SVG, the one innerHTML in the app). currentColor throughout.
 const PATHS: Record<string, string> = {
-  lantern:
-    '<path d="M9 3h6"/><path d="M12 3v2"/><path d="M7 8h10l-1 11H8L7 8z"/><path d="M7 8c0-1.7 2.2-3 5-3s5 1.3 5 3"/><path d="M12 12v4"/>',
+  // A world, for the World tab: the tab lands on the world's own screen (Seethe h37 #3743).
+  world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 3.9 5.4 3.9 9s-1.3 6.6-3.9 9c-2.6-2.4-3.9-5.4-3.9-9s1.3-6.6 3.9-9z"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
@@ -16,7 +16,6 @@ const PATHS: Record<string, string> = {
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
-  home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
   pin: '<path d="M9 4h6l-1 6 3 3H7l3-3-1-6z"/><path d="M12 13v7"/>',
   // Seethe's two marks (h37 #3716, the Captain's yes #3717): a card handed out, a tray of notes to sort.
   reveal: '<rect x="3" y="5" width="10" height="13" rx="1.5"/><path d="M7 9.5h2.5M7 13h3.5"/><path d="M15 11h6M18 8l3 3-3 3"/>',

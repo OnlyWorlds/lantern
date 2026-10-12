@@ -64,7 +64,7 @@ export function tabbar(s: { id: string; canWrite: boolean }, on: 'world' | 'catc
     'nav',
     { class: 'tabbar', 'aria-label': 'World' },
     // On the world's own home, World goes up a level to Your worlds, and says so (the Captain, #3675).
-    on === 'world' ? tab('world', 'Worlds', '#/worlds', 'home') : tab('world', 'World', `#/w/${s.id}`, 'home'),
+    on === 'world' ? tab('world', 'Worlds', '#/worlds', 'world') : tab('world', 'World', `#/w/${s.id}`, 'world'),
     s.canWrite ? tab('catch', 'Catch', `#/w/${s.id}/capture`, 'unsorted') : null,
     tab('ask', 'Ask', `#/w/${s.id}/ask`, 'spark'),
   );

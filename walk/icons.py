@@ -29,6 +29,12 @@ for name, im in sets.items():
     im.save(f'{out}/{name}', optimize=True)
     print(name, im.size)
 
+# The first screen's mark: the globe alone, on no ground, at 3x its 64px place (Seethe h37 #3743:
+# the old lantern glyph read as a bin).
+mark = logo.resize((192, 192), Image.LANCZOS)
+mark.save(f'{out}/ow-globe.png', optimize=True)
+print('ow-globe.png', mark.size)
+
 # A preview: each icon, and the maskable one cut to a circle as Android may show it.
 m = sets['icon-512-maskable.png'].convert('RGBA')
 mask = Image.new('L', (512, 512), 0)
