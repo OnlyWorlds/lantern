@@ -327,9 +327,11 @@ export function elementView(s: WorldSession, id: string): View {
     }
     const pending = s.pending(id);
     const editable = s.canWrite;
+    // An element not yet made on keel is said once, at its name; per-field marks are for edits (S397).
+    const create = pending.get('*');
     const wait = (f: string) => {
-      const row = pending.get(f) ?? pending.get('*');
-      if (!row) return null;
+      const row = pending.get(f) ?? (f === 'name' ? create : undefined);
+      if (!row || (row === create && f !== 'name')) return null;
       const label = row.state === 'needs-you' || row.state === 'gone' ? 'needs you' : row.state === 'refused' ? 'not sent' : 'waiting to send';
       return h('span', { class: 'wait' }, label);
     };
