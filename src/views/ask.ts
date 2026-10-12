@@ -2,13 +2,13 @@
 // lookupWorld). It finds what exists and shows why; it never invents. When nothing matches,
 // "your world does not say" is the answer. For an account world, with signal, the same elements
 // can be put into a sentence by keel's proxy (#159), on a tap: the sources stay on screen.
-import { lookupWorld, type OwElement } from '@onlyworlds/sdk';
+import { buildAskContext, lookupWorld, type OwElement, type OwLookupHit } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { fieldLabel } from '../schema';
-import { elName, elRow, tabbar } from '../ui';
+import { elRow, tabbar } from '../ui';
 import { accountToken } from '../account';
-import { askInASentence, contextFor } from '../ask';
+import { askInASentence } from '../ask';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 
@@ -56,9 +56,10 @@ export function askView(s: WorldSession): View {
     signedIn = !!t;
     if (signedIn && accountWorld && input.value.trim()) run();
   });
-  const sentence = (q: string, els: OwElement[]): HTMLElement | '' => {
+  const sentence = (q: string, hits: OwLookupHit<OwElement>[]): HTMLElement | '' => {
     if (!signedIn || !accountWorld) return '';
-    const context = contextFor(els, (id) => (s.get(id) ? elName(s.get(id)) : undefined));
+    // The elements on screen, in their order (the SDK's buildAskContext, keel's limits).
+    const { context } = buildAskContext(hits, s.lookupIndex());
     // One box per world, question and the very text sent: a redraw while it asks, or after, shows
     // the same box (never a second spend); elements that changed make a new one.
     const key = `${s.id}|${q}|${context.join('|')}`;
@@ -68,7 +69,7 @@ export function askView(s: WorldSession): View {
     answered.set(key, box);
     const btn = h('button', { class: 'btn', type: 'button' }, icon('spark', 18), 'Answer it in a sentence');
     const n = context.length;
-    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends ${n === els.length ? 'these' : `the first`} ${n === 1 ? 'one' : n} to OnlyWorlds to be put into words. It answers from them only.`);
+    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends ${n === hits.length ? 'these' : `the first`} ${n === 1 ? 'one' : n} to OnlyWorlds to be put into words. It answers from them only.`);
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       hint.textContent = 'Asking…';
@@ -106,7 +107,7 @@ export function askView(s: WorldSession): View {
       return;
     }
     out.replaceChildren(
-      navigator.onLine ? sentence(q, hits.map((x) => x.element)) : '',
+      navigator.onLine ? sentence(q, hits) : '',
       h('p', { class: 'section-label' }, 'What your world says'),
       h(
         'div',

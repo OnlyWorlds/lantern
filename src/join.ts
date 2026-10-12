@@ -2,22 +2,19 @@
 // code after the #. Preview says who invites, to which world and as what (no account needed, the
 // code stays unused); joining needs this phone's account token and makes the membership, then the
 // world opens like any account world. A guest's Character comes back with the join.
+// The wire is the SDK's (4.12: previewJoin, acceptJoin, typed refusals).
+import { OwApiError, OwNetworkError, OwV2Client, type OwJoinPreview } from '@onlyworlds/sdk';
 import * as db from './db';
-import { accountToken, fetchAccountWorlds, openAccountWorld, type AccountWorld } from './account';
+import { DEMO_KEY, accountToken, fetchAccountWorlds, openAccountWorld, type AccountWorld } from './account';
 import { API_BASE } from './world';
+
+export type JoinPreview = OwJoinPreview;
+
+const DEAD = 'This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.';
 
 /** The code inside a pasted link, a shared message, or the bare code. */
 export function joinCode(input: string): string | null {
   return input.match(/ow_j_[A-Za-z0-9_-]+/)?.[0] ?? null;
-}
-
-export interface JoinPreview {
-  reader: 'person' | 'agent';
-  world: { name: string; description?: string | null };
-  invited_by: string | null;
-  owner_character: string | null;
-  role: 'co_builder' | 'contributor' | 'guest';
-  expires_at: string;
 }
 
 /** "as a player": the role in the words the rest of Lantern uses. */
@@ -25,35 +22,10 @@ export function roleWords(role: string): string {
   return role === 'guest' ? 'a player' : role === 'co_builder' ? 'a co-builder' : 'a contributor';
 }
 
-async function post(path: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {
-  try {
-    return await fetch(`${API_BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new Error('No connection. Joining needs signal.');
-  }
-}
-
-async function errorOf(res: Response): Promise<{ code?: string; message?: string }> {
-  const b = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-  return b?.error ?? {};
-}
-
-export async function previewJoin(code: string): Promise<JoinPreview> {
-  const res = await post('/join/preview', { code });
-  if (!res.ok) {
-    const e = await errorOf(res);
-    if (res.status === 404) {
-      // A dead link is let go, or every sign-in would come back to it.
-      if ((await pendingJoin()) === code) await setPendingJoin(undefined);
-      throw new Error('This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.');
-    }
-    throw new Error(e.message ?? 'The invite could not be read. Try again.');
-  }
-  return (await res.json()) as JoinPreview;
+function said(e: unknown, fallback: string): Error {
+  if (e instanceof OwNetworkError) return new Error('No connection. Joining needs signal.');
+  if (e instanceof OwApiError && e.message) return new Error(e.message);
+  return new Error(fallback);
 }
 
 /** The code waits here while the person signs in. */
@@ -65,34 +37,53 @@ export async function pendingJoin(): Promise<string | undefined> {
   return db.kvGet<string>('pendingJoin');
 }
 
+export async function previewJoin(code: string): Promise<JoinPreview> {
+  // previewJoin sends no credential whatever key the client holds; the client just needs one.
+  const c = new OwV2Client({ apiKey: (await accountToken()) ?? DEMO_KEY, baseUrl: API_BASE });
+  try {
+    return await c.previewJoin(code);
+  } catch (e) {
+    if (e instanceof OwApiError && e.isNotFound) {
+      // A dead link is let go, or every sign-in would come back to it.
+      if ((await pendingJoin()) === code) await setPendingJoin(undefined);
+      throw new Error(DEAD);
+    }
+    throw said(e, 'The invite could not be read. Try again.');
+  }
+}
+
 export type JoinResult = { worldId: string } | { already: true };
 
 /** Join with this phone's account, then open the world here. */
 export async function acceptJoin(code: string): Promise<JoinResult> {
   const token = await accountToken();
   if (!token) throw new Error('Sign in first.');
-  const res = await post('/account/join', { code }, { Authorization: `Bearer ${token}` });
-  if (res.status === 409) {
-    const e = await errorOf(res);
-    if (e.code === 'already_member') {
+  let m;
+  try {
+    m = await new OwV2Client({ apiKey: token, baseUrl: API_BASE }).acceptJoin(code);
+  } catch (e) {
+    if (e instanceof OwApiError && e.isAlreadyMember) {
       await setPendingJoin(undefined);
       await fetchAccountWorlds(token).catch(() => undefined);
       return { already: true };
     }
-    if (e.code === 'pin_required') {
+    if (e instanceof OwApiError && e.isPinRequired) {
       throw new Error('Set a PIN for your account on onlyworlds.com first. The link stays unused, so come back and join after.');
     }
-    throw new Error(e.message ?? 'Joining did not work. Try again.');
+    if (e instanceof OwApiError && e.isNotFound) {
+      await setPendingJoin(undefined);
+      throw new Error(DEAD);
+    }
+    throw said(e, 'Joining did not work. Try again.');
   }
-  if (res.status === 404) {
-    await setPendingJoin(undefined);
-    throw new Error('This invite link does not work: it was used, it expired, or it was taken back. Ask for a new one.');
-  }
-  if (!res.ok) throw new Error((await errorOf(res)).message ?? 'Joining did not work. Try again.');
-  const m = (await res.json()) as { world_id: string; world_name?: string; role?: AccountWorld['member_role']; roster_character?: string | null };
   await setPendingJoin(undefined);
   const worlds = await fetchAccountWorlds(token).catch(() => [] as AccountWorld[]);
-  const w = worlds.find((x) => x.id === m.world_id) ?? { id: m.world_id, name: m.world_name ?? 'A world', role: 'collaborator', member_role: m.role };
+  const w: AccountWorld = worlds.find((x) => x.id === m.world_id) ?? {
+    id: m.world_id,
+    name: m.world_name || 'A world',
+    role: 'collaborator',
+    member_role: m.role as AccountWorld['member_role'],
+  };
   let rec: db.WorldRecord;
   try {
     rec = await openAccountWorld(w);

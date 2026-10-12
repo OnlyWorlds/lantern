@@ -1,35 +1,11 @@
-// Ask in a sentence (Keel #159): what is sent (the lookup's elements as text, within keel's
-// limits) and how each of keel's answers is said.
+// Ask in a sentence (Keel #159): how each of keel's answers is said. What is sent is the SDK's
+// buildAskContext (Kael's tests hold its limits); the walk checks it reaches the proxy.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { OwElement } from '@onlyworlds/sdk';
 
 const db = await import('../src/db');
-const { askInASentence, contextFor, elementText } = await import('../src/ask');
+const { askInASentence } = await import('../src/ask');
 
-const el = (o: Partial<OwElement> & { id: string; type: string }) => o as OwElement;
-const names: Record<string, string> = { l1: 'Balkonon', c2: 'Ada' };
-const nameOf = (id: string) => names[id];
-
-describe('what is sent', () => {
-  it('an element as text: name and type, kind, description, filled fields, links by name', () => {
-    const t = elementText(
-      el({ id: 'c1', type: 'character', name: 'Mira Thel', supertype: 'Knight', description: 'Holds the fort.', location: 'l1', friends: ['c2', 'gone'] }),
-      nameOf,
-    );
-    expect(t.split('\n')).toEqual(['Mira Thel (character)', 'kind: Knight', 'description: Holds the fort.', 'location: Balkonon', 'friends: Ada']);
-  });
-
-  it("keel's limits: at most 8 elements, 2,000 characters each, 12,000 in all", () => {
-    const long = el({ id: 'x', type: 'narrative', name: 'Long', description: 'w'.repeat(5000) });
-    expect([...elementText(long, nameOf)].length).toBe(2000);
-    const many = Array.from({ length: 12 }, (_, i) => el({ id: `n${i}`, type: 'narrative', name: `N${i}`, description: 'w'.repeat(1900) }));
-    const ctx = contextFor(many, nameOf);
-    expect(ctx.length).toBeLessThanOrEqual(8);
-    expect(ctx.join('').length).toBeLessThanOrEqual(12000);
-    expect(ctx.length).toBe(6);
-  });
-});
 
 describe("keel's answers", () => {
   let reply: () => Response;

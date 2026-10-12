@@ -81,7 +81,7 @@ async function walk(engine, deviceName, tag) {
   check(tag, /49 left today/.test(await page.locator('[data-sentence]').innerText()), 'it says how many are left today');
   const sentBody = asked[0];
   check(tag, sentBody?.world_id === worldId && sentBody?.question === Q && sentBody.context.length >= 1 && sentBody.context.length <= 8, `the proxy got the world, the question and ${sentBody?.context.length} elements`);
-  check(tag, sentBody.context.some((c) => c.startsWith('Admiral Fluffington (character)')), 'the elements go as text, name and type first');
+  check(tag, sentBody.context.some((c) => c.startsWith('Admiral Fluffington (character')), 'the elements go as text, name and type first');
   const above = await page.evaluate(() => {
     const a = document.querySelector('[data-answer="sentence"]');
     const list = document.querySelector('[data-screen="ask"] .results');
