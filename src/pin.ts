@@ -2,7 +2,9 @@
 // h37 #3674), so every world from your account shares one slot here; a world opened with someone
 // else's key keeps its own. Kept on this phone for good (the Captain, #3675: "the most permanent
 // storage that is still safe"): it sits beside the account token and the world keys, and anyone
-// who can read this phone's storage can read those too, so keeping it adds no new exposure. It is
+// who can read this phone's storage can read those too, so keeping it adds no new exposure. That
+// holds while the CSP's script-src stays 'self': an injected script could read the token, the keys
+// and the PIN together, so loosening scripts is the moment to weigh this again (Boss #3741). It is
 // cleared on a wrong try (keel refused it), on sign-out (the account's), and when a world leaves
 // the phone (that world's own).
 export type PinOwner = { id: string; role?: string };
