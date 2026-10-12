@@ -206,6 +206,16 @@ async function walk(engine, tag) {
   await page.waitForSelector('[data-screen="home"] .type-tile', { timeout: 60000 });
   await page.waitForFunction(() => !document.querySelector('.banner'), null, { timeout: 60000 }).catch(() => {});
   await measure('demo-home');
+  // A type's name cut to an ellipsis is neither a wrap nor a spill, so the measure above cannot
+  // see it (S399: at 360, six of the 22 were cut). Every type shown, at four phone widths.
+  await page.getByRole('button', { name: /All 22 types/ }).click();
+  for (const w of [320, 360, 390, 412]) {
+    await page.setViewportSize({ width: w, height: 780 });
+    await page.waitForTimeout(80);
+    const cut = await page.evaluate(() => [...document.querySelectorAll('.type-tile b')].filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent));
+    check(tag, cut.length === 0, `every type's name whole on its tile at ${w} wide${cut.length ? `: cut ${cut.join(', ')}` : ''}`);
+  }
+  await page.setViewportSize({ width: 360, height: 780 });
   for (const t of ['map', 'character', 'location']) {
     await page.goto(page.url().replace(/#\/w\/([^/]+).*/, `#/w/$1/t/${t}`));
     await page.waitForSelector('[data-screen="type"] .el-row', { timeout: 15000 }).catch(() => {});

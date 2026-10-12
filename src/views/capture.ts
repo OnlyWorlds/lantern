@@ -3,6 +3,7 @@
 // into elements (Skeld's convention, #3409). "What is it?" makes it an element of a type at once
 // instead: the first line its name, the rest its description (the Captain's walk, 2026-10-12).
 import { h } from '../dom';
+import { icon, typeIcon } from '../icons';
 import { errorText, go, tabbar, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
@@ -98,6 +99,8 @@ export function captureView(s: WorldSession, fromShare = false): View {
           style: k === UNSORTED ? null : `--type:${typeColor(k)}`,
           'data-kind': k,
         },
+        // Each kind wears its mark (Seethe h37 #3743): a type's own glyph, Unsorted the Catch tab's tray.
+        k === UNSORTED ? icon('unsorted', 16, 2) : typeIcon(k, 16),
         k === UNSORTED ? UNSORTED : typeLabel(k),
       );
       b.addEventListener('click', () => {

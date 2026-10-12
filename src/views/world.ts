@@ -1,7 +1,7 @@
 // Inside a world: its home (find, the types), a type's list, an element's page.
 import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
-import { icon } from '../icons';
+import { icon, typeIcon } from '../icons';
 import { search } from '../search';
 import { API_BASE, type WorldSession } from '../world';
 import { setPin } from '../pin';
@@ -185,8 +185,9 @@ export function homeView(s: WorldSession): View {
       h(
         'a',
         { class: 'type-tile', href: `#/w/${s.id}/t/${t}`, style: `--type:${typeColor(t)}` },
+        // The name keeps the tile's whole width; the type's mark sits with the count under it.
         h('b', null, typePlural(t)),
-        h('span', null, (counts.get(t) ?? 0).toLocaleString('en')),
+        h('span', { class: 'tile-count' }, typeIcon(t, 16), (counts.get(t) ?? 0).toLocaleString('en')),
       ),
     );
     const more =

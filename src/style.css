@@ -518,8 +518,9 @@ h2 {
   gap: 8px;
 }
 
-/* Below 360 three tiles clip "Characters" by a few pixels (walk/fit.mjs at 320): two across. */
-@media (max-width: 359px) {
+/* Three across fits every type's name only from 412 wide: at 360 six were cut to an ellipsis
+   ("Characters" 78px in 73), at 390 "Institutions" by 2px (S399, walk/fit.mjs measures it). Two across below. */
+@media (max-width: 411px) {
   .type-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -537,6 +538,18 @@ h2 {
   color: var(--lan-ink);
   text-decoration: none;
   min-width: 0;
+}
+
+/* A type's mark beside its count, in the family hue made readable (the S397 chip mix). */
+.tile-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.type-icon {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--type, var(--lan-ink-dim)) 70%, var(--lan-ink));
 }
 
 .type-tile b {
@@ -616,9 +629,16 @@ h2 {
   box-shadow: 0 4px 18px var(--lan-accent-glow);
 }
 
-/* While the keyboard is up the bar would ride on it: typing hides it. */
+/* While the keyboard is up the bar would ride on it: typing hides it. It comes back a moment after
+   the field lets go, never at once: the tap that took the focus away was aimed at what lay under the
+   bar (Catch's save button, S399: the bar returned under the finger and the tap hit Catch). Hidden,
+   it takes no taps. */
+.tabbar {
+  transition: visibility 0s linear 350ms;
+}
 body:has(main textarea:focus, main input:focus) .tabbar {
-  display: none;
+  visibility: hidden;
+  transition-delay: 0s;
 }
 
 /* ---------- element page ---------- */
@@ -913,6 +933,9 @@ select.input {
 
 /* "What is it?" on the catch screen: one choice, the type's own colour once chosen. */
 .kind-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 40px;
   padding: 6px 14px;
   border-radius: 20px;

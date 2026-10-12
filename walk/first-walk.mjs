@@ -149,7 +149,7 @@ async function walk(engine, tag) {
   await page.locator('[data-screen="ask"] input').focus();
   check(tag, !(await page.locator('.tabbar').isVisible()), 'typing hides the tab bar');
   await page.locator('[data-screen="ask"] input').blur();
-  check(tag, await page.locator('.tabbar').isVisible(), 'and it comes back');
+  check(tag, await page.locator('.tabbar').waitFor({ state: 'visible', timeout: 2000 }).then(() => true, () => false), 'and it comes back, a moment after');
   const worldId = page.url().match(/#\/w\/([^/?]+)/)[1];
 
   // 6. Pin a world (#3660): it leads the list under Pinned, through a reload, until unpinned.

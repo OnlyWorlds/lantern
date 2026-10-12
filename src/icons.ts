@@ -1,3 +1,5 @@
+import { TYPE_ICON_PATHS } from './type-icons';
+
 // Our own icons (constant SVG, the one innerHTML in the app). currentColor throughout.
 const PATHS: Record<string, string> = {
   // A world, for the World tab: the tab lands on the world's own screen (Seethe h37 #3743).
@@ -23,6 +25,24 @@ const PATHS: Record<string, string> = {
   install: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
+
+/** An element type's own mark (the SDK's ELEMENT_ICONS glyph, src/type-icons.ts): a filled shape, its path set as an attribute. */
+export function typeIcon(type: string, size = 18): SVGSVGElement | null {
+  const d = TYPE_ICON_PATHS[type];
+  if (!d) return null;
+  const ns = 'http://www.w3.org/2000/svg';
+  const wrap = document.createElementNS(ns, 'svg');
+  wrap.setAttribute('width', String(size));
+  wrap.setAttribute('height', String(size));
+  wrap.setAttribute('viewBox', '0 -960 960 960');
+  wrap.setAttribute('fill', 'currentColor');
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.setAttribute('class', 'type-icon');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', d);
+  wrap.appendChild(path);
+  return wrap;
+}
 
 export function icon(name: keyof typeof PATHS | string, size = 22, stroke = 1.8): SVGSVGElement {
   const wrap = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
