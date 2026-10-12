@@ -60,7 +60,7 @@ His next walk and the player round: `Forge/Notes/2026-10-12-lantern-smoke-2.md`.
 
 ## Known gaps (said, not hidden)
 
-- `walk/walk.mjs`, `join.mjs` and `map.mjs` on Playwright's WebKit time out about one run in four at a step waiting on the live demo (S399: 1 of 3 at HEAD before the session's changes, 1 of 5 after, at three different steps); `first-walk.mjs` timed out twice at its second Catch tap in the first runs after a fresh build and preview, then passed 7 runs (S399, the globe change; HEAD 3 of 3). A rerun alone passes; the verdict is the exit code of a clean run.
+- `walk/walk.mjs`, `join.mjs` and `map.mjs` on Playwright's WebKit time out about one run in four at a step waiting on the live demo (S399: 1 of 3 at HEAD before the session's changes, 1 of 5 after, at three different steps); `first-walk.mjs` timed out twice at its second Catch tap in the first runs after a fresh build and preview, then passed 7 runs (S399, the globe change; HEAD 3 of 3). A rerun alone passes; the verdict is the exit code of a clean run. S400, on a quiet machine: `walk.mjs` on WebKit passed 6 of 6 in a row (30 to 36 s each, `Forge/Notes/ui-snapshots/s400/flake/`); the S399 reds came on an afternoon short of memory, so load is the lead, not the code.
 
 - No real phone has run it: WebKit here is Playwright's on Windows. `preparePhoto` on a real iPhone, the home-screen app's separate storage, `persist()` on iOS: the Captain's morning walk.
 - Two tabs on one world can both send a row (the loser restores a settled row). One tab is the phone's case.
