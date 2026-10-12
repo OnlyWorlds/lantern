@@ -18,6 +18,9 @@ const PATHS: Record<string, string> = {
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
   home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
   pin: '<path d="M9 4h6l-1 6 3 3H7l3-3-1-6z"/><path d="M12 13v7"/>',
+  // Seethe's two marks (h37 #3716, the Captain's yes #3717): a card handed out, a tray of notes to sort.
+  reveal: '<rect x="3" y="5" width="10" height="13" rx="1.5"/><path d="M7 9.5h2.5M7 13h3.5"/><path d="M15 11h6M18 8l3 3-3 3"/>',
+  unsorted: '<path d="M4 13l2.5-8h11L20 13"/><path d="M4 13v5h16v-5"/><path d="M4 13h4l1.5 2.5h5L16 13h4"/>',
   install: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };

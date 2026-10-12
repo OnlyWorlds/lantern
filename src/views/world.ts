@@ -563,7 +563,7 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     el.type === 'map' ? 'Open the map' : places.length > 1 ? `On ${elName(s.get(p.map))}` : 'Show on map';
   const acts: (HTMLElement | null)[] = places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p)));
   if (s.canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
-    const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('spark', 16), 'Give it to the party');
+    const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('reveal', 16), 'Give it to the party');
     b.addEventListener('click', () => giveToParty(s, el));
     acts.push(b);
   }
