@@ -90,3 +90,56 @@ export function maxZoomFor(pictureWidth: number, mapWidth: number, dpr: number, 
 
 /** Clustering pays from about a thousand pins on one map (plain wins at 839, clusters by 1,678). */
 export const CLUSTER_ABOVE = 1000;
+
+/** Names are drawn beside pins only while this few named pins are in view: more would be a wall of text. */
+export const LABELS_AT_MOST = 30;
+
+/** The pins whose names are drawn: the named ones in view, or none when there are too many to read. */
+export function pinsToLabel<T>(inView: T[], nameOf: (p: T) => string | null): { pin: T; name: string }[] {
+  const named: { pin: T; name: string }[] = [];
+  for (const pin of inView) {
+    const name = nameOf(pin);
+    if (name) named.push({ pin, name });
+  }
+  return named.length <= LABELS_AT_MOST ? named : [];
+}
+
+export interface LabelSpot<T> {
+  pin: T;
+  name: string;
+  /** The pin's place on screen, in px. */
+  x: number;
+  y: number;
+  /** How far the pin's drawing reaches from its centre: 7 for a dot, 15 for the shown pin's ring. */
+  reach?: number;
+}
+
+export type PlacedLabel<T> = LabelSpot<T> & { side: 'right' | 'left'; gap: number };
+
+/**
+ * Where names go without covering each other or another pin: to the right of the dot, or to its
+ * left near the screen's right edge; a name that fits on neither side is left out (a tap names it).
+ * First come, first placed: put the shown pin first. `widthOf` is the name's real width in px
+ * (the screen measures it in the label's own font: an estimate per character missed capitals and
+ * CJK, the S396 gate); `height` is the label's line box.
+ */
+export function placeLabels<T>(spots: LabelSpot<T>[], screenWidth: number, widthOf: (name: string) => number, height = 16): PlacedLabel<T>[] {
+  type Box = [number, number, number, number];
+  const hit = (a: Box, b: Box) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const taken: Box[] = [];
+  const reach = (s: LabelSpot<T>) => s.reach ?? 7;
+  const dots: Box[] = spots.map((s) => [s.x - reach(s), s.y - reach(s), s.x + reach(s), s.y + reach(s)]);
+  const out: PlacedLabel<T>[] = [];
+  spots.forEach((s, i) => {
+    const w = widthOf(s.name);
+    const gap = reach(s) + 2;
+    const right: Box = [s.x + gap, s.y - height / 2, s.x + gap + w, s.y + height / 2];
+    const left: Box = [s.x - gap - w, s.y - height / 2, s.x - gap, s.y + height / 2];
+    const free = (b: Box) => b[0] >= 0 && b[2] <= screenWidth && !taken.some((t) => hit(t, b)) && !dots.some((d, j) => j !== i && hit(d, b));
+    const side = free(right) ? 'right' : free(left) ? 'left' : null;
+    if (!side) return;
+    taken.push(side === 'right' ? right : left);
+    out.push({ ...s, side, gap });
+  });
+  return out;
+}

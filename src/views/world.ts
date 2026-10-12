@@ -17,6 +17,8 @@ import {
 import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
 import { editField, newElementSheet } from './edit';
 import { placesOf, type Place } from '../maps';
+import { canGive } from '../party';
+import { giveToParty } from './party';
 
 export interface View {
   el: HTMLElement;
@@ -427,7 +429,7 @@ export function elementView(s: WorldSession, id: string): View {
           )
         : '',
       h('div', { class: 'el-head' }, avatar, headText),
-      mapLinks(s, el),
+      actionRow(s, el),
       picture(el),
       descNode ?? '',
       h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? ''),
@@ -475,17 +477,22 @@ export function mapHref(worldId: string, p: Place): string {
   return `#/w/${worldId}/map/${p.map}${q}`;
 }
 
-/** "Show on map": one button per map this element is on (only maps with a picture online). */
-function mapLinks(s: WorldSession, el: OwElement): HTMLElement | '' {
+/**
+ * The element's actions, one row: "Show on map", one per map it is on (only maps with a picture
+ * online), and "Give it to the party", a game master's tap on a thing the party found (not on a
+ * phone-only world: it has no players).
+ */
+function actionRow(s: WorldSession, el: OwElement): HTMLElement | '' {
   const places = placesOf(s, el);
-  if (!places.length) return '';
   const label = (p: Place) =>
     el.type === 'map' ? 'Open the map' : places.length > 1 ? `On ${elName(s.get(p.map))}` : 'Show on map';
-  return h(
-    'div',
-    { class: 'chips map-links' },
-    ...places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p))),
-  );
+  const acts: HTMLElement[] = places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p)));
+  if (s.canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
+    const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('spark', 16), 'Give it to the party');
+    b.addEventListener('click', () => giveToParty(s, el));
+    acts.push(b);
+  }
+  return acts.length ? h('div', { class: 'chips map-links' }, ...acts) : '';
 }
 
 /** An element's picture, large: a photographed page has to be readable. Tap opens it whole. */

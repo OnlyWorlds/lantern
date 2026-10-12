@@ -82,6 +82,23 @@ async function walk(engine, deviceName, tag) {
   });
   // Near an edge the bounds hold the view, so "centred" allows that slack.
   check(tag, Math.abs(centred.dx) < 140 && Math.abs(centred.dy) < 260, `the pin sits near the centre (${centred.dx}, ${centred.dy})`);
+  const labels = await page.locator('.map-label').allInnerTexts();
+  check(tag, labels.length > 0 && labels.length <= 30 && labels.includes(placedEl.name), `names beside the pins in view (${labels.length}), this one's among them: ${JSON.stringify(labels.slice(0, 6))}`);
+  // The rendered ink, not the model: the names' real boxes against each other and every drawn pin.
+  const clash = await page.evaluate(() => {
+    const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const names = [...document.querySelectorAll('.map-label')].map((e) => ({ t: e.textContent, r: e.getBoundingClientRect() }));
+    // Pins are circle paths (an arc in d); the shown pin's ring is one too.
+    const dots = [...document.querySelectorAll('.leaflet-overlay-pane path')].filter((p) => /a\d/.test(p.getAttribute('d') ?? '')).map((p) => p.getBoundingClientRect());
+    const out = [];
+    names.forEach((a, i) => {
+      names.forEach((b, j) => j > i && hit(a.r, b.r) && out.push(`${a.t} / ${b.t}`));
+      // Its own pin sits beside it: a name touching only the dots at its own row's edge is its own.
+      dots.forEach((d) => hit(a.r, d) && out.push(`${a.t} on a pin at ${Math.round(d.left)},${Math.round(d.top)}`));
+    });
+    return out;
+  });
+  check(tag, clash.length === 0, `no name covers another name or a pin, as drawn${clash.length ? ': ' + clash.join('; ') : ''}`);
   await shot('map-focus');
 
   // 3. A tap on empty water closes the card; a tap on another pin opens its own
@@ -172,6 +189,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('.marker-cluster', { timeout: 20000 });
   const clusters = await page.locator('.marker-cluster').count();
   check(tag, clusters > 0 && clusters < 300, `1,200 pins draw as ${clusters} clusters`);
+  check(tag, (await page.locator('.map-label').count()) === 0, 'too many named pins in view to read: no names drawn');
   await shot('map-clusters');
   const z0 = await page.evaluate(() => document.querySelector('.leaflet-image-layer').getBoundingClientRect().width);
   // The cluster nearest the middle (one at an edge can sit under the bar or the zoom buttons).

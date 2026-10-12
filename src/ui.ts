@@ -62,8 +62,12 @@ export function toast(text: string): void {
   toastTimer = window.setTimeout(() => t.remove(), 2600);
 }
 
-/** A bottom sheet. Returns a close function; closes on the backdrop and on navigation. */
+/**
+ * A bottom sheet. Returns a close function; closes on the backdrop and on navigation. One at a
+ * time: a second tap on what opened it opens nothing (stacked sheets wrote twice, the S396 gate).
+ */
 export function sheet(build: (close: () => void) => Node[], label: string): () => void {
+  if (document.querySelector('.backdrop')) return () => undefined;
   const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label });
   const back = h('div', { class: 'backdrop' }, panel);
   const close = () => {

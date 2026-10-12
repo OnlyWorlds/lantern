@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OwElement } from '@onlyworlds/sdk';
-import { mapPicture, maxZoomFor, placesOf, zoneColor, zonePoints, zoneShape } from '../src/maps';
+import { LABELS_AT_MOST, mapPicture, maxZoomFor, pinsToLabel, placeLabels, placesOf, zoneColor, zonePoints, zoneShape } from '../src/maps';
 
 const el = (o: Partial<OwElement> & { id: string; type: string }): OwElement => o as OwElement;
 
@@ -120,5 +120,73 @@ describe('the zoom ceiling', () => {
 
   it('a sharper picture on a plainer screen goes further', () => {
     expect(maxZoomFor(3840, 1920, 1, -2.25)).toBeCloseTo(1.5);
+  });
+});
+
+describe('names beside pins', () => {
+  it('names only the named, and none when too many are in view to read', () => {
+    const name = (p: string) => (p.startsWith('n') ? p : null);
+    expect(pinsToLabel(['n1', 'x', 'n2'], name).map((l) => l.name)).toEqual(['n1', 'n2']);
+    const many = Array.from({ length: LABELS_AT_MOST + 1 }, (_, i) => `n${i}`);
+    expect(pinsToLabel(many, name)).toEqual([]);
+    expect(pinsToLabel([...many.slice(1), 'x', 'y'], name)).toHaveLength(LABELS_AT_MOST);
+  });
+
+  const spot = (name: string, x: number, y: number) => ({ pin: name, name, x, y });
+  const W = (name: string) => [...name].length * 7;
+
+  it('measures each name with the width it is given: a wide script needs the room it really takes', () => {
+    // 5 characters at 7 px fit before the next pin; the same 5 at 13 px (CJK) do not, on either side.
+    const near = (w: (n: string) => number) => placeLabels([spot('東京大聖堂', 100, 100), spot('B', 160, 100), spot('C', 40, 100)], 400, w);
+    expect(near(W).map((o) => o.name)).toContain('東京大聖堂');
+    expect(near((n) => [...n].length * 13).map((o) => o.name)).not.toContain('東京大聖堂');
+  });
+
+  it("the shown pin's ring keeps its name and others' further off", () => {
+    const [shown] = placeLabels([{ ...spot('Puddleton', 100, 100), reach: 15 }], 400, W);
+    expect(shown.gap).toBe(17);
+    // A name ending 15 px from the shown pin's centre would sit on its ring (not on a plain dot): it goes the other way.
+    const other = placeLabels([{ ...spot('X', 100, 100), reach: 15 }, spot('Drip', 50, 104)], 400, W).find((o) => o.name === 'Drip');
+    expect(other?.side).toBe('left');
+  });
+
+  it('to the right of the dot, apart from each other', () => {
+    const out = placeLabels([spot('Drip Plaza', 100, 100), spot('Naval Academy', 100, 300)], 400, W);
+    expect(out.map((o) => [o.name, o.side])).toEqual([
+      ['Drip Plaza', 'right'],
+      ['Naval Academy', 'right'],
+    ]);
+  });
+
+  it('a dot where the name would go sends it left; boxed in on both sides, the later name is left out', () => {
+    const dodge = placeLabels([spot('Puddleton', 200, 100), spot('X', 230, 100)], 400, W);
+    expect(dodge[0]).toMatchObject({ name: 'Puddleton', side: 'left' });
+    const boxed = placeLabels([spot('Puddleton', 200, 100), spot('A', 170, 100), spot('B', 230, 100)], 400, W);
+    expect(boxed.map((o) => o.name)).not.toContain('Puddleton');
+  });
+
+  it('on a crowded screen, no name covers another name or another pin', () => {
+    let seed = 11;
+    const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const spots = Array.from({ length: 30 }, (_, i) => spot(`Place ${'x'.repeat(i % 9)}${i}`, Math.round(rnd() * 390), Math.round(rnd() * 400)));
+    const out = placeLabels(spots, 390, W);
+    expect(out.length).toBeGreaterThan(5);
+    // The model's own boxes: this checks the placement keeps its promise; the rendered text is the walk's (walk/map.mjs).
+    const box = (o: (typeof out)[number]) => {
+      const w = W(o.name);
+      return o.side === 'right' ? [o.x + o.gap, o.y - 8, o.x + o.gap + w, o.y + 8] : [o.x - o.gap - w, o.y - 8, o.x - o.gap, o.y + 8];
+    };
+    const hit = (a: number[], b: number[]) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    for (const a of out) {
+      const ba = box(a);
+      expect(ba[0] >= 0 && ba[2] <= 390).toBe(true);
+      for (const b of out) if (a !== b) expect(hit(ba, box(b))).toBe(false);
+      for (const s of spots) if (s.pin !== a.pin) expect(hit(ba, [s.x - 7, s.y - 7, s.x + 7, s.y + 7])).toBe(false);
+    }
+  });
+
+  it('near the right edge the name goes left; with room on neither side, none', () => {
+    expect(placeLabels([spot('Museum of Moistened History', 380, 50)], 400, W)[0].side).toBe('left');
+    expect(placeLabels([spot('Museum of Moistened History', 100, 50)], 200, W)).toEqual([]);
   });
 });

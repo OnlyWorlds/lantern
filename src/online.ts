@@ -7,6 +7,7 @@ import * as db from './db';
 import { accountToken } from './account';
 import { API_BASE, openWorld, setSessionPin, forgetSession } from './world';
 import { uuid7 } from './uuid7';
+import { moveDraft } from './draft';
 
 export const BULK_MAX = 1000;
 const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by'];
@@ -100,6 +101,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   // 5. Only now: the phone-only copy goes.
   forgetSession(localId);
   await db.removeWorld(localId);
+  moveDraft(localId, online.id);
   return online.id;
 }
 

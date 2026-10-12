@@ -6,7 +6,7 @@ import type * as Leaflet from 'leaflet';
 import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
-import { CLUSTER_ABOVE, mapPicture, maxZoomFor, zoneColor, zonePoints, zoneShape, type Place } from '../maps';
+import { CLUSTER_ABOVE, mapPicture, maxZoomFor, pinsToLabel, placeLabels, zoneColor, zonePoints, zoneShape, type Place } from '../maps';
 import { typeColor, typeLabel } from '../schema';
 import { elName, typeChip } from '../ui';
 import type { WorldSession } from '../world';
@@ -52,6 +52,30 @@ function pinName(s: WorldSession, pin: OwElement): string {
   return placed ? elName(placed) : 'Unnamed pin';
 }
 
+/** A pin name's line box, in px (`.map-label` sets the same line-height). */
+const LABEL_LINE = 16;
+let measurer: CanvasRenderingContext2D | null = null;
+
+/** A name's width as the label draws it: measured in its own font, so capitals and CJK are not guessed. */
+function labelWidth(name: string): number {
+  if (!measurer) {
+    measurer = document.createElement('canvas').getContext('2d');
+    const root = getComputedStyle(document.documentElement);
+    const px = parseFloat(root.fontSize) * 0.72;
+    if (measurer) measurer.font = `700 ${px}px ${root.getPropertyValue('--lan-font-body') || 'sans-serif'}`;
+  }
+  // A little over, for the halo and a font still loading.
+  return Math.ceil((measurer?.measureText(name).width ?? [...name].length * 13) * 1.04) + 2;
+}
+
+/** The name drawn beside a pin: its own, or what it places; none for an unnamed pin. Read as it is now. */
+function pinLabel(s: WorldSession, drawn: OwElement): string | null {
+  const pin = s.get(drawn.id) ?? drawn;
+  if (pin.name?.trim()) return pin.name.trim();
+  const placed = typeof pin.element_id === 'string' ? s.get(pin.element_id) : undefined;
+  return placed?.name?.trim() || null;
+}
+
 function pinType(s: WorldSession, pin: OwElement): string {
   const placed = typeof pin.element_id === 'string' ? s.get(pin.element_id) : undefined;
   return placed?.type ?? (typeof pin.element_type === 'string' ? pin.element_type : 'pin');
@@ -90,6 +114,33 @@ export function mapView(s: WorldSession, place: Place): View {
   let destroyed = false;
   let pins: OwElement[] = [];
   let L: L | null = null;
+  let labels: Leaflet.LayerGroup | null = null;
+
+  /** Names beside the pins in view, when few enough are there to read; redrawn as the map moves. */
+  const drawLabels = () => {
+    labels?.remove();
+    labels = null;
+    // Clustered, most dots are hidden in bubbles: a name would float beside nothing.
+    if (!map || !L || pins.length > CLUSTER_ABOVE) return;
+    const view = map.getBounds().pad(0.1);
+    const inView = pins.filter((p) => view.contains([p.y as number, p.x as number]));
+    const named = pinsToLabel(inView, (p) => pinLabel(s, p));
+    if (!named.length) return;
+    // The shown pin's name first, so it is never the one left out; its ring reaches further.
+    const at = (p: OwElement) => map!.latLngToContainerPoint([p.y as number, p.x as number]);
+    const spots = named
+      .sort((a, b) => Number(b.pin.id === place.pin) - Number(a.pin.id === place.pin))
+      .map(({ pin, name }) => ({ pin, name, x: at(pin).x, y: at(pin).y, reach: pin.id === place.pin ? 15 : 7 }));
+    const g = L.layerGroup();
+    for (const { pin, name, side, gap } of placeLabels(spots, map.getSize().x, labelWidth, LABEL_LINE)) {
+      // The name as text, never as markup: a pin's name is the world's words.
+      const span = h('span', { class: 'map-label', style: side === 'right' ? `left:${gap}px` : `right:${gap}px` }, name);
+      const icon = L.divIcon({ className: 'map-label-anchor', html: span, iconSize: [0, 0] });
+      g.addLayer(L.marker([pin.y as number, pin.x as number], { icon, interactive: false, keyboard: false }));
+    }
+    g.addTo(map);
+    labels = g;
+  };
 
   const showCard = (drawn: OwElement | null) => {
     // The pin as it is now: a pull may have renamed it since it was drawn.
@@ -119,7 +170,8 @@ export function mapView(s: WorldSession, place: Place): View {
     const key = [
       ...p.map((e) => {
         const placed = typeof e.element_id === 'string' ? s.get(e.element_id) : undefined;
-        return `${e.id},${e.x},${e.y},${e.element_id ?? ''},${e.element_type ?? ''},${placed?.type ?? ''}`;
+        // The names too: a rename redraws the names beside the pins (the S396 gate).
+        return `${e.id},${e.x},${e.y},${e.element_id ?? ''},${e.element_type ?? ''},${placed?.type ?? ''},${e.name ?? ''},${placed?.name ?? ''}`;
       }),
       ...m.map((e) => `${e.id},${e.x},${e.y},${e.zone ?? ''},${e.order ?? ''},${e.created_at ?? ''}`),
       ...zoneIds.map((z) => {
@@ -231,6 +283,7 @@ export function mapView(s: WorldSession, place: Place): View {
     }
     g.addTo(map);
     layers = g;
+    drawLabels();
     return { focus, focusZone };
   };
 
@@ -267,6 +320,9 @@ export function mapView(s: WorldSession, place: Place): View {
         note.hidden = false;
       });
       map.fitBounds(bounds);
+      // Before the first draw and its setView: a jump of more than four zoom steps is not
+      // animated, and fires moveend at once (the S396 gate).
+      map.on('moveend', drawLabels);
       const shown = await draw();
       if (destroyed || !map) return;
       if (shown?.focus && typeof shown.focus.x === 'number' && typeof shown.focus.y === 'number') {

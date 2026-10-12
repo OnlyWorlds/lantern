@@ -8,6 +8,7 @@ import { errorText, go, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 import { consumeShared } from '../share';
+import { readDraft, writeDraft } from '../draft';
 
 export const UNSORTED = 'Unsorted';
 
@@ -30,9 +31,28 @@ export function captureView(s: WorldSession, fromShare = false): View {
     placeholder: 'An idea, a name, what just happened at the table…',
     style: 'min-height:200px',
   });
-  // Shared from another app: the note is here already, to keep or change.
+  // A draft from before comes back first (src/draft.ts), and a note shared from another app lands under it.
   const shared = fromShare ? consumeShared() : null;
-  if (shared) text.value = shared;
+  const draft = readDraft(s.id);
+  text.value = [draft.trimEnd(), shared ?? ''].filter(Boolean).join('\n\n');
+  if (shared) writeDraft(s.id, text.value);
+  text.addEventListener('input', () => {
+    writeDraft(s.id, text.value);
+    if (!text.value.trim()) kept.remove();
+  });
+  const clear = h('button', { class: 'btn btn-quiet', type: 'button' }, 'Clear it');
+  const kept = h(
+    'div',
+    { style: 'display:flex;gap:12px;align-items:center;justify-content:space-between' },
+    h('span', { class: 'muted small' }, 'Your note from before is still here.'),
+    clear,
+  );
+  clear.addEventListener('click', () => {
+    text.value = '';
+    writeDraft(s.id, '');
+    kept.remove();
+    text.focus();
+  });
   const file = h('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none', 'aria-hidden': 'true' });
   const preview = h('div', { class: 'stack' });
   const photoBtn = h('button', { class: 'btn', type: 'button' }, icon('camera', 20), 'Add a photo');
@@ -73,7 +93,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
   });
 
   const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Keep it in Unsorted');
-  const form = h('form', { class: 'stack' }, text, h('div', { class: 'row-gap' }, photoBtn), preview, err, saveBtn, file);
+  const form = h('form', { class: 'stack' }, text, draft.trim() ? kept : '', h('div', { class: 'row-gap' }, photoBtn), preview, err, saveBtn, file);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = text.value.trim();
@@ -86,6 +106,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       const values: Record<string, unknown> = { name: titleFrom(body, !!photo), supertype: UNSORTED };
       if (body) values.description = body;
       const id = await s.create('narrative', values, photo ?? undefined);
+      writeDraft(s.id, '');
       toast(s.isLocal || navigator.onLine ? 'Kept in Unsorted.' : 'Kept on this phone. It sends when you have signal.');
       if (photoUrl) URL.revokeObjectURL(photoUrl);
       go(`#/w/${s.id}/e/${id}`, true);

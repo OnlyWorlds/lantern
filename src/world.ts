@@ -180,6 +180,12 @@ export class WorldSession {
     }
   }
 
+  /** Which Collective is the party, kept for this world on this phone. */
+  async rememberParty(partyId: string): Promise<void> {
+    const rec = await db.updateWorldRecord(this.id, { partyId });
+    if (rec) this.rec = rec;
+  }
+
   /** Re-render whoever is watching (an app-wide change, such as a newer build). */
   touch(): void {
     this.emit();
