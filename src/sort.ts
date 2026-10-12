@@ -7,11 +7,8 @@ import { accountToken } from './account';
 import { API_BASE } from './world';
 import type { SliceItem, SortRow } from './sortplan';
 
-export interface SortNote {
-  text: string;
-  /** The note's picture on keel's media host, when the route takes pictures (h37 #3592). */
-  image_url?: string;
-}
+/** A note as the route takes it (h37 #3594): its words, or its words and its picture on keel's media host. */
+export type SortNote = string | { text: string; image_url: string };
 
 export interface Sorted {
   rows: SortRow[];
@@ -22,15 +19,12 @@ export interface Sorted {
 
 export class SortRefused extends Error {}
 
-/** Pictures travel only once the route says it takes them; until then a note is its words. */
-export const ROUTE_TAKES_PICTURES = false;
-
 export async function sortNotes(worldId: string, notes: SortNote[], slice: SliceItem[]): Promise<Sorted> {
   const token = await accountToken();
   if (!token) throw new SortRefused('Sign in to sort with OnlyWorlds.');
   const body = {
     world_id: worldId,
-    notes: notes.map((n) => (ROUTE_TAKES_PICTURES && n.image_url ? { text: n.text, image_url: n.image_url } : n.text)),
+    notes,
     slice,
   };
   try {

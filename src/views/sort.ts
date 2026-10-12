@@ -8,11 +8,19 @@ import { icon } from '../icons';
 import { accountToken, cachedAccountWorlds } from '../account';
 import { MAP_TYPES } from '../maps';
 import { fieldLabel, TYPES, typeColor, typeLabel } from '../schema';
-import { buildSlice, fitNotes, noteText, planWrites, SORTED, type SortRow, type Target, type Ticked } from '../sortplan';
+import { buildSlice, fitNotes, notesPayload, noteText, planWrites, SORTED, type SortRow, type Target, type Ticked } from '../sortplan';
 import { sortNotes, SortRefused, type Sorted } from '../sort';
 import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
+
+/** A card's state: ticked, a make's edits, an ask's pick. */
+interface RowState {
+  on: boolean;
+  name?: string;
+  type?: string;
+  pick?: string;
+}
 
 interface Kept {
   notes: string[];
@@ -65,7 +73,7 @@ export function sortView(s: WorldSession): View {
   let accountWorld = s.rec.kind === 'online' && !!s.rec.role;
   let known = false;
   // Per row (by index in the kept result): ticked, and a make's edits or an ask's pick.
-  const state = new Map<number, { on: boolean; name?: string; type?: string; pick?: string }>();
+  const state = new Map<number, RowState>();
   let showLeftOut = false;
 
   void Promise.all([accountToken(), cachedAccountWorlds()]).then(([t, mine]) => {
@@ -93,11 +101,7 @@ export function sortView(s: WorldSession): View {
     render();
     try {
       const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id));
-      const result = await sortNotes(
-        s.id,
-        fit.map((n) => ({ text: noteText(n), ...(typeof n.image_url === 'string' && n.image_url.startsWith('https:') ? { image_url: n.image_url } : {}) })),
-        slice,
-      );
+      const result = await sortNotes(s.id, notesPayload(fit).notes, slice);
       kept = { notes: fit.map((n) => n.id), result, at: new Date().toISOString() };
       writeKept(s.id, kept);
       state.clear();
@@ -138,6 +142,12 @@ export function sortView(s: WorldSession): View {
       h('p', { class: 'dim', style: 'margin:0' }, 'The AI reads your notes beside what your world already has and proposes what they add. You tick what is true; nothing is written before that.'),
       h('div', { class: 'stack', style: 'gap:6px' }, ...rows),
       over > 0 ? h('p', { class: 'muted small', style: 'margin:0' }, `${plural(over, 'note')} wait for the next sort: one sort reads up to 8 notes, 16,000 characters in all.`) : '',
+      (() => {
+        const held = notesPayload(fit).held;
+        return held
+          ? h('p', { class: 'muted small', style: 'margin:0' }, `${plural(held, 'photo')} go as words only: a photo is read once it is online, four a sort.`)
+          : '';
+      })(),
       reason ? h('p', { class: 'muted small', style: 'margin:0', 'data-why': '' }, reason) : h('p', { class: 'muted small', style: 'margin:0' }, 'One sort uses one of today\'s AI answers.'),
       refusal ? h('p', { class: 'error', role: 'alert' }, refusal) : '',
       sortBtn,
@@ -187,8 +197,23 @@ export function sortView(s: WorldSession): View {
         });
         picks.appendChild(b);
       }
-      body.push(picks);
-      if (!row.then) body.push(h('p', { class: 'muted small', style: 'margin:0' }, row.candidates.length ? 'Picking one only answers the question; a new thing is made from Catch.' : 'Nothing in your world matches: if it is new, make it from Catch.'));
+      // Neither: an empty card to make it new, written fresh (Simmer h37 #3598: never a model's guess behind a tap).
+      const neither = h('button', { class: 'btn btn-quiet', type: 'button', 'data-neither': String(i) }, row.candidates.length ? 'Neither: it is something new' : 'It is something new');
+      neither.addEventListener('click', () => {
+        if (!kept) return;
+        st.pick = undefined;
+        st.on = false;
+        kept.result.rows.splice(i + 1, 0, { kind: 'make', source_line: row.source_line, proposal: { type: '', name: '' } });
+        // Rows after this one move down by one: their ticks move with them.
+        const moved = new Map<number, RowState>();
+        for (const [k, v] of state) moved.set(k > i ? k + 1 : k, v);
+        state.clear();
+        for (const [k, v] of moved) state.set(k, v);
+        writeKept(s.id, kept);
+        render();
+      });
+      body.push(picks, neither);
+      if (!row.then && row.candidates.length) body.push(h('p', { class: 'muted small', style: 'margin:0' }, 'Picking one only answers the question.'));
     }
     const tickable = row.kind !== 'ask';
     const tickBtn = tickable

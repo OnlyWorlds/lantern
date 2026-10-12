@@ -1,7 +1,7 @@
 // The morning after's pure part: what a sort sends, and what the ticked rows write.
 import { describe, expect, it } from 'vitest';
 import { buildWorldIndex, type OwElement } from '@onlyworlds/sdk';
-import { buildSlice, fitNotes, planWrites, type SortRow, type Ticked } from '../src/sortplan';
+import { buildSlice, fitNotes, notesPayload, planWrites, type SortRow, type Ticked } from '../src/sortplan';
 
 const els: OwElement[] = [
   { id: 'swoop', type: 'location', name: 'The Swoop' },
@@ -35,6 +35,30 @@ describe('buildSlice', () => {
   it("gives each its anchor: a place it is in, else its kind, else its description's start", () => {
     expect(slice.find((s) => s.id === 'dot')?.anchor).toBe('The Swoop');
     expect(slice.find((s) => s.id === 'pipit')?.anchor).toBe('Keeps foxes.');
+  });
+});
+
+describe('notesPayload', () => {
+  it('a note goes with its picture only once the picture is online, four a sort at most', () => {
+    const note = (id: string, image_url?: string) => ({ id, type: 'narrative', name: id, description: `words of ${id}`, ...(image_url ? { image_url } : {}) }) as OwElement;
+    const online = (k: string) => `https://media.onlyworlds.com/w/abc/${k}.webp`;
+    const { notes, held } = notesPayload([
+      note('a'),
+      note('b', online('b')),
+      note('c', 'blob:http://localhost/123'),
+      note('d', 'data:image/webp;base64,AAAA'),
+      note('e', online('e')),
+      note('f', online('f')),
+      note('g', online('g')),
+      note('h', online('h')),
+    ]);
+    expect(notes[0]).toBe('words of a');
+    expect(notes[1]).toEqual({ text: 'words of b', image_url: online('b') });
+    expect(notes[2]).toBe('words of c');
+    expect(notes[3]).toBe('words of d');
+    expect(notes.filter((n) => typeof n !== 'string').length).toBe(4);
+    expect(notes[7]).toBe('words of h');
+    expect(held).toBe(3);
   });
 });
 

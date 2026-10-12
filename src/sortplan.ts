@@ -46,7 +46,32 @@ export interface AskRow {
 }
 export type SortRow = MakeRow | AddToRow | LinkRow | AskRow;
 
-export const SLICE_MAX = 40;
+export const SLICE_MAX = 100; // Skeld h37 #3597, on Simmer's word: 40 dropped real candidates on a big world
+/** Pictures a sort may carry (h37 #3594), each on keel's media host. */
+export const PICTURES_MAX = 4;
+const MEDIA = /^https:\/\/media\.onlyworlds\.com\//;
+
+/**
+ * The notes as the route takes them: a note is its words, or its words and its picture when the
+ * picture is already online (a photo still waiting to send, or a phone-only world's, goes as words
+ * only, and is counted so the screen can say so). At most four pictures a sort.
+ */
+export function notesPayload(notes: OwElement[]): { notes: (string | { text: string; image_url: string })[]; held: number } {
+  let pictures = 0;
+  let held = 0;
+  const out = notes.map((n) => {
+    const text = noteText(n);
+    const pic = typeof n.image_url === 'string' ? n.image_url : '';
+    if (!pic) return text;
+    if (MEDIA.test(pic) && pictures < PICTURES_MAX) {
+      pictures++;
+      return { text, image_url: pic };
+    }
+    held++;
+    return text;
+  });
+  return { notes: out, held };
+}
 /** The route's limits (h37 #3591): 1 to 8 notes, each up to 4,000 characters, 16,000 in all. */
 export const NOTES_MAX = 8;
 export const NOTE_CHARS = 4000;

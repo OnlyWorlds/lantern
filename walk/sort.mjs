@@ -90,7 +90,7 @@ async function walk(engine, deviceName, tag) {
 
   // Two notes caught last night, planted in Unsorted.
   const notes = [
-    { id: '0199aaaa-0000-7000-8000-000000000001', type: 'narrative', name: `${a.name} at the fire`, supertype: 'Unsorted', description: `${a.name} at the fire\nA stranger called Ember tends it`, created_at: '2026-10-12T01:00:00Z' },
+    { id: '0199aaaa-0000-7000-8000-000000000001', type: 'narrative', name: `${a.name} at the fire`, supertype: 'Unsorted', description: `${a.name} at the fire\nA stranger called Ember tends it`, image_url: `https://media.onlyworlds.com/w/${worldId}/fire-page.webp`, created_at: '2026-10-12T01:00:00Z' },
     { id: '0199aaaa-0000-7000-8000-000000000002', type: 'narrative', name: `Someone went to ${place.name}`, supertype: 'Unsorted', description: `Someone went to ${place.name}`, created_at: '2026-10-12T01:05:00Z' },
   ];
   await putElements(page, worldId, notes);
@@ -146,7 +146,12 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('.sort-card', { timeout: 15000 });
   const body = sent.at(-1);
   const sliceIds = body.slice.map((x) => x.id);
-  check(tag, body.world_id === worldId && body.notes.length === 2 && body.notes.every((x) => typeof x === 'string'), 'the notes go as their words, to this world');
+  const pictured = body.notes.filter((x) => typeof x !== 'string');
+  check(
+    tag,
+    body.world_id === worldId && body.notes.length === 2 && pictured.length === 1 && /fire-page\.webp$/.test(pictured[0].image_url) && /Ember/.test(pictured[0].text),
+    'the notes go as their words, the photographed one with its picture, to this world',
+  );
   check(tag, sliceIds.includes(a.id) && sliceIds.includes(place.id), `the slice holds what the notes name (${body.slice.length} elements)`);
   check(tag, !sliceIds.some((id) => notes.some((n) => n.id === id)), 'and never the notes');
   check(tag, (await page.locator('.sort-card').count()) === 4, 'four cards');
@@ -160,7 +165,16 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('.sort-card').count()) === 4 && sent.length === 2, 'a reload keeps the sort, and asks nothing again');
 
   // 6. Tick: the make (renamed), the addition, the ask's pick; leave the link.
-  const make = page.locator('.sort-card[data-kind=make]');
+  // Neither: an empty card to make it new, right under the question, nothing filled in for the person.
+  await page.locator('.sort-card[data-kind=ask] [data-neither]').tap();
+  const kinds = await page.locator('.sort-card').evaluateAll((cs) => cs.map((c) => c.dataset.kind));
+  const fresh = page.locator('.sort-card[data-kind=make]').nth(1);
+  check(
+    tag,
+    JSON.stringify(kinds) === JSON.stringify(['make', 'add_to', 'link', 'ask', 'make']) && (await fresh.locator('input[aria-label="Name"]').inputValue()) === '' && !(await fresh.locator('select').inputValue()),
+    `Neither opens an empty card under the question (${kinds.join(', ')})`,
+  );
+  const make = page.locator('.sort-card[data-kind=make]').first();
   await make.locator('input[aria-label="Name"]').fill('Ember of the Hearth');
   await make.locator('[data-tick]').tap();
   await page.locator('.sort-card[data-kind=add_to] [data-tick]').tap();
