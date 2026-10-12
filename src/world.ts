@@ -507,10 +507,15 @@ export class WorldSession {
     void this.flush();
   }
 
-  /** A new element, with an id made on the phone so it can be linked to before it is sent. */
-  async create(type: string, values: Record<string, unknown>, photo?: Blob): Promise<string> {
+  /**
+   * A new element, with an id made on the phone so it can be linked to before it is sent. `fixed`:
+   * an id and key minted earlier (a sort's plan); an element or a waiting row that already has the
+   * id is that create done before, so nothing is made twice.
+   */
+  async create(type: string, values: Record<string, unknown>, photo?: Blob, fixed?: { id: string; idempotencyKey: string }): Promise<string> {
     if (!this.canWrite) throw new Error('This world is read-only here.');
-    const id = uuid7();
+    if (fixed && (this.truth.has(fixed.id) || this.outbox.some((r) => r.id === fixed.id))) return fixed.id;
+    const id = fixed?.id ?? uuid7();
     if (this.isLocal) {
       const now = new Date().toISOString();
       const el = { ...values, id, type, created_at: now, updated_at: now } as OwElement;
@@ -528,7 +533,7 @@ export class WorldSession {
       type,
       id,
       values,
-      idempotencyKey: uuid7(),
+      idempotencyKey: fixed?.idempotencyKey ?? uuid7(),
       photo,
       state: 'waiting',
       createdAt: new Date().toISOString(),

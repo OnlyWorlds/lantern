@@ -90,7 +90,7 @@ async function walk(engine, deviceName, tag) {
 
   // Two notes caught last night, planted in Unsorted.
   const notes = [
-    { id: '0199aaaa-0000-7000-8000-000000000001', type: 'narrative', name: `${a.name} at the fire`, supertype: 'Unsorted', description: `${a.name} at the fire\nA stranger called Ember tends it`, image_url: `https://media.onlyworlds.com/w/${worldId}/fire-page.webp`, created_at: '2026-10-12T01:00:00Z' },
+    { id: '0199aaaa-0000-7000-8000-000000000001', type: 'narrative', name: `${a.name} at the fire`, supertype: 'Unsorted', description: `${a.name} at the fire\nA stranger called Ember tends it`, image_url: `https://media.onlyworlds.com/u/${worldId}/fire-page.webp`, created_at: '2026-10-12T01:00:00Z' },
     { id: '0199aaaa-0000-7000-8000-000000000002', type: 'narrative', name: `Someone went to ${place.name}`, supertype: 'Unsorted', description: `Someone went to ${place.name}`, created_at: '2026-10-12T01:05:00Z' },
   ];
   await putElements(page, worldId, notes);
@@ -137,6 +137,13 @@ async function walk(engine, deviceName, tag) {
   await sortBtn.tap();
   await page.waitForSelector('[data-screen="sort"] .error');
   check(tag, /used up/.test(await page.locator('.error').innerText()), `a refusal is said: ${JSON.stringify(await page.locator('.error').innerText())}`);
+  // Leaving and coming back (no reload) still says why (the S399 merge gate).
+  await page.evaluate((id) => (location.hash = `#/w/${id}`), worldId);
+  await page.waitForSelector('[data-screen="sort"]', { state: 'detached' });
+  await page.evaluate((id) => (location.hash = `#/w/${id}/sort`), worldId);
+  await page.waitForSelector('[data-screen="sort"] .note-pick');
+  const said = page.locator('[data-screen="sort"] .error');
+  check(tag, (await said.count()) === 1 && /used up/.test(await said.innerText()), 'and is still said on coming back to the screen');
 
   // 4. What is sent: the notes' words, and a slice of what they name, never the notes.
   const ask = { id: a.id, type: 'character', name: a.name, anchor: 'by the fire' };
@@ -210,6 +217,10 @@ async function walk(engine, deviceName, tag) {
     `a reload keeps the ticks, the edited name and the pick (${back.join(', ')})`,
   );
   await shot('ticked');
+  // A second tab on the same sort, opened before the first writes it (the S400 gate).
+  const tab2 = await page.context().newPage();
+  await tab2.goto(`${BASE}/#/w/${worldId}/sort`);
+  await tab2.waitForSelector('.sort-card', { timeout: 15000 });
   // A double tap on Write (two clicks in the same moment): one plan, written once.
   await page.evaluate(() => {
     const b = document.querySelector('[data-action=write]');
@@ -221,6 +232,12 @@ async function walk(engine, deviceName, tag) {
   const creates = rows.filter((r) => r.op === 'create' && r.type === 'character');
   const created = creates[0];
   check(tag, creates.length === 1, `a double tap writes once (${creates.length} made)`);
+  // The second tab still shows the sort; its Write finds it written and writes nothing again.
+  await tab2.locator('[data-action=write]').click();
+  await tab2.waitForSelector('[data-screen="sort"] .note-pick, [data-screen="sort"] .empty', { timeout: 10000 });
+  const again = (await readStore(page, worldId, 'outbox')).filter((r) => r.op === 'create' && r.type === 'character');
+  check(tag, again.length === 1, `a second tab's Write on a sort already written writes nothing (${again.length} made)`);
+  await tab2.close();
   const onAOnce = rows.find((r) => r.id === a.id)?.values.description ?? '';
   check(tag, onAOnce.split('Was at the fire.').length === 2, 'and appends once');
   const onA = rows.find((r) => r.id === a.id);

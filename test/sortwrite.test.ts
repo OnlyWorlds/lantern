@@ -21,7 +21,7 @@ const { openWorld, forgetSession } = await import('../src/world');
 const { setPin } = await import('../src/pin');
 const db = await import('../src/db');
 const { planWrites, buildSlice } = await import('../src/sortplan');
-const { runWrites } = await import('../src/sortwrite');
+const { fixPlan, runWrites } = await import('../src/sortwrite');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
 /** A keel that answers what these cases need: the feed, creates, If-Match patches (412 with the current copy), the PIN on writes. */
@@ -146,6 +146,40 @@ describe('the write run', () => {
     await settle();
     expect([...keel.els.values()].some((e) => e.name === 'The Swoop')).toBe(true);
     expect(keel.els.get(N)!.supertype).toBe('Sorted');
+  });
+
+  it('a crash after a create is queued, before its step is kept, makes nothing twice (the id and key fixed with the plan)', async () => {
+    keel.put({ id: N, type: 'narrative', name: 'note', supertype: 'Unsorted', description: 'x' });
+    const make = { kind: 'make' as const, source_line: 'x', proposal: { type: 'Location', name: 'The Swoop', description: 'A cove.' } };
+    const swoops = () => [...keel.els.values()].filter((e) => e.name === 'The Swoop').length;
+    // Two crashes: one while the create still waits (no PIN), one after it reached keel.
+    for (const sent of [false, true]) {
+      const before = swoops();
+      const posts = () => keel.calls.filter((c) => c === 'POST /location').length;
+      const postsBefore = posts();
+      const s = await world(sent);
+      await s.pull();
+      const plan = fixPlan(planWrites([{ key: '0', row: make }], (id) => s.get(id), new Set(), ctxOf(s)).writes);
+      await runWrites(s, { plan, notes: [] }, () => {});
+      // The create goes under the plan's own key, so keel replays it rather than making it again.
+      if (!sent) expect(s.outbox.map((r) => [r.id, r.idempotencyKey])).toEqual([[plan[0].id, plan[0].idempotencyKey]]);
+      if (sent) {
+        await s.flush();
+        await settle();
+      }
+      // The outbox row (or keel's copy) is kept; the step that would say so never reached storage.
+      forgetSession(s.id);
+      const again = await openWorld(s.id);
+      await again.pull();
+      await runWrites(again, { plan, notes: [], step: 0 }, () => {});
+      setPin(again.rec, '1234');
+      await again.flush();
+      await settle();
+      await again.flush();
+      expect(swoops() - before, sent ? 'after keel had it' : 'while it waited').toBe(1);
+      expect(posts() - postsBefore, 'one create sent').toBe(1);
+      expect(again.outbox.length).toBe(0);
+    }
   });
 
   it('with no PIN the writes wait, then send once each when it comes (upheld)', async () => {

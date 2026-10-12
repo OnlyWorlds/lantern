@@ -1,7 +1,8 @@
 // The morning after's pure part: what a sort sends, and what the ticked rows write.
 import { describe, expect, it } from 'vitest';
 import { buildWorldIndex, type OwElement } from '@onlyworlds/sdk';
-import { buildSlice, fitNotes, notesPayload, planWrites, sanitizeRows, tooLong, type SortRow, type Ticked } from '../src/sortplan';
+import { buildSlice, fitNotes, notesPayload, pictureOk, planWrites, sanitizeRows, tooLong, type SortRow, type Ticked } from '../src/sortplan';
+const W = '0190a000-0000-7000-8000-0000000000aa';
 
 const els: OwElement[] = [
   { id: 'swoop', type: 'location', name: 'The Swoop' },
@@ -64,7 +65,7 @@ describe('buildSlice', () => {
 describe('notesPayload', () => {
   it('a note goes with its picture only once the picture is online, four a sort at most', () => {
     const note = (id: string, image_url?: string) => ({ id, type: 'narrative', name: id, description: `words of ${id}`, ...(image_url ? { image_url } : {}) }) as OwElement;
-    const online = (k: string) => `https://media.onlyworlds.com/w/abc/${k}.webp`;
+    const online = (k: string) => `https://media.onlyworlds.com/u/${W}/${k}.webp`;
     const { notes, held } = notesPayload([
       note('a'),
       note('b', online('b')),
@@ -74,7 +75,7 @@ describe('notesPayload', () => {
       note('f', online('f')),
       note('g', online('g')),
       note('h', online('h')),
-    ]);
+    ], W);
     expect(notes[0]).toBe('words of a');
     expect(notes[1]).toEqual({ text: 'words of b', image_url: online('b') });
     expect(notes[2]).toBe('words of c');
@@ -82,6 +83,31 @@ describe('notesPayload', () => {
     expect(notes.filter((n) => typeof n !== 'string').length).toBe(4);
     expect(notes[7]).toBe('words of h');
     expect(held).toBe(3);
+  });
+
+  it("a picture keel would refuse is held back, never sent to refuse the sort (keel's own test, the S399 merge gate)", () => {
+    const base = `https://media.onlyworlds.com/u/${W}/`;
+    expect(pictureOk(base + 'a.webp', W)).toBe(true);
+    expect(pictureOk(base + 'sub/a.webp', W)).toBe(true);
+    expect(pictureOk(base + 'a'.repeat(512 - `u/${W}/`.length), W)).toBe(true);
+    expect(pictureOk(base + 'a.webp', W.toUpperCase())).toBe(true);
+    for (const bad of [
+      `https://media.onlyworlds.com/u/0190a000-0000-7000-8000-0000000000bb/a.webp`, // another world's
+      `https://media.onlyworlds.com/w/${W}/a.webp`,
+      base, // the prefix alone
+      base + 'a.webp?v=2',
+      base + 'a.webp#x',
+      base + 'a//b.webp',
+      base + '../x/a.webp',
+      base + '%2e%2e/a.webp',
+      `http://media.onlyworlds.com/u/${W}/a.webp`,
+      `https://media.onlyworlds.com.evil.example/u/${W}/a.webp`,
+      // 512 characters of key at most: the prefix's 39 and a name of 474 is one over.
+      base + 'a'.repeat(512 - `u/${W}/`.length + 1),
+    ])
+      expect(pictureOk(bad, W), bad).toBe(false);
+    const other = { id: 'x', type: 'narrative', name: 'x', description: 'words', image_url: 'https://media.onlyworlds.com/u/0190a000-0000-7000-8000-0000000000bb/a.webp' } as OwElement;
+    expect(notesPayload([other], W)).toEqual({ notes: ['words'], held: 1 });
   });
 });
 

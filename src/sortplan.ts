@@ -49,21 +49,42 @@ export type SortRow = MakeRow | AddToRow | LinkRow | AskRow;
 export const SLICE_MAX = 100; // Skeld h37 #3597, on Simmer's word: 40 dropped real candidates on a big world
 /** Pictures a sort may carry (h37 #3594), each on keel's media host. */
 export const PICTURES_MAX = 4;
-const MEDIA = /^https:\/\/media\.onlyworlds\.com\//;
+const MEDIA = 'https://media.onlyworlds.com/';
+
+/**
+ * keel's own test (accounts/sort.py `_image_url_ok`): on the media host, no query or fragment, the
+ * object key under this world's `u/<world id>/` with a name after it, no empty or dot segment, at
+ * most 512 characters of key. keel refuses the whole sort for one picture that fails it, so such a
+ * picture is held back here (the S399 merge gate: a picture from another world).
+ */
+export function pictureOk(url: string, worldId: string): boolean {
+  if (!url.startsWith(MEDIA) || /[?#\s]/.test(url) || [...url].length > MEDIA.length + 512) return false;
+  const key = url.slice(MEDIA.length);
+  const prefix = `u/${worldId.toLowerCase()}/`;
+  if (!key.startsWith(prefix) || key.length === prefix.length) return false;
+  let plain: string;
+  try {
+    plain = decodeURIComponent(key);
+  } catch {
+    return false;
+  }
+  return !plain.split('/').some((seg) => seg === '' || seg === '.' || seg === '..');
+}
 
 /**
  * The notes as the route takes them: a note is its words, or its words and its picture when the
- * picture is already online (a photo still waiting to send, or a phone-only world's, goes as words
- * only, and is counted so the screen can say so). At most four pictures a sort.
+ * picture is this world's and online (a photo still waiting to send, a phone-only world's, or one
+ * from another world goes as words only, and is counted so the screen can say so). At most four
+ * pictures a sort.
  */
-export function notesPayload(notes: OwElement[]): { notes: (string | { text: string; image_url: string })[]; held: number } {
+export function notesPayload(notes: OwElement[], worldId: string): { notes: (string | { text: string; image_url: string })[]; held: number } {
   let pictures = 0;
   let held = 0;
   const out = notes.map((n) => {
     const text = noteText(n);
     const pic = typeof n.image_url === 'string' ? n.image_url : '';
     if (!pic) return text;
-    if (MEDIA.test(pic) && pictures < PICTURES_MAX) {
+    if (pictureOk(pic, worldId) && pictures < PICTURES_MAX) {
       pictures++;
       return { text, image_url: pic };
     }
@@ -179,7 +200,9 @@ const sliceName = (el: OwElement): string => (typeof el.name === 'string' ? el.n
 // ---------- from ticked rows to writes ----------
 
 export type Write =
-  | { op: 'create'; key: string; type: string; values: Record<string, unknown> }
+  /** `id` and `idempotencyKey`: minted when the plan is fixed (`fixPlan`), so a step run twice after a
+   * crash meets its own outbox row or keel's copy, and makes nothing twice (the S399 merge gate). */
+  | { op: 'create'; key: string; type: string; values: Record<string, unknown>; id?: string; idempotencyKey?: string }
   /** `base`: keel's copy when the plan was fixed. The edit is judged against it, so a change made
    * elsewhere before a late Finish writing is a conflict, never overwritten (the S399 merge gate). */
   | { op: 'edit'; id: string; values: Record<string, unknown>; base?: OwElement };

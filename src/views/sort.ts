@@ -10,7 +10,7 @@ import { MAP_TYPES } from '../maps';
 import { fieldLabel, TYPES, typeColor, typeLabel } from '../schema';
 import { buildSlice, fitNotes, notesPayload, noteText, planWrites, sanitizeRows, tooLong, type SortRow, type Target, type Ticked, type Write } from '../sortplan';
 import { sortNotes, SortRefused, type Sorted } from '../sort';
-import { runWrites, type WriteRun } from '../sortwrite';
+import { fixPlan, runWrites, type WriteRun } from '../sortwrite';
 import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
@@ -60,14 +60,18 @@ function readKept(worldId: string): Kept | null {
 
 /** A sort under way, per world: leaving and coming back waits for it instead of spending a second answer. */
 const inFlight = new Map<string, Promise<void>>();
+/** Why the last sort here was refused, per world: a screen that comes back after it still says why (the S399 merge gate). */
+const refusals = new Map<string, { text: string; token: string | undefined }>();
 /** A write run under way, per world: one at a time, joined by a screen that comes back to it. */
 const writingRun = new Map<string, Promise<void>>();
-function writeKept(worldId: string, k: Kept | null): void {
+/** False when the phone would not keep it: a reload then loses this sort; the notes stay in Unsorted. */
+function writeKept(worldId: string, k: Kept | null): boolean {
   try {
     if (k) localStorage.setItem(keepKey(worldId), JSON.stringify(k));
     else localStorage.removeItem(keepKey(worldId));
+    return true;
   } catch {
-    /* a reload then loses this sort; the notes stay in Unsorted */
+    return false;
   }
 }
 
@@ -111,6 +115,8 @@ export function sortView(s: WorldSession): View {
         if (main.isConnected) render();
       },
       () => {
+        // The run moved the kept step before it failed: Finish writing resumes from there.
+        kept = readKept(s.id);
         failed = true;
         if (main.isConnected) render();
       },
@@ -127,7 +133,6 @@ export function sortView(s: WorldSession): View {
     });
   }
   let chosen = new Set(fitNotes(unsortedNotes(s)).map((n) => n.id));
-  let refusal = '';
   let signedIn = false;
   let accountWorld = s.rec.kind === 'online' && !!s.rec.role;
   let known = false;
@@ -151,6 +156,8 @@ export function sortView(s: WorldSession): View {
 
   void Promise.all([accountToken(), cachedAccountWorlds()]).then(([t, mine]) => {
     signedIn = !!t;
+    // A refusal said to another account (or before a sign-out) is not this one's.
+    if (refusals.has(s.id) && refusals.get(s.id)!.token !== t) refusals.delete(s.id);
     if (s.rec.kind === 'online' && mine.some((w) => w.id === s.id)) accountWorld = true;
     known = true;
     render();
@@ -170,12 +177,12 @@ export function sortView(s: WorldSession): View {
     const fit = fitNotes(notes);
     if (!fit.length || inFlight.has(s.id)) return;
     phase = 'asking';
-    refusal = '';
+    refusals.delete(s.id);
     render();
     const job = (async () => {
       try {
         const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id));
-        const payload = notesPayload(fit).notes;
+        const payload = notesPayload(fit, s.id).notes;
         let result: Sorted;
         let wordsOnly = false;
         try {
@@ -192,7 +199,7 @@ export function sortView(s: WorldSession): View {
         state.clear();
         phase = 'review';
       } catch (e) {
-        refusal = e instanceof SortRefused ? e.message : errorText(e);
+        refusals.set(s.id, { text: e instanceof SortRefused ? e.message : errorText(e), token: await accountToken() });
         phase = 'choose';
       }
     })();
@@ -238,13 +245,13 @@ export function sortView(s: WorldSession): View {
       h('div', { class: 'stack', style: 'gap:6px' }, ...rows),
       over > 0 ? h('p', { class: 'muted small', style: 'margin:0' }, `${plural(over, 'note')} wait for the next sort: one sort reads up to 8 notes, 16,000 characters in all.`) : '',
       (() => {
-        const held = notesPayload(fit).held;
+        const held = notesPayload(fit, s.id).held;
         return held
-          ? h('p', { class: 'muted small', style: 'margin:0' }, `${plural(held, 'photo')} go as words only: a photo is read once it is online, four a sort.`)
+          ? h('p', { class: 'muted small', style: 'margin:0' }, `${plural(held, 'photo')} go as words only: a photo is read once it is online in this world, four a sort.`)
           : '';
       })(),
       reason ? h('p', { class: 'muted small', style: 'margin:0', 'data-why': '' }, reason) : h('p', { class: 'muted small', style: 'margin:0' }, 'One sort uses one of today\'s AI answers.'),
-      refusal ? h('p', { class: 'error', role: 'alert' }, refusal) : '',
+      refusals.get(s.id) ? h('p', { class: 'error', role: 'alert' }, refusals.get(s.id)!.text) : '',
       sortBtn,
     ];
   };
@@ -363,6 +370,18 @@ export function sortView(s: WorldSession): View {
       toast('This world is read only here now, so nothing more can be written to it.');
       return;
     }
+    // The kept sort is the truth, not this screen's copy of it: another tab may have fixed its plan,
+    // moved its step, written it or let it go (the S400 gate).
+    const saved = readKept(s.id);
+    if (!saved || saved.at !== kept.at) {
+      kept = saved;
+      loadTicks();
+      phase = kept ? 'review' : 'choose';
+      render();
+      toast('This sort was written or changed in another tab. Here is where it stands.');
+      return;
+    }
+    if (saved.plan) kept = saved;
     if (!kept.plan) {
       const ticked: Ticked[] = [];
       kept.result.rows.forEach((row, i) => {
@@ -384,9 +403,13 @@ export function sortView(s: WorldSession): View {
         toast(plan.skipped[0].reason);
         return;
       }
-      kept.plan = plan.writes;
-      kept.step = 0;
-      writeKept(s.id, kept);
+      // The plan's ids live in the kept sort: if the phone will not keep it, a reload would make
+      // everything again, so nothing starts (the S400 gate).
+      if (!writeKept(s.id, { ...kept, plan: fixPlan(plan.writes), step: 0 })) {
+        toast('This phone would not keep the plan, so nothing was written. Free some space and try again.');
+        return;
+      }
+      kept = readKept(s.id)!;
     }
     const k = kept;
     const plan = k.plan!;
