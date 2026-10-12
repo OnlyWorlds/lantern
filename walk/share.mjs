@@ -66,6 +66,18 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('[data-screen="capture"]');
   check(tag, (await page.locator('textarea').inputValue()) === '', 'a later catch starts empty');
 
+  // 5. A share walked away from: Back from the choice, then a catch in another world starts empty (the gate's case)
+  await page.goto(SHARE);
+  await page.waitForSelector('[data-screen="share"] .choice');
+  await page.locator('[data-screen="share"] .topbar a').tap();
+  await page.waitForSelector('[data-screen="worlds"]');
+  await page.locator('.world-card', { hasText: 'Market' }).tap();
+  await page.waitForSelector('[data-screen="home"]');
+  await page.locator('.fab').tap();
+  await page.waitForSelector('[data-screen="capture"]');
+  const leaked = await page.locator('textarea').inputValue();
+  check(tag, leaked === '', `a share walked away from fills no later note (${JSON.stringify(leaked)})`);
+
   check(tag, errors.length === 0, `no errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }

@@ -91,7 +91,9 @@ export function mapView(s: WorldSession, place: Place): View {
   let pins: OwElement[] = [];
   let L: L | null = null;
 
-  const showCard = (pin: OwElement | null) => {
+  const showCard = (drawn: OwElement | null) => {
+    // The pin as it is now: a pull may have renamed it since it was drawn.
+    const pin = drawn ? s.get(drawn.id) ?? drawn : null;
     if (!pin) {
       card.hidden = true;
       card.replaceChildren();
@@ -115,7 +117,10 @@ export function mapView(s: WorldSession, place: Place): View {
     const m = els.filter((e) => e.type === 'marker' && e.map === mapEl.id);
     const zoneIds = [...new Set(m.map((k) => k.zone).filter((z): z is string => typeof z === 'string' && !!z))];
     const key = [
-      ...p.map((e) => `${e.id},${e.x},${e.y},${e.element_id ?? ''}`),
+      ...p.map((e) => {
+        const placed = typeof e.element_id === 'string' ? s.get(e.element_id) : undefined;
+        return `${e.id},${e.x},${e.y},${e.element_id ?? ''},${e.element_type ?? ''},${placed?.type ?? ''}`;
+      }),
       ...m.map((e) => `${e.id},${e.x},${e.y},${e.zone ?? ''},${e.order ?? ''},${e.created_at ?? ''}`),
       ...zoneIds.map((z) => {
         const e = s.get(z);
@@ -139,13 +144,11 @@ export function mapView(s: WorldSession, place: Place): View {
         again = false;
         out = (await drawOnce()) ?? out;
       } while (again && !destroyed);
+      // Cleared here, in the same step as the last check: a refresh after it starts a new drawing.
+      drawing = null;
       return out;
     })();
-    try {
-      return await drawing;
-    } finally {
-      drawing = null;
-    }
+    return drawing;
   };
 
   const drawOnce = async (): Promise<Drawn | undefined> => {

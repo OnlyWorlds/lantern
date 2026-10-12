@@ -1,19 +1,19 @@
 // Shared to Lantern (Android's share sheet, the manifest's share_target): the text arrives in the
 // start URL's query, becomes one note, and waits for the catch screen of the world it goes to.
-// iPhone has no share target for web apps; there the catch screen is the way in.
+// Only a catch screen opened from the share screen (`?shared`) takes it: a share walked away from
+// never fills a later note (the S395 gate). iPhone has no share target for web apps.
 
 let pending: string | null = null;
 
-/** Title, text and link as one note: each once (apps often repeat the link inside the text). */
+/** Title, text and link as one note: a title the text begins with, or a link the text holds, is not repeated. */
 export function composeShared(p: { title?: string | null; text?: string | null; url?: string | null }): string {
-  let parts: string[] = [];
-  for (const v of [p.title, p.text, p.url]) {
-    const t = (v ?? '').trim();
-    if (!t || parts.some((x) => x.includes(t))) continue;
-    // A part this one repeats (a title the text begins with) gives way to it.
-    parts = parts.filter((x) => !t.includes(x));
-    parts.push(t);
-  }
+  const title = (p.title ?? '').trim();
+  const text = (p.text ?? '').trim();
+  const url = (p.url ?? '').trim();
+  const parts: string[] = [];
+  if (title && !text.toLowerCase().startsWith(title.toLowerCase())) parts.push(title);
+  if (text) parts.push(text);
+  if (url && !text.includes(url) && !title.includes(url)) parts.push(url);
   return parts.join('\n');
 }
 
@@ -33,7 +33,7 @@ export function hasShared(): boolean {
   return pending !== null;
 }
 
-/** The catch screen takes the note once. */
+/** The catch screen opened from the share screen takes the note, once. */
 export function consumeShared(): string | null {
   const n = pending;
   pending = null;

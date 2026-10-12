@@ -66,7 +66,7 @@ async function route(): Promise<void> {
     if (!sub) mount(homeView(s), s);
     else if (sub === 't' && parts[3] && isType(parts[3])) mount(typeView(s, parts[3], query === 'unsorted'), s);
     else if (sub === 'e' && parts[3]) mount(elementView(s, parts[3]), s);
-    else if (sub === 'capture' && s.canWrite) mount(captureView(s), s);
+    else if (sub === 'capture' && s.canWrite) mount(captureView(s, query === 'shared'), s);
     else if (sub === 'outbox') mount(outboxView(s), s);
     else if (sub === 'ask') mount(askView(s), s);
     else if (sub === 'map' && parts[3]) {

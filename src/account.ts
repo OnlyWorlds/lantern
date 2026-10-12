@@ -140,8 +140,11 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
   const c = new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE });
   const meta = await c.getWorld();
   const existing = await db.getWorldRecord(meta.id);
+  const sameKey = existing?.apiKey === key;
   const rec: db.WorldRecord = {
     ...existing,
+    // Who the old key was (its Character, its role) is not who this key is.
+    ...(sameKey ? {} : { characterId: undefined, memberRole: undefined, role: undefined }),
     id: meta.id,
     name: meta.name,
     kind: isDemoKey(key) ? 'demo' : 'online',

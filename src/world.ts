@@ -157,17 +157,19 @@ export class WorldSession {
   }
 
   /**
-   * Who this key is in the world, asked once (keel's GET /me with the world's own key, Skeld
-   * #3457): a player's own Character, and the member role for a world opened with a key.
+   * Who this key is in the world (keel's GET /me with the world's own key, Skeld #3457), asked
+   * on each launch: a player's own Character (the owner may give one later), and the member role
+   * for a world opened with a key.
    */
   async learnWhoIAm(): Promise<void> {
-    if (this.isLocal || this.rec.kind === 'demo' || !this.rec.apiKey || this.rec.characterId !== undefined) return;
+    if (this.isLocal || this.rec.kind === 'demo' || !this.rec.apiKey) return;
     try {
       const me = await this.client(false).request<{ role?: string; character?: string | null }>('GET', '/me');
       const role = me.role === 'guest' || me.role === 'co_builder' || me.role === 'contributor' ? me.role : undefined;
       const rec = await db.updateWorldRecord(this.id, {
         characterId: role === 'guest' && typeof me.character === 'string' ? me.character : null,
-        ...(role && !this.rec.memberRole ? { memberRole: role } : {}),
+        // A world from the account list keeps the list's role; one opened with a key takes keel's.
+        ...(this.rec.role ? {} : { memberRole: role }),
       });
       if (rec) {
         this.rec = rec;

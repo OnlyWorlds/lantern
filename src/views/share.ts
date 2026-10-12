@@ -13,7 +13,7 @@ export async function shareView(): Promise<HTMLElement> {
   }
   const worlds = (await db.listWorlds()).filter(recordCanWrite).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   if (worlds.length === 1) {
-    go(`#/w/${worlds[0].id}/capture`, true);
+    go(`#/w/${worlds[0].id}/capture?shared`, true);
     return h('main', { class: 'screen' });
   }
   return h(
@@ -28,7 +28,7 @@ export async function shareView(): Promise<HTMLElement> {
           ...worlds.map((w) =>
             h(
               'a',
-              { class: 'choice', href: `#/w/${w.id}/capture` },
+              { class: 'choice', href: `#/w/${w.id}/capture?shared` },
               h('b', null, w.name || 'Unnamed world'),
               h('span', null, w.kind === 'local' ? 'On this phone' : 'Online'),
             ),

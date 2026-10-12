@@ -21,7 +21,7 @@ function titleFrom(text: string, hasPhoto: boolean): string {
   return hasPhoto ? `A page, ${when}` : `A note, ${when}`;
 }
 
-export function captureView(s: WorldSession): View {
+export function captureView(s: WorldSession, fromShare = false): View {
   let photo: Blob | null = null;
   let photoUrl: string | null = null;
   const text = h('textarea', {
@@ -31,7 +31,7 @@ export function captureView(s: WorldSession): View {
     style: 'min-height:200px',
   });
   // Shared from another app: the note is here already, to keep or change.
-  const shared = consumeShared();
+  const shared = fromShare ? consumeShared() : null;
   if (shared) text.value = shared;
   const file = h('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none', 'aria-hidden': 'true' });
   const preview = h('div', { class: 'stack' });
