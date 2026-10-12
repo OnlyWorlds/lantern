@@ -42,6 +42,8 @@ async function walk(engine, deviceName, tag) {
   // 1b. Sign in against live keel (Keel #211) with a wrong password: the server's own words come back
   await page.locator('a.choice.primary').tap();
   await page.waitForSelector('[data-screen="signin"]');
+  // The token door stays shut until asked for (S397: a flex class once showed it open).
+  check(tag, !(await page.locator('input[aria-label="Account token"]').isVisible()), 'the account token field waits behind "I have an account token"');
   await page.locator('input[aria-label="Email"]').fill('nobody-lantern-walk@example.com');
   await page.locator('input[aria-label="Password"]').fill('not-the-password-1');
   expect400 = true;

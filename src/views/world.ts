@@ -384,7 +384,13 @@ export function elementView(s: WorldSession, id: string): View {
       : [];
     if (!desc && editable) empty.unshift('description');
 
-    const links = s.backlinks(id);
+    // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,
+    // and the first eight shown must not change with it (S397).
+    const links = [...s.backlinks(id)].sort((a, b) => {
+      const ea = s.get(a);
+      const eb = s.get(b);
+      return (ea?.type ?? '').localeCompare(eb?.type ?? '') || elName(ea).localeCompare(elName(eb));
+    });
     let backNode: HTMLElement | null = null;
     if (links.length) {
       const shown = showAllBacklinks ? links : links.slice(0, 8);
