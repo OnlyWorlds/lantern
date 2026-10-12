@@ -31,7 +31,10 @@ function wrapped(page) {
         if (!leaves.has(leaf)) leaves.set(leaf, []);
         leaves.get(leaf).push(t);
       }
-      for (const [leaf, texts] of leaves) {
+      // A pick row (a note to sort, an ask's candidate) carries content, not a label: its title and
+      // the words under it may wrap (cutting a candidate's anchor would hide which one it is). It
+      // still may not run out of its box, checked below.
+      for (const [leaf, texts] of c.classList.contains('note-pick') ? [] : leaves) {
         const tops = new Set();
         for (const t of texts) {
           const range = document.createRange();
@@ -144,6 +147,58 @@ async function walk(engine, tag) {
   await page.locator('.type-tile').first().click();
   await page.waitForSelector('[data-screen="type"]');
   await measure('type');
+
+  // The morning after: a note kept in Unsorted, Sort's choose screen (a phone-only world says why it
+  // cannot sort), then its review screen from a sort kept on this phone, every kind of card, long names.
+  const worldId = page.url().match(/#\/w\/([^/?]+)/)[1];
+  const miraId = await page.evaluate(
+    (id) =>
+      new Promise((res) => {
+        const r = indexedDB.open(`lantern-world-${id}`);
+        r.onsuccess = () => {
+          const g = r.result.transaction('elements').objectStore('elements').getAll();
+          g.onsuccess = () => res(g.result.find((e) => e.name === 'Mira Vell')?.id);
+        };
+      }),
+    worldId,
+  );
+  await page.locator('.tabbar [data-tab=catch]').click();
+  await page.waitForSelector('[data-screen="capture"]');
+  await page.locator('textarea').fill('Last night at the Copper Kettle\nMira Vell argued with a stranger from the northern marches about the price of iron.');
+  await page.getByRole('button', { name: 'Keep it in Unsorted' }).click();
+  await page.waitForTimeout(300);
+  await page.goto(`${BASE}/#/w/${worldId}/sort`);
+  await page.waitForSelector('[data-screen="sort"] .note-pick');
+  await measure('sort-choose');
+  const mira = { id: miraId, type: 'character', name: 'Mira Vell', anchor: 'a smith in the lower town' };
+  const stranger = { id: miraId, type: 'character', name: 'Aldric Thornwood-Vasquez of the Northern Marches', anchor: 'the iron trader' };
+  await page.evaluate(
+    ([id, mira, stranger]) =>
+      localStorage.setItem(
+        `lantern-sort-${id}`,
+        JSON.stringify({
+          notes: [],
+          sent: [mira.id],
+          at: new Date().toISOString(),
+          result: {
+            rows: [
+              { kind: 'make', source_line: 'a stranger from the northern marches', proposal: { type: 'Character', name: 'Aldric Thornwood-Vasquez', description: 'An iron trader from the northern marches.' } },
+              { kind: 'add_to', source_line: 'Mira Vell argued', target: mira, field: 'description', op: 'append', value: 'Argued about the price of iron.' },
+              { kind: 'link', source_line: 'at the Copper Kettle', target: mira, field: 'location', value_id: mira.id, value_name: 'The Copper Kettle' },
+              { kind: 'ask', source_line: 'a stranger', question: 'Which stranger was it?', candidates: [mira, stranger] },
+            ],
+            not_proposed: [{ source_line: 'the price of iron', reason: 'nothing particular to this world' }],
+            remaining: 48,
+          },
+        }),
+      ),
+    [worldId, mira, stranger],
+  );
+  await page.reload();
+  await page.waitForSelector('[data-screen="sort"] .sort-card');
+  await page.locator('.sort-card [data-tick]').first().click();
+  await measure('sort-review');
+  await page.evaluate((id) => localStorage.removeItem(`lantern-sort-${id}`), worldId);
 
   // An online world (the demo, read from live keel): its home, a map's page, an element with links.
   await page.goto(`${BASE}/#/worlds`);

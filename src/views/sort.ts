@@ -31,6 +31,8 @@ interface Kept {
   /** Once Write is tapped: the writes, fixed, and how many are done, so a retry resumes and never writes twice. */
   plan?: Write[];
   step?: number;
+  /** The cards' ticks, edits and picks, by row index: a reload mid-review keeps them. */
+  ticks?: Record<string, RowState>;
 }
 
 /** Rows checked on arrival and again on reopen: a row the screen cannot show is left out with its reason. */
@@ -46,7 +48,8 @@ function readKept(worldId: string): Kept | null {
     const raw = localStorage.getItem(keepKey(worldId));
     if (!raw) return null;
     const k = JSON.parse(raw) as Kept;
-    return { ...k, sent: Array.isArray(k.sent) ? k.sent : [], result: clean(k.result) };
+    const ticks = k.ticks && typeof k.ticks === 'object' ? k.ticks : {};
+    return { ...k, sent: Array.isArray(k.sent) ? k.sent : [], result: clean(k.result), ticks };
   } catch {
     return null;
   }
@@ -76,7 +79,14 @@ function snippet(t: string, n = 90): string {
   return cps.length > n ? cps.slice(0, n - 1).join('').trimEnd() + '…' : cps.join('');
 }
 
-const KIND_WORD: Record<SortRow['kind'], string> = { make: 'New', add_to: 'Add to', link: 'Link', ask: 'Which one?' };
+/** A note's words under its name: a catch's first line is its name, so the line under it does not say it twice. */
+function afterName(n: OwElement): string {
+  const t = noteText(n);
+  const name = typeof n.name === 'string' ? n.name.trim() : '';
+  return name && t.startsWith(name) ? t.slice(name.length).trim() : t;
+}
+
+const KIND_WORD:Record<SortRow['kind'], string> = { make: 'New', add_to: 'Add to', link: 'Link', ask: 'Which one?' };
 
 export function sortView(s: WorldSession): View {
   const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'sort' });
@@ -89,6 +99,7 @@ export function sortView(s: WorldSession): View {
     phase = 'asking';
     void pending.then(() => {
       kept = readKept(s.id);
+      loadTicks();
       phase = kept ? 'review' : 'choose';
       render();
     });
@@ -98,8 +109,22 @@ export function sortView(s: WorldSession): View {
   let signedIn = false;
   let accountWorld = s.rec.kind === 'online' && !!s.rec.role;
   let known = false;
-  // Per row (by index in the kept result): ticked, and a make's edits or an ask's pick.
+  // Per row (by index in the kept result): ticked, and a make's edits or an ask's pick. Kept with the
+  // sort, so a reload or a lost tab comes back to the same ticks.
   const state = new Map<number, RowState>();
+  const loadTicks = () => {
+    state.clear();
+    for (const [k, v] of Object.entries(kept?.ticks ?? {})) {
+      const i = Number(k);
+      if (Number.isInteger(i) && v && typeof v === 'object') state.set(i, { on: !!v.on, name: v.name, type: v.type, pick: v.pick });
+    }
+  };
+  const saveTicks = () => {
+    if (!kept || kept.plan) return;
+    kept.ticks = Object.fromEntries([...state].filter(([, v]) => v.on || v.name !== undefined || v.type !== undefined || v.pick !== undefined));
+    writeKept(s.id, kept);
+  };
+  loadTicks();
   let showLeftOut = false;
 
   void Promise.all([accountToken(), cachedAccountWorlds()]).then(([t, mine]) => {
@@ -166,7 +191,7 @@ export function sortView(s: WorldSession): View {
           'span',
           { class: 'label' },
           h('b', null, String(n.name ?? 'A note')),
-          h('span', { class: 'muted small', style: 'display:block' }, tooLong(n) ? 'Too long for one sort (4,000 characters): split it on its page first.' : snippet(noteText(n))),
+          h('span', { class: 'muted small', style: 'display:block' }, tooLong(n) ? 'Too long for one sort (4,000 characters): split it on its page first.' : snippet(afterName(n))),
         ),
         typeof n.image_url === 'string' && n.image_url ? icon('image', 18) : '',
       );
@@ -210,7 +235,10 @@ export function sortView(s: WorldSession): View {
     const body: (Node | string)[] = [];
     if (row.kind === 'make') {
       const name = h('input', { class: 'input', type: 'text', 'aria-label': 'Name', value: st.name ?? row.proposal.name });
-      name.addEventListener('input', () => (st.name = name.value));
+      name.addEventListener('input', () => {
+        st.name = name.value;
+        saveTicks();
+      });
       name.disabled = locked;
       const type = h('select', { class: 'input', 'aria-label': 'What it is' });
       const want = (st.type ?? row.proposal.type ?? '').toLowerCase();
@@ -223,7 +251,10 @@ export function sortView(s: WorldSession): View {
         const o = h('option', { value: '', selected: true }, 'Choose what it is');
         type.prepend(o);
       }
-      type.addEventListener('change', () => (st.type = type.value));
+      type.addEventListener('change', () => {
+        st.type = type.value;
+        saveTicks();
+      });
       type.disabled = locked;
       body.push(h('div', { class: 'row-gap' }, name, type));
       if (row.proposal.description) body.push(h('p', { class: 'dim small', style: 'margin:0' }, row.proposal.description));
@@ -242,6 +273,7 @@ export function sortView(s: WorldSession): View {
         b.addEventListener('click', () => {
           st.pick = st.pick === c.id ? undefined : c.id;
           st.on = !!st.pick;
+          saveTicks();
           render();
         });
         b.disabled = locked;
@@ -259,6 +291,7 @@ export function sortView(s: WorldSession): View {
         for (const [k, v] of state) moved.set(k > i ? k + 1 : k, v);
         state.clear();
         for (const [k, v] of moved) state.set(k, v);
+        saveTicks();
         writeKept(s.id, kept);
         render();
       });
@@ -272,6 +305,7 @@ export function sortView(s: WorldSession): View {
           const b = h('button', { class: `btn btn-pill${st.on ? ' on' : ''}`, type: 'button', 'aria-pressed': String(st.on), 'data-tick': String(i) }, st.on ? icon('check', 16, 2.4) : '', st.on ? 'True' : 'Tick if true');
           b.addEventListener('click', () => {
             st.on = !st.on;
+            saveTicks();
             render();
           });
           b.disabled = locked;

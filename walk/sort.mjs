@@ -192,6 +192,17 @@ async function walk(engine, deviceName, tag) {
   const writeLabel = await page.locator('[data-action=write]').innerText();
   check(tag, writeLabel === 'Write 3', `three ticked (${JSON.stringify(writeLabel)})`);
   check(tag, (await make.locator('input[aria-label="Name"]').inputValue()) === 'Ember of the Hearth', 'a tick keeps the edited name');
+  // A reload mid-review (the phone drops the tab): the ticks, the edited name, the pick and the Neither card come back.
+  await page.reload();
+  await page.waitForSelector('.sort-card', { timeout: 15000 });
+  const back = await page.locator('.sort-card').evaluateAll((cs) => cs.map((c) => `${c.dataset.kind}${c.classList.contains('on') ? '+' : ''}`));
+  check(
+    tag,
+    JSON.stringify(back) === JSON.stringify(['make+', 'add_to+', 'link', 'ask+', 'make']) &&
+      (await make.locator('input[aria-label="Name"]').inputValue()) === 'Ember of the Hearth' &&
+      (await page.locator('[data-action=write]').innerText()) === 'Write 3',
+    `a reload keeps the ticks, the edited name and the pick (${back.join(', ')})`,
+  );
   await shot('ticked');
   // A double tap on Write (two clicks in the same moment): one plan, written once.
   await page.evaluate(() => {
