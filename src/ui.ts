@@ -50,14 +50,21 @@ export function tabbar(s: { id: string; canWrite: boolean }, on: 'world' | 'catc
   const tab = (id: 'world' | 'catch' | 'ask', label: string, href: string, ic: string) =>
     h(
       'a',
-      { href, class: [id === 'catch' ? 'catch' : '', on === id ? 'on' : ''].filter(Boolean).join(' ') || null, 'aria-current': on === id ? 'page' : null, 'data-tab': id },
+      {
+        href,
+        class: [id === 'catch' ? 'catch' : '', on === id ? 'on' : ''].filter(Boolean).join(' ') || null,
+        // Lit where you are; "current page" only while the tab still points here (World on the home points up).
+        'aria-current': on === id && !(id === 'world' && href === '#/worlds') ? 'page' : null,
+        'data-tab': id,
+      },
       id === 'catch' ? h('span', { class: 'catch-dot' }, icon(ic, 26, 2.2)) : icon(ic, 22),
       label,
     );
   return h(
     'nav',
     { class: 'tabbar', 'aria-label': 'World' },
-    tab('world', 'World', `#/w/${s.id}`, 'home'),
+    // On the world's own home, World goes up a level to Your worlds, and says so (the Captain, #3675).
+    on === 'world' ? tab('world', 'Worlds', '#/worlds', 'home') : tab('world', 'World', `#/w/${s.id}`, 'home'),
     s.canWrite ? tab('catch', 'Catch', `#/w/${s.id}/capture`, 'plus') : null,
     tab('ask', 'Ask', `#/w/${s.id}/ask`, 'spark'),
   );

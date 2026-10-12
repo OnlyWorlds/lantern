@@ -17,25 +17,9 @@ import * as db from './db';
 import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
 import { isEmptyValue } from './schema';
+import { pinFor, setPin } from './pin';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
-
-/** The PIN is asked once and kept for the session (DESIGN: Keys and sign-in), never stored. */
-function sessionPin(worldId: string): string | undefined {
-  try {
-    return sessionStorage.getItem(`lantern-pin-${worldId}`) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-export function setSessionPin(worldId: string, pin: string | undefined): void {
-  try {
-    if (pin) sessionStorage.setItem(`lantern-pin-${worldId}`, pin);
-    else sessionStorage.removeItem(`lantern-pin-${worldId}`);
-  } catch {
-    /* private mode: the PIN is asked again next time */
-  }
-}
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -292,11 +276,16 @@ export class WorldSession {
     return this.outbox.filter((r) => r.state === 'needs-you' || r.state === 'gone' || r.state === 'refused').length;
   }
 
+  /** A PIN is held for this world now (one entered on another of your worlds counts). */
+  pinKnown(): boolean {
+    return !!pinFor(this.rec);
+  }
+
   // ---------- the client ----------
 
   private client(withPin: boolean): OwV2Client {
     if (!this.rec.apiKey) throw new Error('This world has no key.');
-    const pin = withPin ? sessionPin(this.id) : undefined;
+    const pin = withPin ? pinFor(this.rec) : undefined;
     return new OwV2Client({ apiKey: this.rec.apiKey, apiPin: pin, baseUrl: API_BASE });
   }
 
@@ -572,7 +561,7 @@ export class WorldSession {
     if (buildBehind) return;
     const rows = this.outbox.filter((r) => r.state === 'waiting').sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     if (!rows.length) return;
-    if (!sessionPin(this.id)) {
+    if (!pinFor(this.rec)) {
       this.needPin = true;
       this.emit();
       return;
@@ -722,7 +711,7 @@ export class WorldSession {
       }
       if (e.status === 401) {
         // A wrong PIN: stop and ask again; keel throttles wrong PINs, so never loop.
-        setSessionPin(this.id, undefined);
+        setPin(this.rec, undefined);
         this.needPin = true;
         await keep('waiting');
         return true;

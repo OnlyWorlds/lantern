@@ -3,7 +3,8 @@ import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
-import { API_BASE, setSessionPin, type WorldSession } from '../world';
+import { API_BASE, type WorldSession } from '../world';
+import { setPin } from '../pin';
 import {
   fieldInfo,
   fieldLabel,
@@ -35,13 +36,16 @@ export function setBehindReload(fn: (() => void) | null): void {
   behindReload = fn;
 }
 
+/** Changes wait on a PIN not yet entered (one entered on another of your worlds already counts). */
+export const askPin = (s: WorldSession): boolean => s.needPin && !s.pinKnown() && s.waitingCount() > 0;
+
 function statusBanner(s: WorldSession): HTMLElement | null {
   if (behindReload) {
     const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Reload');
     b.addEventListener('click', () => behindReload?.());
     return h('div', { class: 'banner', role: 'status' }, 'A new version of Lantern is ready. Changes wait until you reload.', b);
   }
-  if (s.needPin && s.waitingCount()) {
+  if (askPin(s)) {
     const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter PIN');
     b.addEventListener('click', () => pinSheet(s));
     return h('div', { class: 'banner', role: 'status' }, `Enter your PIN to send ${plural(s.waitingCount(), 'change')}.`, b);
@@ -77,7 +81,7 @@ export function pinSheet(s: WorldSession): void {
       try {
         // keel checks a PIN sent on a read too: one read proves it before anything is written.
         await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE }).getWorld();
-        setSessionPin(s.id, pin.value.trim());
+        setPin(s.rec, pin.value.trim());
         s.needPin = false;
         close();
         void s.flush();
@@ -90,7 +94,13 @@ export function pinSheet(s: WorldSession): void {
     });
     return [
       h('h2', null, 'Your PIN'),
-      h('p', { class: 'dim', style: 'margin:0' }, 'The four digits you set on onlyworlds.com. Lantern keeps it until you close the app.'),
+      h(
+        'p',
+        { class: 'dim', style: 'margin:0' },
+        s.rec.role
+          ? 'The four digits you set on onlyworlds.com. Lantern keeps it on this phone for all your worlds, until you sign out.'
+          : 'The four digits that came with this world\'s key. Lantern keeps it on this phone for this world.',
+      ),
       form,
     ];
   }, 'Your PIN');
@@ -100,6 +110,11 @@ function headPill(s: WorldSession): HTMLElement | null {
   const needs = s.needsYouCount();
   if (needs) return h('a', { class: 'pill alert', href: `#/w/${s.id}/outbox` }, `${needs} need${needs === 1 ? 's' : ''} you`);
   const waiting = s.waitingCount();
+  if (askPin(s)) {
+    const b = h('button', { class: 'pill alert', type: 'button' }, 'Needs your PIN');
+    b.addEventListener('click', () => pinSheet(s));
+    return b;
+  }
   if (waiting) return h('a', { class: 'pill', href: `#/w/${s.id}/outbox` }, `${waiting} waiting to send`);
   if (s.isLocal) return h('span', { class: 'pill quiet' }, 'On this phone');
   if (s.rec.memberRole === 'guest') return h('span', { class: 'pill quiet' }, 'Player');
@@ -337,6 +352,16 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     const wait = (f: string) => {
       const row = pending.get(f) ?? (f === 'name' ? create : undefined);
       if (!row || (row === create && f !== 'name')) return null;
+      // Waiting on the PIN: the mark says so and asks for it (the Captain's walk: a picture sat
+      // "waiting to send" with nothing saying why).
+      if (row.state === 'waiting' && askPin(s)) {
+        const b = h('button', { class: 'wait wait-pin', type: 'button' }, 'needs your PIN');
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          pinSheet(s);
+        });
+        return b;
+      }
       const label = row.state === 'needs-you' || row.state === 'gone' ? 'needs you' : row.state === 'refused' ? 'not sent' : 'waiting to send';
       return h('span', { class: 'wait' }, label);
     };
@@ -361,10 +386,19 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       return b;
     };
 
-    const avatar = h('div', { class: 'avatar', style: `--type:${typeColor(el.type)}`, 'aria-hidden': 'true' });
-    if (typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url)) {
-      avatar.style.backgroundImage = `url("${el.image_url}")`;
-    } else avatar.textContent = initials(elName(el));
+    const hasPicture = typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url);
+    // No picture yet: the placeholder itself opens Camera or Gallery (the Captain, #3660).
+    const tapToAdd = !hasPicture && editable && !MAP_TYPES.has(el.type);
+    const avatar = tapToAdd
+      ? h('button', { class: 'avatar avatar-add', type: 'button', style: `--type:${typeColor(el.type)}`, 'aria-label': 'Add a picture', 'data-action': 'avatar-picture' })
+      : h('div', { class: 'avatar', style: `--type:${typeColor(el.type)}`, 'aria-hidden': 'true' });
+    if (hasPicture) avatar.style.backgroundImage = `url("${el.image_url}")`;
+    else avatar.append(initials(elName(el)));
+    // The camera hangs off the corner, beside the square rather than inside it, so it never covers the initials.
+    const avatarBox = tapToAdd
+      ? h('div', { class: 'avatar-box' }, avatar, h('span', { class: 'avatar-cam', 'aria-hidden': 'true' }, icon('camera', 14, 2.2)))
+      : avatar;
+    if (tapToAdd) avatar.addEventListener('click', () => pictureSheet(s, el, false));
 
     const kind = [typeLabel(el.type), el.supertype, el.subtype].filter(Boolean).join(' · ');
     // A caught line can be a sentence long: the title steps down so it does not fill the screen.
@@ -395,7 +429,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         empty.push(field);
         continue;
       }
-      const isBlock = info.type === 'multi_link' || (info.type === 'text' && String(v).length > 28);
+      // A single link takes the multi link's layout: label, its marks and the pencil on one line, the chip under it (the Captain's walk, #3660).
+      const isBlock = info.type === 'multi_link' || info.type === 'single_link' || (info.type === 'text' && String(v).length > 28);
       const isLink = info.type === 'single_link' || info.type === 'multi_link';
       rows.push(
         tapRow(
@@ -467,7 +502,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
             needs.state === 'refused' ? 'A change to this was not sent. Tap to see why.' : 'A change to this needs you. Tap to choose.',
           )
         : '',
-      h('div', { class: 'el-head' }, avatar, headText),
+      h('div', { class: 'el-head' }, avatarBox, headText),
       actionRow(s, el, wait('image_url')),
       picture(el),
       descNode ?? '',

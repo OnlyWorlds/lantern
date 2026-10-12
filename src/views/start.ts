@@ -15,7 +15,8 @@ import {
   signOut,
   type AccountWorld,
 } from '../account';
-import { setSessionPin, forgetSession } from '../world';
+import { forgetSession } from '../world';
+import { setPin } from '../pin';
 import { pendingJoin } from '../join';
 import { uuid7 } from '../uuid7';
 import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
@@ -206,7 +207,7 @@ export function keyView(): HTMLElement {
     btn.disabled = true;
     try {
       const rec = await openWithKey(key.value, pin.value.trim() || undefined);
-      if (pin.value.trim()) setSessionPin(rec.id, pin.value.trim());
+      if (pin.value.trim()) setPin(rec, pin.value.trim());
       go(`#/w/${rec.id}`, true);
     } catch (ex) {
       const m = errorText(ex);
@@ -270,6 +271,41 @@ function worldCard(rec: db.WorldRecord, waiting: number): HTMLElement {
     h('div', { class: 'text' }, h('b', null, rec.name || 'Unnamed world'), h('span', null, bits.join(' · '))),
     waiting ? h('span', { class: 'small', style: 'color:var(--lan-accent)' }, `${waiting} waiting`) : null,
   );
+}
+
+// Pinned worlds, on this phone: an ordered list of ids. A per-phone convenience, so it lives in
+// localStorage; losing it loses only the order.
+const PINNED_KEY = 'lantern-pinned-worlds';
+function readPinned(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PINNED_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function togglePinned(id: string): void {
+  const now = readPinned();
+  const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
+  try {
+    localStorage.setItem(PINNED_KEY, JSON.stringify(next));
+  } catch {
+    toast('This phone would not keep the pin.');
+  }
+}
+
+/** A world's card with its pin beside it: a separate tap, never inside the card's own link. */
+function pinRow(id: string, card: HTMLElement, on: boolean, after: () => void): HTMLElement {
+  const b = h(
+    'button',
+    { class: `pin-btn${on ? ' on' : ''}`, type: 'button', 'aria-pressed': String(on), 'aria-label': on ? 'Unpin this world' : 'Pin this world to the top', 'data-pin': id },
+    icon('pin', 18, on ? 2.4 : 1.8),
+  );
+  b.addEventListener('click', () => {
+    togglePinned(id);
+    after();
+  });
+  return h('div', { class: 'pin-row' }, card, b);
 }
 
 function saveCopyButton(rec: db.WorldRecord): HTMLElement {
@@ -384,12 +420,24 @@ export function worldsView(): HTMLElement {
     main.replaceChildren(
       topbar('Your worlds', undefined, h('a', { class: 'btn btn-round', href: '#/settings', 'aria-label': 'Settings' }, icon('settings', 20))),
     );
+    // Pinned worlds lead the list, in the order pinned, whatever kind they are (the Captain, #3660).
+    // Each card is built once, then placed: under Pinned, or in its own section.
+    const pinned = readPinned();
+    const pinnedCards = new Map<string, HTMLElement>();
+    const place = (id: string, card: HTMLElement, into: HTMLElement[]) => {
+      const row = pinRow(id, card, pinned.includes(id), () => void render(acct));
+      if (pinned.includes(id)) pinnedCards.set(id, row);
+      else into.push(row);
+    };
+    const pinnedSection = h('div', { class: 'stack' }, h('p', { class: 'section-label' }, 'Pinned'));
+    main.appendChild(pinnedSection);
 
     if (token) {
       const list = h('div', { class: 'stack' }, h('p', { class: 'section-label' }, 'Online'));
+      const cards: HTMLElement[] = [];
       for (const w of acct) {
         const rec = byId.get(w.id);
-        if (rec) list.appendChild(worldCard(rec, waiting.get(w.id) ?? 0));
+        if (rec) place(w.id, worldCard(rec, waiting.get(w.id) ?? 0), cards);
         else {
           const card = h(
             'button',
@@ -412,41 +460,37 @@ export function worldsView(): HTMLElement {
               card.removeAttribute('disabled');
             }
           });
-          list.appendChild(card);
+          place(w.id, card, cards);
         }
       }
       if (!acct.length) list.appendChild(h('p', { class: 'muted', style: 'margin:0' }, 'No worlds on this account yet.'));
-      main.appendChild(list);
+      list.append(...cards);
+      if (acct.length && !cards.length) list.remove();
+      else main.appendChild(list);
     }
 
-    const keyed = recs.filter((r) => r.kind === 'online' && !acct.some((a) => a.id === r.id));
-    if (keyed.length) {
-      main.appendChild(
-        h(
-          'div',
-          { class: 'stack' },
-          h('p', { class: 'section-label' }, token ? 'Opened with a key' : 'Online'),
-          ...keyed.map((r) => worldCard(r, waiting.get(r.id) ?? 0)),
-        ),
-      );
-    }
+    const section = (label: string, cards: HTMLElement[]) => {
+      if (cards.length) main.appendChild(h('div', { class: 'stack' }, h('p', { class: 'section-label' }, label), ...cards));
+    };
+    const keyedCards: HTMLElement[] = [];
+    for (const r of recs.filter((r) => r.kind === 'online' && !acct.some((a) => a.id === r.id))) place(r.id, worldCard(r, waiting.get(r.id) ?? 0), keyedCards);
+    section(token ? 'Opened with a key' : 'Online', keyedCards);
 
-    const local = recs.filter((r) => r.kind === 'local');
-    if (local.length) {
-      main.appendChild(
-        h(
-          'div',
-          { class: 'stack' },
-          h('p', { class: 'section-label' }, 'On this phone only'),
-          ...local.map((r) => h('div', { class: 'local-group' }, worldCard(r, 0), h('div', { class: 'row-gap' }, saveCopyButton(r), putOnlineButton(r, !!token)))),
-        ),
-      );
+    const localCards: HTMLElement[] = [];
+    for (const r of recs.filter((r) => r.kind === 'local')) {
+      const group = h('div', { class: 'local-group' }, worldCard(r, 0), h('div', { class: 'row-gap' }, saveCopyButton(r), putOnlineButton(r, !!token)));
+      place(r.id, group, localCards);
     }
+    section('On this phone only', localCards);
 
-    const demos = recs.filter((r) => r.kind === 'demo');
-    if (demos.length) {
-      main.appendChild(h('div', { class: 'stack' }, h('p', { class: 'section-label' }, 'Demo'), ...demos.map((r) => worldCard(r, 0))));
-    }
+    const demoCards: HTMLElement[] = [];
+    for (const r of recs.filter((r) => r.kind === 'demo')) place(r.id, worldCard(r, 0), demoCards);
+    section('Demo', demoCards);
+
+    // Pinned, in pin order; a pin for a world no longer here is simply not shown.
+    const shown = pinned.filter((id) => pinnedCards.has(id));
+    if (shown.length) pinnedSection.append(...shown.map((id) => pinnedCards.get(id)!));
+    else pinnedSection.remove();
 
     main.appendChild(h('div', { class: 'spacer' }));
     main.appendChild(
@@ -463,7 +507,7 @@ export function worldsView(): HTMLElement {
         : h('a', { class: 'btn btn-quiet', href: '#/signin', style: 'align-self:center' }, 'Sign in to OnlyWorlds'),
     );
     main.appendChild(h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'Join with an invite link'));
-    if (!demos.length) {
+    if (!recs.some((r) => r.kind === 'demo')) {
       const b = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Explore Moppetopia');
       b.addEventListener('click', async () => {
         try {
@@ -544,5 +588,7 @@ export function settingsView(): HTMLElement {
 
 export async function removeWorldFromPhone(id: string): Promise<void> {
   forgetSession(id);
+  // A world opened with a key takes its own PIN with it; your account's PIN stays for your other worlds.
+  setPin({ id }, undefined);
   await db.removeWorld(id);
 }

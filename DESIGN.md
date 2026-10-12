@@ -30,7 +30,7 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 ### Keys and sign-in
 - **Signed in**: today, paste an account token from onlyworlds.com; when Keel #211 lands, sign in with email and password and the phone gets its own token. Lantern lists `GET /api/v2/account/worlds` (owned and shared) and mints a key named for the phone per world it opens (`POST /api/v2/account/worlds/{id}/keys`), revocable on the portal.
 - **A read key** (the demo, a read-shared world): no PIN, no edit controls, no camera.
-- **The PIN** is checked once when you connect and kept for the session; keel checks a sent PIN on reads too (B4). A 401 on a write stops the outbox and asks again; never a retry loop (keel throttles wrong PINs).
+- **The PIN** is the account's: keel keeps one per account and copies it onto every world it owns (Skeld #3674), so Lantern asks once for all your worlds; a world opened with someone else's key keeps its own. Kept on the phone (the Captain #3675), cleared on sign-out, on a wrong try, and with a world removed (`src/pin.ts`). keel checks a sent PIN on reads too (B4). A 401 on a write stops the outbox and asks again; never a retry loop (keel throttles wrong PINs).
 - **A player** joins by the human join link (Keel #212) once #213 is live: open it, see the world and the role, accept.
 - Secrets stay on the device (IndexedDB), never in a URL.
 
