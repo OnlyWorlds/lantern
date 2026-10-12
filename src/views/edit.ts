@@ -9,9 +9,9 @@ import type { WorldSession } from '../world';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
-async function save(s: WorldSession, el: OwElement, values: Record<string, unknown>, close: () => void): Promise<void> {
+async function save(s: WorldSession, el: OwElement, values: Record<string, unknown>, close: () => void, base: OwElement | undefined): Promise<void> {
   try {
-    await s.edit(el.id, values);
+    await s.edit(el.id, values, base);
     close();
     if (!s.isLocal) toast(navigator.onLine ? 'Saved. Sending…' : 'Saved on this phone. It sends when you have signal.');
   } catch (e) {
@@ -29,8 +29,12 @@ function actions(close: () => void, saveLabel = 'Save'): { row: HTMLElement; ok:
 export function editField(s: WorldSession, el: OwElement, field: string): void {
   const info = field === 'name' || field === 'description' || field === 'supertype' || field === 'subtype' ? { type: 'text' as const } : fieldInfo(el.type, field);
   if (!info) return;
+  // The server's copy as the sheet opens it: the edit's base. Taken at save instead, a change
+  // arriving while the sheet is open (the poll) would become the base and be overwritten
+  // without a conflict (the S396 gate).
+  const base = s.serverCopy(el.id);
   if (info.type === 'single_link' || info.type === 'multi_link') {
-    linkSheet(s, el, field, info.type === 'multi_link', info.target ?? '');
+    linkSheet(s, el, field, info.type === 'multi_link', info.target ?? '', base);
     return;
   }
   sheet((close) => {
@@ -81,13 +85,13 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
           v = n;
         }
       }
-      void save(s, el, { [field]: v }, close);
+      void save(s, el, { [field]: v }, close, base);
     });
     return [h('h2', null, fieldLabel(field)), form];
   }, fieldLabel(field));
 }
 
-function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean, target: string): void {
+function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean, target: string, base: OwElement | undefined): void {
   const start = el[field];
   let chosen: string[] = multi ? (Array.isArray(start) ? start.map(String) : []) : typeof start === 'string' ? [start] : [];
   sheet((close) => {
@@ -134,7 +138,7 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
               renderCurrent();
               renderResults();
             } else {
-              void save(s, el, { [field]: x.id }, close);
+              void save(s, el, { [field]: x.id }, close, base);
             }
           });
           return b;
@@ -149,7 +153,7 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
     const form = h('form', { class: 'stack' }, h('label', { class: 'search' }, icon('search', 20), input), results, row);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      void save(s, el, { [field]: multi ? chosen : null }, close);
+      void save(s, el, { [field]: multi ? chosen : null }, close, base);
     });
     if (!multi && !chosen.length) ok.style.display = 'none';
     return [h('h2', null, fieldLabel(field)), current, form];

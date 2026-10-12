@@ -26,6 +26,8 @@ class FakeKeel {
   offline = false;
   calls: string[] = [];
   resyncOnce = false;
+  /** Set: the key is a guest's, and this is its view epoch (bumped by a roster change, no change_seq). */
+  epoch: number | null = null;
   /** Writes wait on this before answering (a send held in flight). */
   gate: Promise<void> | null = null;
   /** The next write is applied, then its answer is lost, and the network stays down. */
@@ -63,17 +65,23 @@ class FakeKeel {
 
     if (path === '/world') return this.json(200, { id: 'w1', name: 'Fake world' });
     if (path === '/changes') {
+      // keel's head read: the world's current change_seq, no bodies (core/changes.py).
+      // A guest's cursors carry the view epoch: "<seq>:<id>:<epoch>" (keel 4b R2).
+      const cur = (seq: number) => (this.epoch === null ? String(seq) : `${seq}:ffffffff:${this.epoch}`);
+      if (url.searchParams.get('head') === 'true') return this.json(200, { head: this.seq, cursor: cur(this.seq) });
       if (this.failZeroWalk && !url.searchParams.get('since')) throw new TypeError('Failed to fetch');
-      if (this.resyncOnce && url.searchParams.get('since')) {
+      const sinceRaw = url.searchParams.get('since');
+      const staleEpoch = this.epoch !== null && sinceRaw && sinceRaw.split(':')[2] !== String(this.epoch);
+      if ((this.resyncOnce || staleEpoch) && sinceRaw) {
         this.resyncOnce = false;
         return this.err(409, 'resync_required');
       }
-      const since = Number(url.searchParams.get('since') ?? 0);
+      const since = Number((sinceRaw ?? '0').split(':')[0]);
       const changes = [
         ...[...this.els.values()].filter((e) => e.change_seq > since).map((e) => ({ op: 'upsert', id: e.id, type: e.type, element: e, change_seq: e.change_seq })),
         ...this.deleted.filter((d) => d.seq > since).map((d) => ({ op: 'delete', id: d.id, type: d.type, change_seq: d.seq })),
       ].sort((a, b) => a.change_seq - b.change_seq);
-      return this.json(200, { cursor: String(this.seq), changes, has_more: false, head: this.seq });
+      return this.json(200, { cursor: cur(this.seq), changes, has_more: false, head: this.seq });
     }
     const m = path.match(/^\/([a-z]+)\/?([^/]*)\/?$/);
     if (!m) return this.err(404, 'not_found');
@@ -164,6 +172,85 @@ describe('pull', () => {
     await s.pull();
     expect(s.get('a')?.name).toBe('Ada');
     expect(s.status).toBe('idle');
+  });
+
+  it('the quiet poll: nothing new draws nothing; a reveal arrives and draws once; never a syncing banner', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    let draws = 0;
+    const statuses: string[] = [];
+    s.subscribe(() => {
+      draws++;
+      statuses.push(s.status);
+    });
+    keel.calls = [];
+    await s.pull(true);
+    expect(draws).toBe(0);
+    // Nothing moved: one head read, no walk, and not the world's name and picture.
+    expect(keel.calls).toEqual(['GET /changes']);
+    keel.put({ id: 'r', type: 'narrative', name: 'A rusted sword' });
+    keel.calls = [];
+    await s.pull(true);
+    expect(s.get('r')?.name).toBe('A rusted sword');
+    expect(keel.calls).toEqual(['GET /changes', 'GET /changes']); // the head moved: the walk
+    expect(draws).toBe(1);
+    expect(statuses).not.toContain('syncing');
+    // Losing signal is still said (a draw); coming back clears it (another).
+    keel.offline = true;
+    await s.pull(true);
+    expect(s.status).toBe('offline');
+    expect(draws).toBe(2);
+    keel.offline = false;
+    await s.pull(true);
+    expect(s.status).toBe('idle');
+    expect(draws).toBe(3);
+  });
+
+  it("a guest's view changing with no change in the world (a Character taken away) reaches the phone by the poll", async () => {
+    keel.epoch = 1;
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'secret', type: 'narrative', name: 'What Ada knew' });
+    const s = await freshWorld();
+    await s.pull();
+    expect(s.get('secret')).toBeDefined();
+    // The owner takes the guest's Character: the element leaves the view, the head does not move.
+    keel.els.delete('secret');
+    keel.epoch = 2;
+    await s.pull(true);
+    expect(s.get('secret')).toBeUndefined();
+    expect(s.status).toBe('idle');
+    // Settled: the next poll is one head read again.
+    keel.calls = [];
+    await s.pull(true);
+    expect(keel.calls).toEqual(['GET /changes']);
+  });
+
+  it('a change that arrives while an edit sheet is open is a conflict, never silently overwritten', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada', description: 'A smith.' });
+    const s = await freshWorld();
+    await s.pull();
+    setSessionPin(s.id, keel.pin);
+    // The player opens the description: the base is taken now.
+    const atOpen = s.serverCopy('a');
+    // The game master changes the same field; the poll brings it in while the sheet is open.
+    keel.put({ ...keel.els.get('a')!, description: 'A smith, and a spy.' });
+    await s.pull(true);
+    expect(s.get('a')?.description).toBe('A smith, and a spy.');
+    // The player saves what they typed over the old text.
+    await s.edit('a', { description: 'A smith who sings.' }, atOpen);
+    await s.flush();
+    expect(keel.els.get('a')!.description).toBe('A smith, and a spy.');
+    expect(s.outbox[0]?.state).toBe('needs-you');
+  });
+
+  it('a quiet poll before the first full read is a full read', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull(true);
+    expect(s.get('a')?.name).toBe('Ada');
+    // The world's own read went too (the quiet poll skips it once a copy exists).
+    expect(keel.calls).toContain('GET /world');
   });
 
   it('offline: keeps what the phone has and says so', async () => {

@@ -16,10 +16,16 @@ function show(s: WorldSession, type: string, field: string, v: unknown): string 
   return String(v);
 }
 
+// The choices made on a conflict, kept outside its card: a redraw (a change arriving from the
+// poll) rebuilds the cards and must not put a choice back (the S396 gate).
+const choices = new Map<string, Set<string>>();
+
 function conflictCard(s: WorldSession, row: OutboxRow): HTMLElement {
   const current = row.current as OwElement;
   const moved = movedFields(row, current);
-  const mine = new Set(moved);
+  const key = `${row.id}:${row.seq}:${String(current.change_seq ?? '')}`;
+  const mine = choices.get(key) ?? new Set(moved);
+  choices.set(key, mine);
   const card = h('div', { class: 'conflict', 'data-conflict': row.id });
   const render = () => {
     const pairs = moved.map((f) => {

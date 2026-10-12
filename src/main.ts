@@ -162,6 +162,20 @@ function onBehind(): void {
   activeSession?.touch();
 }
 
+// While the app is open and in front, it looks for changes now and then, quietly: what the game
+// master gives the party reaches a player's phone during the session, not at the next launch.
+// Hidden, it stops (the return to the front pulls at once, below).
+const POLL_MS = 20_000;
+window.setInterval(() => {
+  const s = activeSession;
+  if (document.visibilityState !== 'visible' || !navigator.onLine || !s) return;
+  // A key keel no longer takes is said once; asking every 20 s would not change the answer.
+  if (s.keyRefused) return;
+  // Changes still waiting go with it: a send that failed while the phone thought it had signal
+  // is tried again here, so its banner comes back instead of the poll quietly clearing it.
+  void s.pull(true).then(() => (s.waitingCount() && !s.needPin ? s.flush() : undefined));
+}, POLL_MS);
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   void checkForUpdate(onBehind);

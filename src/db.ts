@@ -23,6 +23,8 @@ export interface WorldRecord {
   count?: number;
   /** The /changes cursor: opaque, stored verbatim. */
   cursor?: string;
+  /** The feed's head when the last walk finished: the quiet poll's "anything new?" compares with it. */
+  appliedHead?: number | string;
   lastSync?: string;
   /** Put it online, under way: the account world already made, and the bulk's key, so a retry repeats nothing. */
   pendingOnline?: { serverId: string; key: string; bulkKey: string };

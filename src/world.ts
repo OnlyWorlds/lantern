@@ -64,6 +64,17 @@ export function movedFields(row: OutboxRow, current: OwElement): string[] {
 const sessions = new Map<string, Promise<WorldSession>>();
 
 /** Whether this phone can change the world: one on this phone, or a write key (not the demo). */
+/**
+ * The view epoch in a guest's feed cursor ("<seq>:<id>:<epoch>"), or null for any other shape.
+ * The one place Lantern reads inside the opaque cursor, for the poll's "did my view change?"
+ * (keel's own documented tip format, core/changes.py; asked of Skeld to bless or replace).
+ */
+export function cursorEpoch(cursor: unknown): string | null {
+  if (cursor === undefined || cursor === null) return null;
+  const parts = String(cursor).split(':');
+  return parts.length === 3 ? parts[2] : null;
+}
+
 export function recordCanWrite(rec: WorldRecord): boolean {
   if (rec.kind === 'local') return true;
   if (rec.kind === 'demo' || !rec.apiKey || isDemoKey(rec.apiKey)) return false;
@@ -285,28 +296,60 @@ export class WorldSession {
 
   // ---------- pulling ----------
 
-  pull(): Promise<void> {
+  /**
+   * quiet: the poll while the app is open (a reveal reaching a player at the table). It says
+   * nothing while it looks, skips the world's name and picture, and redraws only on a change.
+   */
+  pull(quiet = false): Promise<void> {
     if (this.isLocal || !this.rec.apiKey) return Promise.resolve();
-    this.pulling ??= this.doPull().finally(() => {
+    // A quiet poll before the first full read has nothing to be quiet about: the full read goes.
+    this.pulling ??= this.doPull(false, quiet && !!this.rec.cursor).finally(() => {
       this.pulling = null;
     });
     return this.pulling;
   }
 
-  private async doPull(resynced = false): Promise<void> {
-    this.status = 'syncing';
-    this.statusText = this.rec.cursor ? 'Checking for changes' : 'Fetching the world';
-    this.emit();
+  private async doPull(resynced = false, quiet = false): Promise<void> {
+    const before = { status: this.status, text: this.statusText };
+    if (!quiet) {
+      this.status = 'syncing';
+      this.statusText = this.rec.cursor ? 'Checking for changes' : 'Fetching the world';
+      this.emit();
+    }
+    let changed = !quiet;
     // Reads need no PIN (keel checks one if sent, and a wrong one would fail the read).
     const c = this.client(false);
     try {
-      const meta = await c.getWorld();
-      const rec = await db.updateWorldRecord(this.id, {
-        name: meta.name,
-        description: typeof meta.description === 'string' ? meta.description : undefined,
-        image_url: typeof meta.image_url === 'string' ? meta.image_url : undefined,
-      });
-      if (rec) this.rec = rec;
+      if (!quiet) {
+        const meta = await c.getWorld();
+        const rec = await db.updateWorldRecord(this.id, {
+          name: meta.name,
+          description: typeof meta.description === 'string' ? meta.description : undefined,
+          image_url: typeof meta.image_url === 'string' ? meta.image_url : undefined,
+        });
+        if (rec) this.rec = rec;
+      }
+
+      // The quiet poll asks first whether anything moved: keel's head read is an index lookup,
+      // no bodies (Skeld, h29 #3511). Compared with the head this phone last APPLIED, so a missed
+      // poll never drops a change; a head behind it (a restore) walks again too.
+      if (quiet && !resynced && this.rec.appliedHead !== undefined) {
+        const tip = await c.request<{ head?: number | string; cursor?: number | string }>('GET', '/changes', { query: 'head=true' });
+        // A guest's view can change with no change in the world (a Character given or taken, a
+        // role, the membership gone: keel bumps the view's epoch, not the head). The tip cursor
+        // carries that epoch (keel core/changes.py: "<seq>:<max uuid>:<epoch>"); a different
+        // one walks, and the walk meets resync_required (the S396 gate).
+        const sameView = cursorEpoch(tip.cursor) === cursorEpoch(this.rec.cursor);
+        if (String(tip.head) === String(this.rec.appliedHead) && sameView) {
+          this.status = 'idle';
+          this.statusText = '';
+          if (this.status !== before.status || this.statusText !== before.text) {
+            this.rebuild();
+            this.emit();
+          }
+          return;
+        }
+      }
 
       const gen = c.changesAll(resynced ? undefined : this.rec.cursor);
       let puts: OwElement[] = [];
@@ -340,6 +383,7 @@ export class WorldSession {
           }
           const rec2 = await db.updateWorldRecord(this.id, {
             cursor: r.value.cursor,
+            appliedHead: r.value.head,
             lastSync: new Date().toISOString(),
             count: this.truth.size,
           });
@@ -350,6 +394,7 @@ export class WorldSession {
         if (ch.op === 'upsert') puts.push({ ...ch.element, type: ch.type, id: ch.id });
         else dels.push(ch.id);
         seen++;
+        changed = true;
         if (puts.length + dels.length >= 500) {
           await flushBatch();
           this.statusText = `Fetching the world · ${seen.toLocaleString('en')}`;
@@ -357,6 +402,7 @@ export class WorldSession {
         }
       }
       this.status = 'idle';
+      this.keyRefused = false;
       this.statusText = '';
     } catch (e) {
       if (e instanceof OwApiError && e.isResyncRequired && !resynced) {
@@ -365,11 +411,17 @@ export class WorldSession {
       }
       this.setError(e);
     }
+    // A quiet poll that found nothing new and changed no status draws nothing.
+    if (!changed && this.status === before.status && this.statusText === before.text) return;
     this.rebuild();
     this.emit();
   }
 
+  /** The last read was refused for the key itself (401/403): the poll stops asking until a full pull. */
+  keyRefused = false;
+
   private setError(e: unknown): void {
+    this.keyRefused = e instanceof OwApiError && (e.status === 401 || e.status === 403);
     if (e instanceof OwNetworkError || (e instanceof TypeError && /fetch|network/i.test(e.message))) {
       this.status = 'offline';
       this.statusText = 'No connection: showing what this phone has';
@@ -384,8 +436,17 @@ export class WorldSession {
 
   // ---------- writing ----------
 
-  /** An edit: saved to the outbox first, shown at once, sent when it can be. */
-  async edit(id: string, values: Record<string, unknown>): Promise<void> {
+  /** The server's copy of an element as this phone last read it (no outbox laid on top). */
+  serverCopy(id: string): OwElement | undefined {
+    return this.truth.get(id);
+  }
+
+  /**
+   * An edit: saved to the outbox first, shown at once, sent when it can be. `baseAtOpen` is the
+   * server's copy when the user started the edit: a change that arrived since then is a conflict
+   * for the 412 rule to judge, never a silent base.
+   */
+  async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement): Promise<void> {
     if (!this.canWrite) throw new Error('This world is read-only here.');
     if (this.isLocal) {
       const cur = this.truth.get(id) ?? ({ id, type: values.type as string, name: '' } as OwElement);
@@ -406,7 +467,7 @@ export class WorldSession {
       // A row for this element still in the outbox (being sent, a create not landed, a conflict):
       // this edit follows it, and its base is the server's copy at the moment it is sent.
       const behind = this.outbox.some((r) => r.id === id);
-      const base = behind ? undefined : this.truth.get(id);
+      const base = behind ? undefined : baseAtOpen ?? this.truth.get(id);
       const row: OutboxRow = {
         op: behind || base ? 'patch' : 'create',
         type: el.type,
