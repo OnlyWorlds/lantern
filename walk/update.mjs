@@ -3,7 +3,7 @@
 //   node walk/update.mjs
 import { chromium, webkit, devices } from 'playwright';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const BASE = 'http://localhost:5181';
 let failures = 0;
@@ -47,7 +47,51 @@ async function walk(engine, deviceName, tag) {
   await browser.close();
 }
 
+// A deploy's cutover (Boss h37 #3518): the new worker and assets are live while "/" is still the
+// previous shell. The new worker must refuse to install (it would store the old shell under the new
+// build); once "/" is the new shell, it installs.
+const nextWorker = (page) =>
+  page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const settled = new Promise((res) => {
+      reg.addEventListener(
+        'updatefound',
+        () => {
+          const w = reg.installing;
+          w.addEventListener('statechange', () => {
+            if (w.state === 'installed' || w.state === 'redundant') res(w.state);
+          });
+        },
+        { once: true },
+      );
+      setTimeout(() => res('no update found'), 15000);
+    });
+    await reg.update().catch(() => {});
+    return settled;
+  });
+
+async function cutover(engine, deviceName, tag) {
+  build();
+  const oldShell = readFileSync('dist/index.html', 'utf8');
+  const browser = await engine.launch();
+  const ctx = await browser.newContext({ ...devices[deviceName] });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/#/`);
+  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 15000 });
+  build();
+  const newShell = readFileSync('dist/index.html', 'utf8');
+  writeFileSync('dist/index.html', oldShell);
+  const during = await nextWorker(page);
+  check(tag, during === 'redundant', `a new worker meeting the previous shell at "/" refuses to install (${during})`);
+  writeFileSync('dist/index.html', newShell);
+  const after = await nextWorker(page);
+  check(tag, after === 'installed', `with the new shell at "/" it installs (${after})`);
+  await browser.close();
+}
+
 await walk(chromium, 'Pixel 7', 'pixel');
 await walk(webkit, 'iPhone 13', 'iphone');
+await cutover(chromium, 'Pixel 7', 'pixel');
+await cutover(webkit, 'iPhone 13', 'iphone');
 console.log(failures ? `${failures} FAILED` : 'all ok');
 process.exit(failures ? 1 : 0);

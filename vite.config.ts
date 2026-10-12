@@ -43,9 +43,14 @@ function lanternWorker(): Plugin {
         // is precached as "/" itself (probed on the preview, 2026-10-12).
         .map((p) => (p === 'index.html' ? '/' : '/' + p))
         .sort();
+      // The scripts this build's shell loads: the worker refuses a "/" that does not name them (a
+      // deploy's cutover can serve the previous shell for a moment, Boss h37 #3518).
+      const shellScripts = [...readFileSync(join(outDir, 'index.html'), 'utf8').matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
+      if (!shellScripts.length) throw new Error('lantern-worker: the shell loads no script');
       const sw = readFileSync('sw/sw.js', 'utf8')
         .replace('__BUILD_ID__', BUILD_ID)
-        .replace('__PRECACHE__', JSON.stringify(files));
+        .replace('__PRECACHE__', JSON.stringify(files))
+        .replace('__SHELL_SCRIPTS__', JSON.stringify(shellScripts));
       writeFileSync(join(outDir, 'sw.js'), sw);
       writeFileSync(join(outDir, 'version.json'), JSON.stringify({ build: BUILD_ID }) + '\n');
     },

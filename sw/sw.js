@@ -6,6 +6,7 @@
 // to the host, which answers 404 for what does not exist.
 const BUILD = '__BUILD_ID__';
 const PRECACHE = __PRECACHE__;
+const SHELL_SCRIPTS = __SHELL_SCRIPTS__;
 const CACHE = `lantern-${BUILD}`;
 const SHELL = new Set(['/', '/index.html']);
 
@@ -17,6 +18,12 @@ self.addEventListener('install', (event) => {
         const res = await fetch(path, { cache: 'reload' });
         // Never store a redirect or an error under a precache path.
         if (!res.ok || res.redirected) throw new Error(`precache refused ${path}: ${res.status}`);
+        // Nor another build's shell: during a deploy's cutover "/" can still be the previous one
+        // (Boss h37 #3518), and stored under this build it would load scripts this cache lacks.
+        if (SHELL.has(path)) {
+          const html = await res.clone().text();
+          if (!SHELL_SCRIPTS.every((src) => html.includes(src))) throw new Error(`precache refused ${path}: another build's shell`);
+        }
         await cache.put(path, res);
       }
     })(),
