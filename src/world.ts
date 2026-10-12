@@ -75,6 +75,13 @@ export function cursorEpoch(cursor: unknown): string | null {
   return parts.length === 3 ? parts[2] : null;
 }
 
+/** keel's head is a change_seq; one below the head this phone applied means a rewind. */
+export function headBehind(head: unknown, applied: unknown): boolean {
+  const h = Number(head);
+  const a = Number(applied);
+  return head != null && applied != null && Number.isFinite(h) && Number.isFinite(a) && h < a;
+}
+
 export function recordCanWrite(rec: WorldRecord): boolean {
   if (rec.kind === 'local') return true;
   if (rec.kind === 'demo' || !rec.apiKey || isDemoKey(rec.apiKey)) return false;
@@ -332,9 +339,9 @@ export class WorldSession {
 
       // The quiet poll asks first whether anything moved: keel's head read is an index lookup,
       // no bodies (Skeld, h29 #3511). Compared with the head this phone last APPLIED, so a missed
-      // poll never drops a change; a head behind it (a restore) walks again too.
+      // poll never drops a change; a head behind it (a rewind) walks, and the walk's end reads again.
       if (quiet && !resynced && this.rec.appliedHead !== undefined) {
-        const tip = await c.request<{ head?: number | string; cursor?: number | string }>('GET', '/changes', { query: 'head=true' });
+        const tip = await c.changesHead();
         // A guest's view can change with no change in the world (a Character given or taken, a
         // role, the membership gone: keel bumps the view's epoch, not the head). The tip cursor
         // carries that epoch (keel core/changes.py: "<seq>:<max uuid>:<epoch>"); a different
@@ -376,6 +383,9 @@ export class WorldSession {
       for (;;) {
         const r = await gen.next();
         if (r.done) {
+          // A rewound world (restored from a backup): the walk from a cursor past the head brought
+          // nothing and ends at a head behind the one applied, so read it again from zero (keel's word).
+          if (!fresh && headBehind(r.value.head, this.rec.appliedHead)) return this.doPull(true);
           await flushBatch();
           if (fresh) {
             await db.clearElements(this.id);

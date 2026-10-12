@@ -226,6 +226,33 @@ describe('pull', () => {
     expect(keel.calls).toEqual(['GET /changes']);
   });
 
+  it('a world rewound behind the head this phone applied is read again from zero, by the poll and by a full read', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bren' });
+    const s = await freshWorld();
+    await s.pull();
+    expect(s.get('b')).toBeDefined();
+    // keel is restored to a backup from before Bren: the head goes back to 1.
+    keel.els.delete('b');
+    keel.seq = 1;
+    await s.pull(true);
+    expect(s.get('b')).toBeUndefined();
+    expect(s.get('a')?.name).toBe('Ada');
+    // Settled: the next poll is one head read again.
+    keel.calls = [];
+    await s.pull(true);
+    expect(keel.calls).toEqual(['GET /changes']);
+    // The same rewind met by a full read (on open): its walk ends behind the head applied.
+    keel.put({ id: 'c', type: 'character', name: 'Cass' });
+    await s.pull();
+    expect(s.get('c')).toBeDefined();
+    keel.els.delete('c');
+    keel.seq = 1;
+    await s.pull();
+    expect(s.get('c')).toBeUndefined();
+    expect(s.status).toBe('idle');
+  });
+
   it('a change that arrives while an edit sheet is open is a conflict, never silently overwritten', async () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada', description: 'A smith.' });
     const s = await freshWorld();
