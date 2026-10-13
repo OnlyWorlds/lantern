@@ -4,6 +4,7 @@
 // opens the place; a picture added after the element was made (camera or gallery); the tab bar on
 // every screen, World going home; Ask says why it gives no sentence.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/first-walk.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 

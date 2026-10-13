@@ -1,4 +1,5 @@
 // After a live walk: no scratch element may remain. Run with the same env as live-write.mjs.
+import './guard.mjs';
 import { OwV2Client } from '@onlyworlds/sdk';
 const api = new OwV2Client({ apiKey: process.env.OW_WRITE_KEY ?? process.env.OW_DEMO_WRITE_KEY });
 const left = [];

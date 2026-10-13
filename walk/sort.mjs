@@ -6,6 +6,7 @@
 // keeps the spent sort; the ticked rows land in the outbox (a make with its edited name, an
 // addition, an ask's pick) and the notes are filed as Sorted; an unticked row writes nothing.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/sort.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 

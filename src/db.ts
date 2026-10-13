@@ -77,11 +77,23 @@ function done(t: IDBTransaction): Promise<void> {
   });
 }
 
-function open(name: string, version: number, upgrade: (db: IDBDatabase) => void): Promise<IDBDatabase> {
+/**
+ * `gone`: this connection closed because a newer build asked for a newer shape (another tab, or
+ * the page after a reload). The caller forgets it, so the next use opens the new shape; without
+ * this an old tab left open would block the upgrade (the security pass, F7).
+ */
+function open(name: string, version: number, upgrade: (db: IDBDatabase) => void, gone?: () => void): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open(name, version);
     r.onupgradeneeded = () => upgrade(r.result);
-    r.onsuccess = () => resolve(r.result);
+    r.onsuccess = () => {
+      const db = r.result;
+      db.onversionchange = () => {
+        db.close();
+        gone?.();
+      };
+      resolve(db);
+    };
     r.onerror = () => reject(r.error);
     r.onblocked = () => reject(new Error(`database ${name} is blocked by another tab`));
   });
@@ -91,10 +103,15 @@ function open(name: string, version: number, upgrade: (db: IDBDatabase) => void)
 
 let appDb: Promise<IDBDatabase> | null = null;
 function app(): Promise<IDBDatabase> {
-  appDb ??= open('lantern', 1, (db) => {
-    db.createObjectStore('worlds', { keyPath: 'id' });
-    db.createObjectStore('kv');
-  }).catch((e) => {
+  appDb ??= open(
+    'lantern',
+    1,
+    (db) => {
+      db.createObjectStore('worlds', { keyPath: 'id' });
+      db.createObjectStore('kv');
+    },
+    () => (appDb = null),
+  ).catch((e) => {
     appDb = null; // a blocked or failed open is tried again next time, not cached
     throw e;
   });
@@ -162,10 +179,15 @@ const worldDbName = (id: string) => `lantern-world-${id}`;
 function world(id: string): Promise<IDBDatabase> {
   let p = worldDbs.get(id);
   if (!p) {
-    p = open(worldDbName(id), 1, (db) => {
-      db.createObjectStore('elements', { keyPath: 'id' });
-      db.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true });
-    }).catch((e) => {
+    p = open(
+      worldDbName(id),
+      1,
+      (db) => {
+        db.createObjectStore('elements', { keyPath: 'id' });
+        db.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true });
+      },
+      () => worldDbs.delete(id),
+    ).catch((e) => {
       worldDbs.delete(id);
       throw e;
     });

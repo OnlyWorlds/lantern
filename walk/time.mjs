@@ -3,6 +3,7 @@
 // and what has not, an Event under way says so, an undated one stays reachable, nothing spills at 320.
 // A world with no Event offers no list.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/time.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';

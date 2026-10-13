@@ -2,6 +2,7 @@
 // the rest) opens on this phone; they read under "Your fields", Atlas's machinery (atlas_) never shows,
 // text and numbers change from their row, a list reads only, find finds them, nothing spills at 320.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/custom.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';

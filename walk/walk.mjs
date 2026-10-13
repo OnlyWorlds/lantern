@@ -1,6 +1,7 @@
 // Lantern walked as a phone taps it: .tap() on device profiles, WebKit and Chromium, against the
 // production build (vite preview on :5181, so the worker is real), airplane mode included.
 // Run: npm run build && (npx vite preview &) && node walk/walk.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';

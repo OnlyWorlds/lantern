@@ -1,6 +1,7 @@
 // Shared from another app, as Android's share sheet does it: the start URL opened with title,
 // text and url in its query (the manifest's GET share_target). Both engines.
 // Run: npm run build && (npx vite preview &) && node walk/share.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';

@@ -3,6 +3,7 @@
 // clock runs the app's timers, so twenty seconds pass in a moment. Checks: a poll every 20 s while
 // in front, quiet (no banner); a reveal arrives on the player's home without a tap; hidden, no poll.
 // Run: npm run build && (npx vite preview &) && node walk/poll.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';

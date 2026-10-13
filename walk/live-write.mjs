@@ -2,6 +2,7 @@
 // with their uploaded picture. Keys come from the environment and never reach a screenshot
 // (the inputs are password fields) or a log.
 //   OW_WRITE_KEY=... OW_PIN_FILE=... node walk/live-write.mjs
+import './guard.mjs';
 import { chromium, devices } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { OwV2Client } from '@onlyworlds/sdk';

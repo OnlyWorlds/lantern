@@ -2,6 +2,7 @@
 // worlds as before; "Sign out and remove your worlds" removes the account's (the records with a role)
 // after a second tap that says what goes with them, and keeps a world opened with someone's key.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/signout.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';

@@ -1,6 +1,7 @@
 // The map, walked on the demo world (Moppetopia: two maps with pictures online, pins, zones from
 // markers) as a phone taps it, both engines. Read only, so it runs against live keel safely.
 // Run: npm run build && (npx vite preview &) && node walk/map.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';

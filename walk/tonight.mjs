@@ -2,6 +2,7 @@
 // pages; they lead the world's home in the order kept; let one go from its page, clear the list from
 // the home; another world on the phone keeps its own list.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/tonight.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';

@@ -5,6 +5,7 @@
 // which Collective is the party and remembers it; the reveal carries its own name, line and
 // picture, is told to the party and links the thing; Change keeps what was typed.
 // Run: npm run build && (npx vite preview &) && node walk/party.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 

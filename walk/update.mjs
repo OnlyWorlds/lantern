@@ -1,6 +1,7 @@
 // A pinned phone meets a newer build: the banner shows, the outbox holds, Reload lands on the
 // new build. Builds twice into dist/ while vite preview (:5181) serves it.
 //   node walk/update.mjs
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';

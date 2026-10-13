@@ -4,6 +4,7 @@
 // above its sources; a redraw keeps it; the allowance and a pause get their own sentences.
 // Workers blocked: with one in control, Playwright's WebKit does not route the page's requests.
 // Run: npm run build && (npx vite preview &) && node walk/ask.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 

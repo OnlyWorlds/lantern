@@ -3,6 +3,7 @@
 // keel's tests, since a good link is the owner's to make: shared from a chat, the link opens the
 // invite; "Sign in to join" keeps it through the sign-in; no PIN gets its own sentence.
 // Run: npm run build && (npx vite preview &) && node walk/join.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 

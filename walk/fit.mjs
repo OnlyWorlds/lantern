@@ -3,6 +3,7 @@
 // the lines each control's text paints, per text leaf (a .choice's title and hint are two leaves by
 // design). Pointed at a known two-line label first, so a zero is a measurement, not a blind spot.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/fit.mjs [webkit|chromium]
+import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
