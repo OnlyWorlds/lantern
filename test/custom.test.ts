@@ -61,6 +61,14 @@ describe('custom fields', () => {
     ]);
   });
 
+  it("a world's clock survives Save a copy and Open a world file, under Atlas's folder names", async () => {
+    const rec = { id: 'w0000000-0000-4000-8000-0000000000c2', name: 'Clock round trip', kind: 'local' as const, addedAt: '', timeNow: 453, timeUnit: 'Year' };
+    const { bytes } = toWorldFile(rec, []);
+    const id = await openWorldFile(bytes);
+    const back = await db.getWorldRecord(id);
+    expect([back?.timeNow, back?.timeUnit]).toEqual([453, 'Year']);
+  });
+
   it('survive Save a copy and Open a world file', async () => {
     const els = [{ id: 'c1111111-0000-4000-8000-000000000001', type: 'character', name: 'Ada', x_mood: 'grim', x_height_cm: 172, x_tags: ['a', 'b'] }];
     const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000c1', name: 'Custom round trip', kind: 'local', addedAt: '' }, els);

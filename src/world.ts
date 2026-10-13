@@ -18,6 +18,7 @@ import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
 import { isEmptyValue } from './schema';
 import { pinFor, setPin } from './pin';
+import { clockFrom } from './time';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 
@@ -321,6 +322,10 @@ export class WorldSession {
           name: meta.name,
           description: typeof meta.description === 'string' ? meta.description : undefined,
           image_url: typeof meta.image_url === 'string' ? meta.image_url : undefined,
+          ...(() => {
+            const k = clockFrom(meta as unknown as Record<string, unknown>);
+            return { timeNow: k.now, timeUnit: k.unit };
+          })(),
         });
         if (rec) this.rec = rec;
       }

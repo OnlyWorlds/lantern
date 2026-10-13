@@ -20,6 +20,7 @@ import {
 import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
 import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
+import { dateText } from '../time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
@@ -228,6 +229,15 @@ export function homeView(s: WorldSession): View {
             { class: 'choice', href: `#/w/${s.id}/t/narrative?unsorted` },
             h('b', null, `Unsorted · ${unsorted.length}`),
             h('span', null, 'Caught and not yet turned into elements'),
+          )
+        : '',
+      // Before now (src/views/time.ts): only once the world has an Event to put in order.
+      (counts.get('event') ?? 0) > 0
+        ? h(
+            'a',
+            { class: 'choice', href: `#/w/${s.id}/time`, 'data-action': 'before-now' },
+            h('b', null, 'Before now'),
+            h('span', null, s.rec.timeNow === undefined ? 'The Events in the order they happened' : `The Events in order, up to ${dateText(s.rec.timeNow, s.rec.timeUnit)}`),
           )
         : '',
       h('p', { class: 'section-label' }, 'In this world'),

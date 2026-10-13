@@ -9,6 +9,9 @@ export interface WorldRecord {
   name: string;
   description?: string;
   image_url?: string;
+  /** The world's now and its unit (keel's time_range_current, time_basic_unit): src/time.ts. */
+  timeNow?: number;
+  timeUnit?: string;
   kind: WorldKind;
   /** The world key (ow_w_, ow_r_ or a legacy 10-digit key). Absent for a world on this phone only. */
   apiKey?: string;

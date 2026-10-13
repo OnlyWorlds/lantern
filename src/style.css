@@ -474,6 +474,29 @@ h2 {
   flex-direction: column;
 }
 
+/* Before now (src/views/time.ts): the world's now as a line across the list, and what comes after it quieter. */
+.now-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--lan-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.now-line::before,
+.now-line::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: var(--lan-accent);
+  opacity: 0.6;
+}
+.results.after {
+  opacity: 0.7;
+}
+
 .el-row {
   display: flex;
   align-items: center;

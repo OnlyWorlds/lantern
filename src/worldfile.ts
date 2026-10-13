@@ -5,6 +5,7 @@
 import { readWorldFile, SPATIAL_TYPES, writeWorldFile, type OwElement, type OwWorldFileEntry } from '@onlyworlds/sdk';
 import * as db from './db';
 import { isType } from './schema';
+import { clockFrom } from './time';
 
 const SPATIAL = new Set<string>(SPATIAL_TYPES);
 /** Where a type's files live in a world folder. */
@@ -52,6 +53,9 @@ function fileName(id: string, name: string | undefined, used: Set<string>): stri
 export function toWorldFile(rec: db.WorldRecord, elements: OwElement[]): { bytes: Uint8Array; name: string } {
   const world: Record<string, unknown> = { id: rec.id, name: rec.name };
   if (rec.description) world.description = rec.description;
+  // The folder spec's names for the clock (Atlas reads both spellings of now).
+  if (rec.timeNow !== undefined) world.time_current = rec.timeNow;
+  if (rec.timeUnit) world.time_basic_unit = rec.timeUnit;
   const files: OwWorldFileEntry[] = [{ path: 'world.json', data: enc.encode(JSON.stringify(world, null, 2) + '\n') }];
   const used = new Map<string, Set<string>>();
   for (const el of [...elements].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -113,6 +117,8 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
     id: read.worldId,
     name: read.name || 'Opened world',
     description: typeof read.world.description === 'string' ? read.world.description : undefined,
+    timeNow: clockFrom(read.world as Record<string, unknown>).now,
+    timeUnit: clockFrom(read.world as Record<string, unknown>).unit,
     kind: 'local',
     count: elements.length,
     addedAt: new Date().toISOString(),
