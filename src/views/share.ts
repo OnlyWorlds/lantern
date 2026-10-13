@@ -1,25 +1,27 @@
 // Shared from another app: which world the note goes to. One world that takes changes goes
-// straight to its catch screen; several ask; none says how to get one.
+// straight to its catch screen; several ask; none says how to get one. The home-screen icon's Catch
+// shortcut (the manifest's shortcuts, Android) asks the same, with no note riding along.
 import { h } from '../dom';
 import * as db from '../db';
 import { hasShared } from '../share';
 import { go, topbar } from '../ui';
 import { recordCanWrite } from '../world';
 
-export async function shareView(): Promise<HTMLElement> {
-  if (!hasShared()) {
+export async function shareView(shortcut = false): Promise<HTMLElement> {
+  const q = shortcut ? '' : '?shared';
+  if (!shortcut && !hasShared()) {
     go('#/worlds', true);
     return h('main', { class: 'screen' });
   }
   const worlds = (await db.listWorlds()).filter(recordCanWrite).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   if (worlds.length === 1) {
-    go(`#/w/${worlds[0].id}/capture?shared`, true);
+    go(`#/w/${worlds[0].id}/capture${q}`, true);
     return h('main', { class: 'screen' });
   }
   return h(
     'main',
     { class: 'screen', 'data-screen': 'share' },
-    topbar('Catch this', '#/worlds'),
+    topbar(shortcut ? 'Catch' : 'Catch this', '#/worlds'),
     worlds.length
       ? h(
           'div',
@@ -28,7 +30,7 @@ export async function shareView(): Promise<HTMLElement> {
           ...worlds.map((w) =>
             h(
               'a',
-              { class: 'choice', href: `#/w/${w.id}/capture?shared` },
+              { class: 'choice', href: `#/w/${w.id}/capture${q}` },
               h('b', null, w.name || 'Unnamed world'),
               h('span', null, w.kind === 'local' ? 'On this phone' : 'Online'),
             ),
@@ -37,7 +39,7 @@ export async function shareView(): Promise<HTMLElement> {
       : h(
           'div',
           { class: 'stack' },
-          h('p', { class: 'empty' }, 'No world here takes changes yet. Start one on this phone, or sign in, then share again.'),
+          h('p', { class: 'empty' }, 'No world here takes changes yet. Start one on this phone, or sign in, then try again.'),
           h('a', { class: 'btn btn-primary', href: '#/new' }, 'Start a world on this phone'),
         ),
   );

@@ -110,6 +110,9 @@ async function route(): Promise<void> {
     case 'share':
       mount(await shareView());
       return;
+    case 'catch':
+      mount(await shareView(true));
+      return;
     case 'join':
       mount(await joinView(sharedJoin));
       sharedJoin = null;
