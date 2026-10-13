@@ -22,6 +22,7 @@ import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
 import { dateText } from '../time';
+import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
@@ -666,6 +667,22 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     s.touch();
   });
   acts.push(keepBtn);
+  // An Event's start as the world's now (Before now): the owner's, at the table. A world-wide
+  // change, so the first tap says what it does and the second makes it.
+  const start = el.start_date;
+  if (el.type === 'event' && s.canMoveNow && typeof start === 'number' && Number.isInteger(start) && start !== s.rec.timeNow) {
+    const b = h('button', { class: 'btn btn-pill', type: 'button', 'data-action': 'make-now' }, icon('check', 16), 'Make this now');
+    let armed = false;
+    b.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        b.lastChild!.textContent = `Move now to ${dateText(start, s.rec.timeUnit)}? Tap again`;
+        return;
+      }
+      void moveNow(s, start);
+    });
+    acts.push(b);
+  }
   if (s.canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
     const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('reveal', 16), 'Give it to the party');
     b.addEventListener('click', () => giveToParty(s, el));

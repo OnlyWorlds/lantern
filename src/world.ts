@@ -282,6 +282,44 @@ export class WorldSession {
     return !!pinFor(this.rec);
   }
 
+  /**
+   * Who may move the world's now from this phone: keel lets only the owner change a world's own
+   * settings, a co-builder's key included (403 owner_only, Skeld h37 #4085). A key with no account
+   * role may be the owner's own: it is let try, and keel's answer is said.
+   */
+  get canMoveNow(): boolean {
+    return this.isLocal || (this.canWrite && this.rec.role !== 'collaborator' && this.rec.memberRole !== 'guest');
+  }
+
+  /**
+   * Move the world's now (Before now; the Captain h37 #4087). A world setting, not an element: it
+   * goes at once with the PIN, never through the outbox, so it needs signal; a world on this
+   * phone only keeps it here. The caller asks for the PIN first when none is held.
+   */
+  async setNow(n: number): Promise<void> {
+    if (!Number.isInteger(n)) throw new Error('A whole number, please.');
+    if (!this.isLocal) {
+      if (!navigator.onLine) throw new Error('Moving now needs signal. Try again when you have it.');
+      try {
+        const meta = await this.client(true).patchWorld({ time_range_current: n });
+        const k = clockFrom(meta as unknown as Record<string, unknown>);
+        n = k.now ?? n;
+        if (k.unit) this.rec = { ...this.rec, timeUnit: k.unit };
+      } catch (e) {
+        if (e instanceof OwApiError && e.isOwnerOnly) throw new Error("Only the world's owner can move its now.");
+        if (e instanceof OwApiError && e.status === 401) {
+          // A wrong PIN: cleared, never retried (keel throttles wrong PINs).
+          setPin(this.rec, undefined);
+          throw new Error('That PIN was not right. Enter it again and try once more.');
+        }
+        throw e;
+      }
+    }
+    const rec = await db.updateWorldRecord(this.id, { timeNow: n, timeUnit: this.rec.timeUnit });
+    if (rec) this.rec = rec;
+    this.emit();
+  }
+
   // ---------- the client ----------
 
   private client(withPin: boolean): OwV2Client {

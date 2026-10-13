@@ -96,6 +96,23 @@ async function walk(engine, tag) {
   await page.waitForFunction(() => /The flood/.test(document.querySelector('.el-head h1')?.textContent ?? ''));
   check(tag, true, 'a row opens its Event');
 
+  // Moving now (h37 #4087): from Before now, and from an Event's page in two taps.
+  await page.goto(`${BASE}/#/w/${wid}/time`);
+  await page.locator('[data-action=change-now]').tap();
+  await page.locator('.sheet input[aria-label=Now]').fill('400');
+  await page.locator('.sheet').getByRole('button', { name: 'Move now' }).tap();
+  await page.waitForFunction(() => document.querySelector('[data-now]')?.getAttribute('data-now') === '400');
+  check(tag, JSON.stringify(await names('before')) === JSON.stringify(['The founding', 'The siege']), `moved to Year 400, the list splits there (${JSON.stringify(await names('before'))})`);
+  await page.goto(`${BASE}/#/w/${wid}/e/071e0000-0000-4000-8000-000000000003`);
+  const make = page.locator('[data-action=make-now]');
+  await make.tap();
+  check(tag, /Move now to Year 453\? Tap again/.test(await make.innerText()), 'the first tap on Make this now says what it does');
+  await make.tap();
+  await page.waitForFunction(() => !document.querySelector('[data-action=make-now]'));
+  await page.goto(`${BASE}/#/w/${wid}/time`);
+  await page.waitForSelector('[data-now="453"]');
+  check(tag, true, "the second makes The crowning's year the world's now");
+
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }
