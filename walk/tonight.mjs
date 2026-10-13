@@ -79,6 +79,15 @@ async function walk(engine, tag) {
   await page.locator('[data-action=clear-tonight]').tap();
   await page.waitForFunction(() => !document.querySelector('[data-part=tonight]'));
   check(tag, true, 'Clear the list empties it');
+  // Recent (h37 #4087): the pages opened on this phone, newest first; one on Tonight is left out.
+  const lately = await page.$$eval('[data-part=recent] .el-row b', (bs) => bs.map((b) => b.textContent));
+  check(tag, JSON.stringify(lately) === JSON.stringify(['Ada', 'The Gull Inn']), `Recent, newest first (${JSON.stringify(lately)})`);
+  await page.goto(`${BASE}/#/w/${W1}/e/${INN}`);
+  await page.locator('[data-action=tonight]').tap();
+  await page.goto(`${BASE}/#/w/${W1}`);
+  await page.waitForSelector('[data-part=tonight]');
+  const lately2 = await page.$$eval('[data-part=recent] .el-row b', (bs) => bs.map((b) => b.textContent));
+  check(tag, JSON.stringify(lately2) === JSON.stringify(['Ada']), `one on Tonight leaves Recent (${JSON.stringify(lately2)})`);
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }

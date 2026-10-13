@@ -19,6 +19,7 @@ import {
 } from '../schema';
 import { elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
 import { clearTonight, tonight, toggleTonight } from '../tonight';
+import { noteOpened, recent } from '../recent';
 import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
 import { dateText } from '../time';
@@ -233,10 +234,18 @@ export function homeView(s: WorldSession): View {
       clearTonight(s.id);
       renderBody();
     });
+    // Recent: the last few opened on this phone, those already on Tonight left out.
+    const castIds = new Set(cast.map((e) => e.id));
+    const lately = recent(s.id)
+      .filter((id) => !castIds.has(id))
+      .map((id) => s.get(id))
+      .filter((e): e is OwElement => !!e)
+      .slice(0, 5);
     body.replaceChildren(
       ...(cast.length
         ? [h('p', { class: 'section-label' }, 'Tonight'), h('div', { class: 'results', 'data-part': 'tonight' }, ...cast.map((e) => elRow(s.id, e))), clear]
         : []),
+      ...(lately.length ? [h('p', { class: 'section-label' }, 'Recent'), h('div', { class: 'results', 'data-part': 'recent' }, ...lately.map((e) => elRow(s.id, e)))] : []),
       unsorted.length
         ? h(
             'a',
@@ -369,6 +378,8 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
 /** `fill`: just made from Catch, so its empty fields show at once, ready to fill in (the Captain, h37 #3555). */
 export function elementView(s: WorldSession, id: string, fill = false): View {
   const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'element' });
+  // Only a page that exists counts as opened (a dead link is not Recent).
+  if (s.get(id)) noteOpened(s.id, id);
   // All fields (Settings) opens with the empty ones showing, as a page just made from Catch does.
   let showEmpty = fill || fieldsShown() === 'all';
   let showAllBacklinks = false;
