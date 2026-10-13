@@ -23,7 +23,7 @@ import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
 import { errorText, go, sheet, toast, topbar } from '../ui';
 import { installButton, onHomeScreen } from '../install';
-import { applyTheme, currentTheme, BUILD_ID } from '../app-state';
+import { applyTheme, currentTheme, fieldsShown, setFieldsShown, BUILD_ID, type FieldsShown } from '../app-state';
 
 export function welcomeView(): HTMLElement {
   const busy = { on: false };
@@ -546,6 +546,21 @@ export function settingsView(): HTMLElement {
       });
       return b;
     };
+    const fields = fieldsShown();
+    const fieldsBtn = (id: FieldsShown, label: string) => {
+      const b = h('button', { class: `side${fields === id ? ' on' : ''}`, type: 'button', 'aria-pressed': String(fields === id), 'data-fields': id }, h('b', null, label));
+      b.addEventListener('click', () => {
+        setFieldsShown(id);
+        void render();
+      });
+      return b;
+    };
+    const fieldsSaid =
+      fields === 'all'
+        ? 'Every field shows, the empty ones too.'
+        : fields === 'own'
+          ? "Only the fields you added show. The type's own fields are a tap away."
+          : 'The filled fields show. The empty ones are a tap away.';
     const keep = h('button', { class: 'btn', type: 'button' }, 'Ask the phone to keep your worlds');
     keep.addEventListener('click', async () => {
       const ok = await db.persistStorage();
@@ -562,6 +577,9 @@ export function settingsView(): HTMLElement {
       topbar('Settings', '#/worlds'),
       h('p', { class: 'section-label' }, 'Look'),
       h('div', { class: 'row-gap' }, themeBtn('warm', 'Warm'), themeBtn('house', 'House')),
+      h('p', { class: 'section-label' }, 'Fields on a page'),
+      h('div', { class: 'row-gap' }, fieldsBtn('filled', 'Filled'), fieldsBtn('all', 'All'), fieldsBtn('own', 'Yours')),
+      h('p', { class: 'dim', style: 'margin:0' }, fieldsSaid),
       h('p', { class: 'section-label' }, 'Account'),
       token
         ? h('div', { class: 'stack' }, h('p', { class: 'dim', style: 'margin:0' }, 'Signed in. This phone has its own key to your account.'), out)

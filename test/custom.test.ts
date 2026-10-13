@@ -2,7 +2,7 @@
 // found and kept; Atlas's machinery (atlas_) never shown; a null is a deleted one.
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { customEditable, customFields, fieldLabel, isCustomField } from '../src/schema';
+import { customEditable, customFieldKey, customFieldProblem, customFields, fieldLabel, isCustomField } from '../src/schema';
 import { search } from '../src/search';
 import { openWorldFile, toWorldFile } from '../src/worldfile';
 import * as db from '../src/db';
@@ -21,6 +21,21 @@ describe('custom fields', () => {
     expect(fieldLabel('shadow_true_name')).toBe('True name');
     expect(fieldLabel('x_STR')).toBe('STR');
     expect(fieldLabel('birth_date')).toBe('Birth date');
+  });
+
+  it("a typed name is stored as Atlas stores it, and refused where Atlas refuses it", () => {
+    expect(customFieldKey('Eye colour')).toBe('x_eye_colour');
+    expect(customFieldKey('  Façade—Ward! ')).toBe('x_façade_ward');
+    expect(customFieldKey('x_Mood')).toBe('x_mood');
+    expect(customFieldKey('shadow_true name')).toBe('shadow_true_name');
+    expect(customFieldKey('!!!')).toBe('');
+    const el = { type: 'character', x_mood: 'grim', x_gone: null };
+    expect(customFieldProblem(el, '')).toMatch(/Give the field a name/);
+    expect(customFieldProblem(el, customFieldKey('atlas_page'))).toMatch(/kept for Atlas/);
+    expect(customFieldProblem(el, customFieldKey('Height'))).toMatch(/already a field of every Character/);
+    expect(customFieldProblem(el, customFieldKey('description'))).toMatch(/already a field/);
+    expect(customFieldProblem(el, customFieldKey('Mood'))).toMatch(/already on this Character/);
+    expect(customFieldProblem(el, customFieldKey('Gone'))).toBeNull(); // a removed one can come back
   });
 
   it('only text and numbers change on the phone', () => {

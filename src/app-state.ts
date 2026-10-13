@@ -24,6 +24,29 @@ export function applyTheme(t: Theme): void {
 }
 
 /**
+ * Which fields a page shows (the Captain, h37 #4061), per phone: the filled ones (empty ones a tap
+ * away), all of them, or only the world maker's own (the type's fields a tap away).
+ */
+export type FieldsShown = 'filled' | 'all' | 'own';
+
+export function fieldsShown(): FieldsShown {
+  try {
+    const v = localStorage.getItem('lantern-fields');
+    return v === 'all' || v === 'own' ? v : 'filled';
+  } catch {
+    return 'filled';
+  }
+}
+
+export function setFieldsShown(v: FieldsShown): void {
+  try {
+    localStorage.setItem('lantern-fields', v);
+  } catch {
+    /* falls back to the filled ones next time */
+  }
+}
+
+/**
  * A pinned phone can run an old build for days. On open (and when the app comes back to the
  * front), ask the server which build is current, bypassing every cache; while this build is
  * behind, the outbox holds and the screen offers the reload (Boss #3391).

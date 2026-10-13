@@ -18,7 +18,8 @@ import {
   TYPES,
 } from '../schema';
 import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
-import { editField, newElementSheet, pictureSheet } from './edit';
+import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
+import { fieldsShown } from '../app-state';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
@@ -344,7 +345,8 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
 /** `fill`: just made from Catch, so its empty fields show at once, ready to fill in (the Captain, h37 #3555). */
 export function elementView(s: WorldSession, id: string, fill = false): View {
   const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'element' });
-  let showEmpty = fill;
+  // All fields (Settings) opens with the empty ones showing, as a page just made from Catch does.
+  let showEmpty = fill || fieldsShown() === 'all';
   let showAllBacklinks = false;
 
   const refresh = () => {
@@ -434,6 +436,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       ? tapRow('description', h('p', { class: 'prose' }, desc, wait('description')))
       : null;
 
+    const shown = fieldsShown();
     const rows: HTMLElement[] = [];
     const empty: string[] = [];
     // The head already says the kind; the rows are only there to tap and change it.
@@ -466,10 +469,11 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     // The world maker's own fields (Atlas's custom fields, x_mood), after the schema's, under their own label.
     // A list or a group of values reads here and is changed in Atlas; an empty one waits with the empty rows.
     const customRows: HTMLElement[] = [];
+    const customEmpty: string[] = [];
     for (const field of customFields(el)) {
       const v = el[field];
       if (isEmptyValue(v)) {
-        if (customEditable(v)) empty.push(field);
+        if (customEditable(v)) customEmpty.push(field);
         continue;
       }
       const text = Array.isArray(v)
@@ -490,11 +494,13 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     }
     // Before the empty rows are built: a description is an empty field too (the S398 gate).
     if (!desc && editable) empty.unshift('description');
-    const emptyRows = showEmpty
-      ? empty.map((f) =>
-          tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f)), h('span', { class: 'v muted' }, '·'))),
-        )
-      : [];
+    const dot = (f: string) => tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f)), h('span', { class: 'v muted' }, '·')));
+    // The phone's choice (Settings, h37 #4061). Only your own: the type's fields, filled or not, wait
+    // behind the toggle and your empty ones show. Otherwise the toggle holds every empty field.
+    const own = shown === 'own';
+    if (own || showEmpty) customRows.push(...customEmpty.map(dot));
+    const schemaRows = own && !showEmpty ? [] : [...rows, ...(showEmpty ? empty.map(dot) : [])];
+    const behindToggle = own ? rows.length + empty.length : empty.length + customEmpty.length;
 
     // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,
     // and the first eight shown must not change with it (S397).
@@ -525,9 +531,16 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     }
 
     const toggle =
-      empty.length > 0
+      behindToggle > 0
         ? (() => {
-            const b = h('button', { class: 'btn btn-quiet', type: 'button' }, showEmpty ? 'Hide the empty fields' : `Show the ${empty.length} empty fields`);
+            const label = own
+              ? showEmpty
+                ? `Hide the ${typeLabel(el.type)}'s fields`
+                : `Show the ${typeLabel(el.type)}'s ${behindToggle} fields`
+              : showEmpty
+                ? 'Hide the empty fields'
+                : `Show the ${behindToggle} empty fields`;
+            const b = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'toggle-fields' }, label);
             b.addEventListener('click', () => {
               showEmpty = !showEmpty;
               refresh();
@@ -535,6 +548,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
             return b;
           })()
         : null;
+    const addField = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'add-field' }, 'Add a field');
+    addField.addEventListener('click', () => addFieldSheet(s, el));
     const needs = [...pending.values()].find((r) => r.state === 'needs-you' || r.state === 'gone' || r.state === 'refused');
 
     main.replaceChildren(
@@ -552,14 +567,15 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       descNode ?? '',
       ...(customRows.length
         ? [
-            h('div', { class: 'fields' }, ...rows, ...emptyRows),
+            schemaRows.length ? h('div', { class: 'fields' }, ...schemaRows) : '',
             h('p', { class: 'section-label', style: 'margin:8px 0 0' }, 'Your fields'),
             h('div', { class: 'fields', 'data-section': 'custom' }, ...customRows),
             // The custom list's last row already draws the line above it.
             backNode ? h('div', { class: 'fields', style: 'border-top:0' }, backNode) : '',
           ]
-        : [h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? '')]),
+        : [h('div', { class: 'fields' }, ...schemaRows, backNode ?? '')]),
       toggle ?? '',
+      editable ? addField : '',
       editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap a value to change it.') : '',
       tabbar(s, null),
     );

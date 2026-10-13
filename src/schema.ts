@@ -83,6 +83,39 @@ export function customFields(el: Record<string, unknown>): string[] {
     .sort((a, b) => fieldLabel(a).localeCompare(fieldLabel(b)) || (a < b ? -1 : 1));
 }
 
+/**
+ * The key a typed name is stored under, as Atlas makes it (`normalizeCustomFieldName`, Atlas
+ * element-detail-custom-fields.ts): "Eye colour" is x_eye_colour; a typed x_ or shadow_ prefix is
+ * kept; atlas_ keeps its prefix so the check below refuses it. Empty when nothing is left.
+ */
+export function customFieldKey(input: string): string {
+  let raw = input.trim().toLowerCase();
+  let prefix = 'x_';
+  if (raw.startsWith('x_')) raw = raw.slice(2);
+  else if (raw.startsWith('shadow_')) {
+    prefix = 'shadow_';
+    raw = raw.slice(7);
+  } else if (raw.startsWith('atlas_')) {
+    prefix = 'atlas_';
+    raw = raw.slice(6);
+  }
+  const slug = raw
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60);
+  return slug ? prefix + slug : '';
+}
+
+/** Why a key cannot be added to this element, in a sentence, or null when it can. */
+export function customFieldProblem(el: { type: string; [k: string]: unknown }, key: string): string | null {
+  if (!key) return 'Give the field a name.';
+  if (key.startsWith('atlas_')) return 'Names starting with atlas_ are kept for Atlas. Pick another.';
+  const bare = key.replace(/^(x_|shadow_)/, '');
+  if (BASE_FIELDS.includes(bare) || fieldInfo(el.type, bare)) return `${fieldLabel(bare)} is already a field of every ${typeLabel(el.type)}: use that one.`;
+  if (el[key] !== undefined && el[key] !== null) return `${fieldLabel(key)} is already on this ${typeLabel(el.type)}.`;
+  return null;
+}
+
 /** Only text and numbers are changed on the phone; a list or a group of values is Atlas's to edit. */
 export function customEditable(v: unknown): boolean {
   return typeof v === 'string' || typeof v === 'number';

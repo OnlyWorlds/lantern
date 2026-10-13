@@ -3,7 +3,7 @@ import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
-import { customEditable, fieldInfo, fieldLabel, isCustomField, typeColor, typeLabel } from '../schema';
+import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, typeColor, typeLabel } from '../schema';
 import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { photoPicker } from './photo';
@@ -100,8 +100,58 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
       }
       void save(s, el, { [field]: v }, close, base);
     });
-    return [h('h2', null, fieldLabel(field)), form];
+    if (!custom) return [h('h2', null, fieldLabel(field)), form];
+    // A custom field goes as Atlas removes one: an explicit null, so the next read cannot bring it back.
+    // The first tap asks; the second removes.
+    const remove = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center', 'data-action': 'remove-field' }, 'Remove this field');
+    let armed = false;
+    remove.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        remove.textContent = `Remove ${fieldLabel(field).toLowerCase()} and its value`;
+        return;
+      }
+      void save(s, el, { [field]: null }, close, base);
+    });
+    return [h('h2', null, fieldLabel(field)), form, remove];
   }, fieldLabel(field));
+}
+
+/** A field of the world maker's own, named on the phone (Atlas's rule: "mood" is stored as x_mood). */
+export function addFieldSheet(s: WorldSession, el: OwElement): void {
+  const base = s.serverCopy(el.id);
+  // The names this world already uses come first, so "Mood" here is the same field as "Mood" there.
+  const used = [...new Set(s.elements().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))]
+    .filter((f) => el[f] === undefined || el[f] === null)
+    .map(fieldLabel)
+    .sort((a, b) => a.localeCompare(b));
+  sheet((close) => {
+    const listId = `used-fields-${el.id}`;
+    const name = h('input', { class: 'input', type: 'text', 'aria-label': 'Field name', placeholder: 'Mood', list: used.length ? listId : null, autocapitalize: 'sentences' });
+    const value = h('textarea', { class: 'textarea', 'aria-label': 'Value' });
+    const err = h('p', { class: 'error', role: 'alert' });
+    const { row } = actions(close, 'Add');
+    const form = h(
+      'form',
+      { class: 'stack' },
+      h('label', { class: 'stack', style: 'gap:6px' }, h('span', { class: 'muted small' }, 'Name'), name),
+      used.length ? h('datalist', { id: listId }, ...used.map((u) => h('option', { value: u }))) : '',
+      h('label', { class: 'stack', style: 'gap:6px' }, h('span', { class: 'muted small' }, 'Value'), value),
+      err,
+      row,
+    );
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const key = customFieldKey(name.value);
+      const problem = customFieldProblem(el, key);
+      if (problem) {
+        err.textContent = problem;
+        return;
+      }
+      void save(s, el, { [key]: value.value }, close, base);
+    });
+    return [h('h2', null, 'Add a field'), form];
+  }, 'Add a field');
 }
 
 function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean, target: string, base: OwElement | undefined): void {

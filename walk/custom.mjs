@@ -36,8 +36,11 @@ const zip = Buffer.from(
           x_blank: '',
           x_gone: null,
           atlas_aliases: ['The ferrywoman'],
+          physicality: 'Broad hands, a boatman’s back.',
         }),
       },
+      // A second Character whose own field's name is offered when adding one to Ada.
+      { path: 'elements/character/bo--00000002.json', data: enc({ id: 'c0570000-0000-4000-8000-000000000002', name: 'Bo', x_rank: 'Bosun' }) },
     ],
     'custom-walk',
   ),
@@ -131,6 +134,65 @@ async function walk(engine, tag) {
   await page.waitForSelector('.results .el-row');
   const hit = await page.locator('.results').innerText();
   check(tag, /Ada/.test(hit) && /in your fields/.test(hit), `find reaches a custom field (${JSON.stringify(hit)})`);
+
+  // Step 2 (h37 #4061): add a field of your own, remove one, and the setting for which fields show.
+  const storedOf = (field) =>
+    page.evaluate(
+      ([w, id, f]) =>
+        new Promise((res) => {
+          const r = indexedDB.open(`lantern-world-${w}`);
+          r.onsuccess = () => {
+            const t = r.result.transaction('elements').objectStore('elements').get(id);
+            t.onsuccess = () => res(t.result ? JSON.stringify(f in t.result ? t.result[f] : 'absent') : 'none');
+          };
+        }),
+      [wid, ada, field],
+    );
+  await page.goto(`${BASE}/#/w/${wid}/e/${ada}`);
+  await page.waitForSelector('[data-action=add-field]');
+  await page.locator('[data-action=add-field]').tap();
+  await page.waitForSelector('.sheet input[aria-label="Field name"]');
+  const offered = await page.$$eval('.sheet datalist option', (os) => os.map((o) => o.value));
+  check(tag, JSON.stringify(offered) === JSON.stringify(['Rank']), `the world's own names are offered, not this one's (${JSON.stringify(offered)})`);
+  await page.locator('.sheet input[aria-label="Field name"]').fill('Height');
+  await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
+  const said = await page.locator('.sheet .error').innerText();
+  check(tag, /already a field of every Character/.test(said), `a name the type already has is refused (${JSON.stringify(said)})`);
+  await page.locator('.sheet input[aria-label="Field name"]').fill('Eye colour');
+  await page.locator('.sheet textarea[aria-label="Value"]').fill('grey');
+  await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
+  await page.waitForSelector('.frow[data-field=x_eye_colour]');
+  check(tag, (await page.locator('.frow[data-field=x_eye_colour] .v').innerText()) === 'grey' && (await storedOf('x_eye_colour')) === '"grey"', 'a new field is stored as Atlas would name it (x_eye_colour)');
+  await page.locator('[data-section=custom]').screenshot({ path: `${OUT}/custom-${tag}-03-added.png` });
+
+  await page.locator('.frow[data-field=x_mood]').tap();
+  await page.waitForSelector('.sheet [data-action=remove-field]');
+  await page.locator('.sheet [data-action=remove-field]').tap();
+  check(tag, (await page.locator('.sheet').count()) === 1 && /and its value/.test(await page.locator('.sheet [data-action=remove-field]').innerText()), 'the first tap on Remove asks');
+  await page.locator('.sheet [data-action=remove-field]').tap();
+  await page.waitForFunction(() => !document.querySelector('.frow[data-field=x_mood]'));
+  check(tag, (await storedOf('x_mood')) === 'null', `the second removes it, as an explicit null (${await storedOf('x_mood')})`);
+
+  // Yours: the type's fields wait behind the toggle; your own show.
+  await page.goto(`${BASE}/#/settings`);
+  await page.locator('[data-fields=own]').tap();
+  await page.goto(`${BASE}/#/w/${wid}/e/${ada}`);
+  await page.waitForSelector('[data-section=custom]');
+  check(tag, (await page.locator('.frow[data-field=physicality]').count()) === 0 && (await page.locator('.frow[data-field=x_blank]').count()) === 1, "Yours: the type's fields hidden, your empty one showing");
+  const tog = page.locator('[data-action=toggle-fields]');
+  check(tag, /Show the Character's \d+ fields/.test(await tog.innerText()), `the toggle names what it holds (${JSON.stringify(await tog.innerText())})`);
+  await tog.tap();
+  await page.waitForSelector('.frow[data-field=physicality]');
+  check(tag, true, "the toggle brings the type's fields back");
+  // All: the empty ones show from the start.
+  await page.goto(`${BASE}/#/settings`);
+  await page.locator('[data-fields=all]').tap();
+  await page.goto(`${BASE}/#/w/${wid}/e/${ada}`);
+  await page.waitForSelector('[data-section=custom]');
+  check(tag, (await page.locator('.frow[data-field=height]').count()) === 1, 'All: an empty field shows at once');
+  await page.goto(`${BASE}/#/settings`);
+  await page.locator('[data-fields=filled]').tap();
+  await page.locator('main').screenshot({ path: `${OUT}/custom-${tag}-04-settings.png` });
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
