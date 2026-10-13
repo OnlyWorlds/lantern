@@ -1,9 +1,21 @@
 // Find: names first (exact, then prefix, then a word's start, then anywhere), then the other
-// words an element carries (supertype, subtype, description). Accents and case never matter.
+// words an element carries (supertype, subtype, description, then the world maker's own fields). Accents and case never matter.
 import type { OwElement } from '@onlyworlds/sdk';
+import { customFields } from './schema';
 
 export function norm(s: unknown): string {
   return typeof s === 'string' ? s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() : '';
+}
+
+/** The words in the world maker's own fields (x_mood), text and numbers only. */
+function customText(el: OwElement): string {
+  const rec = el as unknown as Record<string, unknown>;
+  return customFields(rec)
+    .map((f) => rec[f])
+    .flatMap((v) => (Array.isArray(v) ? v : [v]))
+    .filter((v) => typeof v === 'string' || typeof v === 'number')
+    .map((v) => norm(String(v)))
+    .join('\n');
 }
 
 export interface Hit {
@@ -31,6 +43,9 @@ export function search(elements: Iterable<OwElement>, query: string, limit = 40)
     } else if (norm(el.description).includes(q)) {
       rank = 5;
       where = 'description';
+    } else if (customText(el).includes(q)) {
+      rank = 6;
+      where = 'custom';
     }
     if (rank >= 0) hits.push({ el, rank, where });
   }

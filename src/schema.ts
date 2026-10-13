@@ -67,10 +67,32 @@ export function typeColor(type: string): string {
   return isType(type) ? elementColor(type, 'dark') : '#888888';
 }
 
-/** "birth_date" to "Birth date"; the stat block stays as written (STR, DEX). */
+// A custom field is a key the world's maker added (Atlas: type "mood", it stores x_mood). keel
+// passes extension keys through as written; atlas_ keys are Atlas's machinery and stay hidden.
+// The prefixes are Atlas's (its EXTENSION_FIELD_NAMESPACES, minus atlas_).
+const CUSTOM_PREFIXES = ['x_', 'shadow_'];
+
+export function isCustomField(field: string): boolean {
+  return CUSTOM_PREFIXES.some((p) => field.startsWith(p) && field.length > p.length);
+}
+
+/** The element's custom fields, by label; null is a deleted one (Atlas's tombstone), never shown. */
+export function customFields(el: Record<string, unknown>): string[] {
+  return Object.keys(el)
+    .filter((f) => isCustomField(f) && el[f] !== null && el[f] !== undefined)
+    .sort((a, b) => fieldLabel(a).localeCompare(fieldLabel(b)) || (a < b ? -1 : 1));
+}
+
+/** Only text and numbers are changed on the phone; a list or a group of values is Atlas's to edit. */
+export function customEditable(v: unknown): boolean {
+  return typeof v === 'string' || typeof v === 'number';
+}
+
+/** "birth_date" to "Birth date", "x_eye_colour" to "Eye colour"; the stat block stays as written (STR, DEX). */
 export function fieldLabel(field: string): string {
-  if (field === field.toUpperCase()) return field;
-  const s = field.replace(/_/g, ' ');
+  const bare = CUSTOM_PREFIXES.reduce((f, p) => (isCustomField(f) && f.startsWith(p) ? f.slice(p.length) : f), field);
+  if (bare === bare.toUpperCase()) return bare;
+  const s = bare.replace(/_/g, ' ').trim() || bare;
   return s[0].toUpperCase() + s.slice(1);
 }
 

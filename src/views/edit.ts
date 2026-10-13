@@ -3,7 +3,7 @@ import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
-import { fieldInfo, fieldLabel, typeColor, typeLabel } from '../schema';
+import { customEditable, fieldInfo, fieldLabel, isCustomField, typeColor, typeLabel } from '../schema';
 import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { photoPicker } from './photo';
@@ -28,7 +28,15 @@ function actions(close: () => void, saveLabel = 'Save'): { row: HTMLElement; ok:
 }
 
 export function editField(s: WorldSession, el: OwElement, field: string): void {
-  const info = field === 'name' || field === 'description' || field === 'supertype' || field === 'subtype' ? { type: 'text' as const } : fieldInfo(el.type, field);
+  // A custom field has no schema: its value says what it is (a number stays a number).
+  const custom = isCustomField(field);
+  if (custom && !customEditable(el[field] ?? '')) return;
+  const info =
+    field === 'name' || field === 'description' || field === 'supertype' || field === 'subtype' || (custom && typeof el[field] !== 'number')
+      ? { type: 'text' as const }
+      : custom
+        ? { type: 'integer' as const }
+        : fieldInfo(el.type, field);
   if (!info) return;
   // The server's copy as the sheet opens it: the edit's base. Taken at save instead, a change
   // arriving while the sheet is open (the poll) would become the base and be overwritten
@@ -50,8 +58,8 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
       input = h('input', {
         class: 'input',
         type: 'number',
-        inputmode: 'numeric',
-        step: '1',
+        inputmode: custom ? 'decimal' : 'numeric',
+        step: custom ? 'any' : '1',
         min: info.type === 'integer_max' ? '0' : null,
         max: info.type === 'integer_max' && info.max ? String(info.max) : null,
         'aria-label': fieldLabel(field),
@@ -75,7 +83,11 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
         if (!raw) v = null;
         else {
           const n = Number(raw);
-          if (!Number.isInteger(n)) {
+          if (custom && !Number.isFinite(n)) {
+            err.textContent = 'A number, please.';
+            return;
+          }
+          if (!custom && !Number.isInteger(n)) {
             err.textContent = 'A whole number, please.';
             return;
           }

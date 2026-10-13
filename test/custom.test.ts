@@ -1,0 +1,56 @@
+// Custom fields (h37 #4050): the world maker's own keys, as Atlas writes them (x_mood), shown,
+// found and kept; Atlas's machinery (atlas_) never shown; a null is a deleted one.
+import 'fake-indexeddb/auto';
+import { describe, expect, it } from 'vitest';
+import { customEditable, customFields, fieldLabel, isCustomField } from '../src/schema';
+import { search } from '../src/search';
+import { openWorldFile, toWorldFile } from '../src/worldfile';
+import * as db from '../src/db';
+import type { OwElement } from '@onlyworlds/sdk';
+
+describe('custom fields', () => {
+  it('are the x_ and shadow_ keys with a value, never atlas_ ones or a bare prefix', () => {
+    const el = { id: '1', type: 'character', name: 'Ada', x_mood: 'grim', shadow_true_name: 'Ash', x_gone: null, atlas_aliases: ['A'], x_: 'odd', description: 'd' };
+    expect(customFields(el)).toEqual(['x_mood', 'shadow_true_name']);
+    expect(isCustomField('atlas_page')).toBe(false);
+    expect(isCustomField('x_')).toBe(false);
+  });
+
+  it('read as Atlas names them, without the prefix', () => {
+    expect(fieldLabel('x_eye_colour')).toBe('Eye colour');
+    expect(fieldLabel('shadow_true_name')).toBe('True name');
+    expect(fieldLabel('x_STR')).toBe('STR');
+    expect(fieldLabel('birth_date')).toBe('Birth date');
+  });
+
+  it('only text and numbers change on the phone', () => {
+    expect(customEditable('grim')).toBe(true);
+    expect(customEditable(3.5)).toBe(true);
+    expect(customEditable(['a'])).toBe(false);
+    expect(customEditable({ a: 1 })).toBe(false);
+    expect(customEditable(true)).toBe(false);
+  });
+
+  it('are found by find, after the name, kind and description', () => {
+    const els = [
+      { id: '1', type: 'character', name: 'Ada', x_mood: 'Grimly cheerful' },
+      { id: '2', type: 'character', name: 'Bo', description: 'grim' },
+      { id: '3', type: 'character', name: 'Cy', x_tags: ['harbour', 'grim'], atlas_note: 'grim' },
+      { id: '4', type: 'character', name: 'Di', atlas_note: 'grim' },
+    ] as unknown as OwElement[];
+    const hits = search(els, 'grim');
+    expect(hits.map((x) => [x.el.name, x.where])).toEqual([
+      ['Bo', 'description'],
+      ['Cy', 'custom'], // a rank's ties go by the shorter name
+      ['Ada', 'custom'],
+    ]);
+  });
+
+  it('survive Save a copy and Open a world file', async () => {
+    const els = [{ id: 'c1111111-0000-4000-8000-000000000001', type: 'character', name: 'Ada', x_mood: 'grim', x_height_cm: 172, x_tags: ['a', 'b'] }];
+    const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000c1', name: 'Custom round trip', kind: 'local', addedAt: '' }, els);
+    const id = await openWorldFile(bytes);
+    const back = (await db.allElements(id))[0] as unknown as Record<string, unknown>;
+    expect([back.x_mood, back.x_height_cm, back.x_tags]).toEqual(['grim', 172, ['a', 'b']]);
+  });
+});

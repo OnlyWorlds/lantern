@@ -6,6 +6,8 @@ import { search } from '../search';
 import { API_BASE, type WorldSession } from '../world';
 import { setPin } from '../pin';
 import {
+  customEditable,
+  customFields,
   fieldInfo,
   fieldLabel,
   isEmptyValue,
@@ -160,7 +162,7 @@ export function homeView(s: WorldSession): View {
       const hits = search(s.view.values(), q);
       body.replaceChildren(
         hits.length
-          ? h('div', { class: 'results' }, ...hits.map((x) => elRow(s.id, x.el, x.where === 'description' ? 'in its description' : undefined)))
+          ? h('div', { class: 'results' }, ...hits.map((x) => elRow(s.id, x.el, x.where === 'description' ? 'in its description' : x.where === 'custom' ? 'in your fields' : undefined)))
           : h('p', { class: 'empty' }, 'Nothing by that name. Try fewer letters.'),
       );
       return;
@@ -461,6 +463,31 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         ),
       );
     }
+    // The world maker's own fields (Atlas's custom fields, x_mood), after the schema's, under their own label.
+    // A list or a group of values reads here and is changed in Atlas; an empty one waits with the empty rows.
+    const customRows: HTMLElement[] = [];
+    for (const field of customFields(el)) {
+      const v = el[field];
+      if (isEmptyValue(v)) {
+        if (customEditable(v)) empty.push(field);
+        continue;
+      }
+      const text = Array.isArray(v)
+        ? v.map((x) => (typeof x === 'string' || typeof x === 'number' ? String(x) : '…')).join(', ')
+        : typeof v === 'boolean'
+          ? v ? 'Yes' : 'No'
+          : typeof v === 'object'
+            ? 'Set in Atlas'
+            : String(v);
+      const isBlock = text.length > 28;
+      const row = h(
+        'div',
+        { class: `frow${isBlock ? ' block' : ''}`, 'data-field': field },
+        h('span', { class: 'k' }, fieldLabel(field), wait(field)),
+        h('span', { class: `v${typeof v === 'object' && !Array.isArray(v) ? ' muted' : ''}` }, text),
+      );
+      customRows.push(customEditable(v) ? tapRow(field, row) : row);
+    }
     // Before the empty rows are built: a description is an empty field too (the S398 gate).
     if (!desc && editable) empty.unshift('description');
     const emptyRows = showEmpty
@@ -523,7 +550,15 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       actionRow(s, el, wait('image_url')),
       picture(el),
       descNode ?? '',
-      h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? ''),
+      ...(customRows.length
+        ? [
+            h('div', { class: 'fields' }, ...rows, ...emptyRows),
+            h('p', { class: 'section-label', style: 'margin:8px 0 0' }, 'Your fields'),
+            h('div', { class: 'fields', 'data-section': 'custom' }, ...customRows),
+            // The custom list's last row already draws the line above it.
+            backNode ? h('div', { class: 'fields', style: 'border-top:0' }, backNode) : '',
+          ]
+        : [h('div', { class: 'fields' }, ...rows, ...emptyRows, backNode ?? '')]),
       toggle ?? '',
       editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap a value to change it.') : '',
       tabbar(s, null),
