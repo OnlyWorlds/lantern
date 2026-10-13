@@ -1,6 +1,6 @@
 # Lantern: progress
 
-**2026-10-12 00:40, updated 2026-10-13 19:08** · Temper, S394 (the first overnight build) · S395 (maps) · S396 (give it to the party, drafts kept, pin names) · S397 (the claim-taking walk, a rewound world, the cutover shell) · S398 (the Captain's first phone walk, fixed) · S399 (his second walk's notes) · S400 (the merge gate's leftovers) · S402 (custom fields, the third notes, the security pass, before now, tonight's cast, moving now, a player's notes, given tonight)
+**2026-10-12 00:40, updated 2026-10-13 19:06** · Temper, S394 (the first overnight build) · S395 (maps) · S396 (give it to the party, drafts kept, pin names) · S397 (the claim-taking walk, a rewound world, the cutover shell) · S398 (the Captain's first phone walk, fixed) · S399 (his second walk's notes) · S400 (the merge gate's leftovers) · S402 (custom fields, the third notes, the security pass, before now, tonight's cast, moving now, a player's notes, given tonight)
 
 ## CURRENT STATE
 
