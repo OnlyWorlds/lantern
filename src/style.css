@@ -474,6 +474,16 @@ h2 {
   flex-direction: column;
 }
 
+/* A player's note (src/views/notes.ts): a quiet card, the note's own words first. */
+.note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--lan-surface);
+}
+
 /* Before now (src/views/time.ts): the world's now as a line across the list, and what comes after it quieter. */
 .now-line {
   display: flex;

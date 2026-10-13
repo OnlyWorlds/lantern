@@ -20,6 +20,8 @@ import {
 import { elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
 import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { noteOpened, recent } from '../recent';
+import { givenTonight } from '../given';
+import { notes } from '../notes';
 import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
 import { dateText } from '../time';
@@ -173,7 +175,7 @@ export function homeView(s: WorldSession): View {
       return;
     }
     if (s.rec.memberRole === 'guest') {
-      body.replaceChildren(...playerHome(s));
+      body.replaceChildren(...myNotesLink(s), ...playerHome(s));
       return;
     }
     const counts = s.counts();
@@ -245,6 +247,16 @@ export function homeView(s: WorldSession): View {
       ...(cast.length
         ? [h('p', { class: 'section-label' }, 'Tonight'), h('div', { class: 'results', 'data-part': 'tonight' }, ...cast.map((e) => elRow(s.id, e))), clear]
         : []),
+      // Given tonight (src/given.ts): the reveals this phone gave in the last day, newest first, with the time.
+      ...(() => {
+        const g = givenTonight(s.id)
+          .map((x) => ({ el: s.get(x.id), at: x.at }))
+          .filter((x): x is { el: OwElement; at: string } => !!x.el);
+        if (!g.length) return [];
+        const hm = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        return [h('p', { class: 'section-label' }, `Given tonight · ${g.length}`), h('div', { class: 'results', 'data-part': 'given' }, ...g.map((x) => elRow(s.id, x.el, `given ${hm(x.at)}`)))];
+      })(),
+      ...myNotesLink(s),
       ...(lately.length ? [h('p', { class: 'section-label' }, 'Recent'), h('div', { class: 'results', 'data-part': 'recent' }, ...lately.map((e) => elRow(s.id, e)))] : []),
       unsorted.length
         ? h(
@@ -303,6 +315,12 @@ export function homeView(s: WorldSession): View {
 }
 
 // ---------- a type's list ----------
+
+/** A player's own notes (src/notes.ts), one tap away on the home, once there is one. */
+function myNotesLink(s: WorldSession): HTMLElement[] {
+  const n = s.takesNotes ? notes(s.id).length : 0;
+  return n ? [h('a', { class: 'choice', href: `#/w/${s.id}/notes`, 'data-action': 'my-notes' }, h('b', null, `My notes · ${n}`), h('span', null, 'Kept on this phone only'))] : [];
+}
 
 export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): View {
   const input = h('input', {

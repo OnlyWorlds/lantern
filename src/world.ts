@@ -162,6 +162,11 @@ export class WorldSession {
     return recordCanWrite(this.rec);
   }
 
+  /** A world this key only reads (a player's, a lent read key), not the demo: notes stay on the phone. */
+  get takesNotes(): boolean {
+    return !this.canWrite && this.rec.kind !== 'demo';
+  }
+
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);

@@ -3,6 +3,7 @@
 import type { OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { partyChoices, partySize, revealValues } from '../party';
+import { noteGiven } from '../given';
 import { elName, errorText, go, sheet, toast } from '../ui';
 import type { WorldSession } from '../world';
 
@@ -82,6 +83,7 @@ export function giveToParty(s: WorldSession, thing: OwElement, draft?: Draft): v
       ok.disabled = true;
       try {
         const id = await s.create('narrative', revealValues(thing, party.id, name.value, line.value));
+        noteGiven(s.id, id);
         // It is in the outbox, not yet with keel: the toast says so (a PIN may still be needed).
         toast(navigator.onLine ? `Sending to ${elName(party)}…` : `Kept on this phone. ${elName(party)} sees it when you have signal.`);
         // Left during the write (a navigation closed the sheet): the user is elsewhere now, stay there.

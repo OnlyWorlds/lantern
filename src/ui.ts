@@ -46,7 +46,7 @@ export function topbar(title: string | Node, backHref?: string, ...actions: Node
  * write) and Ask. World is the way home from anywhere: mobile apps keep a tab bar, not breadcrumbs
  * (the Captain's walk, 2026-10-12). `on` is null on a screen that is none of the three (an element).
  */
-export function tabbar(s: { id: string; canWrite: boolean }, on: 'world' | 'catch' | 'ask' | null): HTMLElement {
+export function tabbar(s: { id: string; canWrite: boolean; takesNotes?: boolean }, on: 'world' | 'catch' | 'ask' | null): HTMLElement {
   const tab = (id: 'world' | 'catch' | 'ask', label: string, href: string, ic: string) =>
     h(
       'a',
@@ -65,7 +65,8 @@ export function tabbar(s: { id: string; canWrite: boolean }, on: 'world' | 'catc
     { class: 'tabbar', 'aria-label': 'World' },
     // On the world's own home, World goes up a level to Your worlds, and says so (the Captain, #3675).
     on === 'world' ? tab('world', 'Worlds', '#/worlds', 'world') : tab('world', 'World', `#/w/${s.id}`, 'world'),
-    s.canWrite ? tab('catch', 'Catch', `#/w/${s.id}/capture`, 'unsorted') : null,
+    // A player's key only reads: their Catch is a note kept on this phone (src/notes.ts).
+    s.canWrite ? tab('catch', 'Catch', `#/w/${s.id}/capture`, 'unsorted') : s.takesNotes ? tab('catch', 'Note', `#/w/${s.id}/notes`, 'edit') : null,
     tab('ask', 'Ask', `#/w/${s.id}/ask`, 'spark'),
   );
 }

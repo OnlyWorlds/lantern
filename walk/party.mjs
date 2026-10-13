@@ -162,6 +162,12 @@ async function walk(engine, deviceName, tag) {
   check(tag, !v.narrator && !v.characters && v.story === undefined, 'nothing else: no narrator, no one it is about, none of the thing\'s words');
   check(tag, rows.every((r) => r.state === 'waiting'), 'nothing sent: no PIN, keel cut off');
 
+  // 7b. Given tonight (h37 #4113): the world's home lists what this phone just gave, with the time.
+  await page.goto(`${BASE}/?owner#/w/${worldId}`);
+  await page.waitForSelector('[data-part=given] .el-row');
+  const givenRow = await page.locator('[data-part=given] .el-row').innerText();
+  check(tag, /A rusted sword/.test(givenRow) && /given \d{1,2}:\d{2}/.test(givenRow), `the home lists it under Given tonight (${JSON.stringify(givenRow)})`);
+
   // 8. The second tap goes straight to the sheet: the party is remembered. Two clicks in one
   // frame (a double tap landing before the sheet draws; dispatched, so a model of it) open one sheet.
   await page.goto(`${BASE}/?owner#/w/${worldId}/e/${thing.id}`);

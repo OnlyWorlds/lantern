@@ -18,6 +18,7 @@ import { outboxView } from './views/outbox';
 import { askView } from './views/ask';
 import { sortView } from './views/sort';
 import { beforeNowView } from './views/time';
+import { notesView } from './views/notes';
 import { mapView } from './views/map';
 import { shareView } from './views/share';
 import { consumeShared, peekShared, takeShared } from './share';
@@ -73,6 +74,7 @@ async function route(): Promise<void> {
     else if (sub === 'e' && parts[3]) mount(elementView(s, parts[3], query === 'fill'), s);
     else if (sub === 'capture' && s.canWrite) mount(captureView(s, query === 'shared'), s);
     else if (sub === 'outbox') mount(outboxView(s), s);
+    else if (sub === 'notes' && s.takesNotes) mount(notesView(s), s);
     else if (sub === 'ask') mount(askView(s), s);
     else if (sub === 'sort') mount(sortView(s), s);
     else if (sub === 'time') mount(beforeNowView(s), s);
