@@ -825,7 +825,8 @@ button.wait-pin {
   border: 1px dashed var(--lan-border);
 }
 
-/* The pencil beside a linked field's label: a finger-sized target around a small mark. */
+/* The pencil on a linked field's label line, at its far right (the Captain, h37 #4050): a finger-sized
+   target around a small mark, its glyph's right edge on the row's edge. */
 .frow .k {
   display: inline-flex;
   align-items: center;
@@ -837,7 +838,7 @@ button.wait-pin {
   justify-content: center;
   width: 40px;
   height: 40px;
-  margin: -8px 0 -8px 2px;
+  margin: -8px -11px -8px auto;
   border: 0;
   border-radius: 20px;
   background: transparent;

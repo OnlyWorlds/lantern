@@ -32,6 +32,9 @@ export interface View {
 // ---------- status lines shared by the world's screens ----------
 
 let behindReload: (() => void) | null = null;
+// Kept outside the banner: a redraw while the new build takes over (the poll, a sync) must not
+// hand back a live Reload button (the Captain's walk: seconds with no sign the tap took).
+let reloading = false;
 export function setBehindReload(fn: (() => void) | null): void {
   behindReload = fn;
 }
@@ -41,9 +44,22 @@ export const askPin = (s: WorldSession): boolean => s.needPin && !s.pinKnown() &
 
 function statusBanner(s: WorldSession): HTMLElement | null {
   if (behindReload) {
-    const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Reload');
-    b.addEventListener('click', () => behindReload?.());
-    return h('div', { class: 'banner', role: 'status' }, 'A new version of Lantern is ready. Changes wait until you reload.', b);
+    const b = h('button', { class: 'btn btn-primary', type: 'button' }, reloading ? 'Reloading' : 'Reload') as HTMLButtonElement;
+    const text = h('span', null, reloading ? 'Loading the new version.' : 'A new version of Lantern is ready. Changes wait until you reload.');
+    const mark = (): void => {
+      b.disabled = true;
+      b.setAttribute('aria-busy', 'true');
+      b.textContent = 'Reloading';
+      text.textContent = 'Loading the new version.';
+    };
+    if (reloading) mark();
+    b.addEventListener('click', () => {
+      if (reloading) return;
+      reloading = true;
+      mark();
+      behindReload?.();
+    });
+    return h('div', { class: 'banner', role: 'status' }, text, b);
   }
   if (askPin(s)) {
     const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter PIN');

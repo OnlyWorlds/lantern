@@ -100,6 +100,14 @@ async function walk(engine, tag) {
     return { block: row?.classList.contains('block'), below: !!k && !!chip && chip.top >= k.bottom - 1 };
   });
   check(tag, lay.block && lay.below, `a single link's chip sits under its label, as a multi link's does (${JSON.stringify(lay)})`);
+  // h37 #4050: the pencil at the label line's far right; its glyph's right edge on the row's, inside the page.
+  const right = await page.evaluate(() => {
+    const row = document.querySelector('.frow[data-field=location]')?.getBoundingClientRect();
+    const svg = document.querySelector('.frow[data-field=location] .edit-btn svg')?.getBoundingClientRect();
+    return row && svg ? { gap: Math.round(row.right - svg.right), page: document.documentElement.clientWidth - Math.ceil(svg.right) } : null;
+  });
+  check(tag, !!right && Math.abs(right.gap) <= 2 && right.page >= 0, `the pencil sits at the far right of its row (${JSON.stringify(right)})`);
+  await page.locator('.frow[data-field=location]').screenshot({ path: `walk/shots/first-${tag}-04b-pencil-right.png` });
   await page.locator('.frow[data-field=location] .link-chip').tap();
   await page.waitForFunction(() => /Lower Town/.test(document.querySelector('.el-head h1')?.textContent ?? ''));
   check(tag, true, 'the chip still opens the place');

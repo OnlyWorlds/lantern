@@ -36,8 +36,18 @@ async function walk(engine, deviceName, tag) {
   const banner = await page.locator('.banner').innerText();
   check(tag, /new version/.test(banner), `the banner: ${JSON.stringify(banner.split('\n')[0])}`);
   await page.screenshot({ path: `walk/shots/update-${tag}-banner.png` });
+  // What the button said the moment the tap landed (h37 #4050: seconds with no sign the tap took).
+  // A window listener runs after the button's own; sessionStorage outlives the reload.
+  await page.evaluate(() =>
+    window.addEventListener('click', (e) => {
+      const btn = e.target.closest?.('.banner button');
+      if (btn) sessionStorage.setItem('walk-reload', JSON.stringify({ text: btn.textContent, disabled: btn.disabled, line: btn.parentElement.textContent }));
+    }),
+  );
   await Promise.all([page.waitForEvent('load', { timeout: 20000 }), page.locator('.banner button').tap()]);
   await page.waitForSelector('[data-screen]');
+  const tapped = JSON.parse((await page.evaluate(() => sessionStorage.getItem('walk-reload'))) ?? '{}');
+  check(tag, tapped.text === 'Reloading' && tapped.disabled === true && /Loading the new version/.test(tapped.line ?? ''), `the tap shows at once (${JSON.stringify(tapped)})`);
   const scriptB = await running();
   check(tag, scriptA !== scriptB, `Reload runs the new build (${scriptA} to ${scriptB})`);
   await page.goto(`${BASE}/#/settings`);
