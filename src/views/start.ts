@@ -573,6 +573,31 @@ export function settingsView(): HTMLElement {
       toast('Signed out. Worlds already on this phone stay.');
       void render();
     });
+    // On a shared phone the next person can read what stays (the security pass, F2; the Captain
+    // h37 #4072: offered, not the default). The account's worlds are the ones with a role, as the PIN's are.
+    const mine = token ? (await db.listWorlds()).filter((w) => w.role) : [];
+    let unsent = 0;
+    for (const w of mine) unsent += (await db.outboxRows(w.id)).length;
+    const outAll = h(
+      'button',
+      { class: 'btn btn-quiet', type: 'button', 'data-action': 'sign-out-remove' },
+      `Sign out and remove your ${plural(mine.length, 'world')} from this phone`,
+    );
+    let armed = false;
+    outAll.addEventListener('click', async () => {
+      if (!armed) {
+        armed = true;
+        outAll.textContent = unsent
+          ? `Remove them? ${plural(unsent, 'change')} not sent yet go with them. Tap again.`
+          : `Remove ${mine.length === 1 ? 'it' : 'them'} from this phone? Tap again.`;
+        return;
+      }
+      outAll.setAttribute('disabled', '');
+      for (const w of mine) await removeWorldFromPhone(w.id);
+      await signOut();
+      toast(`Signed out. ${plural(mine.length, 'world')} removed from this phone.`);
+      void render();
+    });
     main.replaceChildren(
       topbar('Settings', '#/worlds'),
       h('p', { class: 'section-label' }, 'Look'),
@@ -582,7 +607,7 @@ export function settingsView(): HTMLElement {
       h('p', { class: 'dim', style: 'margin:0' }, fieldsSaid),
       h('p', { class: 'section-label' }, 'Account'),
       token
-        ? h('div', { class: 'stack' }, h('p', { class: 'dim', style: 'margin:0' }, 'Signed in. This phone has its own key to your account.'), out)
+        ? h('div', { class: 'stack' }, h('p', { class: 'dim', style: 'margin:0' }, 'Signed in. This phone has its own key to your account.'), out, mine.length ? outAll : '')
         : h('a', { class: 'btn', href: '#/signin' }, 'Sign in to OnlyWorlds'),
       h('p', { class: 'section-label' }, 'This phone'),
       h(
