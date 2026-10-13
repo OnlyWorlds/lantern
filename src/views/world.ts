@@ -17,7 +17,8 @@ import {
   typePlural,
   TYPES,
 } from '../schema';
-import { elName, elRow, errorText, sheet, tabbar, topbar, typeChip } from '../ui';
+import { elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
+import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
 import { dateText } from '../time';
@@ -222,7 +223,19 @@ export function homeView(s: WorldSession): View {
           })()
         : null;
     const unsorted = s.elements().filter((e) => e.type === 'narrative' && e.supertype === 'Unsorted');
+    // Tonight's cast first: the session's handful, in the order kept; one gone from the world drops out.
+    const cast = tonight(s.id)
+      .map((id) => s.get(id))
+      .filter((e): e is OwElement => !!e);
+    const clear = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'clear-tonight', style: 'align-self:flex-start' }, 'Clear the list');
+    clear.addEventListener('click', () => {
+      clearTonight(s.id);
+      renderBody();
+    });
     body.replaceChildren(
+      ...(cast.length
+        ? [h('p', { class: 'section-label' }, 'Tonight'), h('div', { class: 'results', 'data-part': 'tonight' }, ...cast.map((e) => elRow(s.id, e))), clear]
+        : []),
       unsorted.length
         ? h(
             'a',
@@ -640,6 +653,19 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
   const label = (p: Place) =>
     el.type === 'map' ? 'Open the map' : places.length > 1 ? `On ${elName(s.get(p.map))}` : 'Show on map';
   const acts: (HTMLElement | null)[] = places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p)));
+  // Tonight's cast (src/tonight.ts): this phone's own list, so a reader and a player keep one too.
+  const kept = tonight(s.id).includes(el.id);
+  const keepBtn = h(
+    'button',
+    { class: 'btn btn-pill', type: 'button', 'data-action': 'tonight', 'aria-pressed': String(kept) },
+    icon(kept ? 'check' : 'pin', 16),
+    kept ? 'Kept for tonight' : 'Keep for tonight',
+  );
+  keepBtn.addEventListener('click', () => {
+    if (!toggleTonight(s.id, el.id)) toast('This phone would not keep the list.');
+    s.touch();
+  });
+  acts.push(keepBtn);
   if (s.canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
     const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('reveal', 16), 'Give it to the party');
     b.addEventListener('click', () => giveToParty(s, el));
