@@ -478,7 +478,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     for (const f of editable ? ['supertype', 'subtype'] : []) {
       const v = el[f];
       if (isEmptyValue(v)) empty.push(f);
-      else rows.push(tapRow(f, h('div', { class: 'frow' }, h('span', { class: 'k' }, fieldLabel(f), wait(f)), h('span', { class: 'v' }, String(v)))));
+      else rows.push(tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f), wait(f)), h('span', { class: 'v' }, String(v)))));
     }
     for (const { field, info } of typeFields(el.type)) {
       const v = el[field];
@@ -534,7 +534,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     // behind the toggle and your empty ones show. Otherwise the toggle holds every empty field.
     const own = shown === 'own';
     if (own || showEmpty) customRows.push(...customEmpty.map(dot));
-    const schemaRows = own && !showEmpty ? [] : [...rows, ...(showEmpty ? empty.map(dot) : [])];
+    // Under Yours a type field with a change waiting, or one that needs you, still shows (the S402 gate, G5).
+    const schemaRows = own && !showEmpty ? rows.filter((r) => pending.has(r.getAttribute('data-field') ?? '')) : [...rows, ...(showEmpty ? empty.map(dot) : [])];
     const behindToggle = own ? rows.length + empty.length : empty.length + customEmpty.length;
 
     // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,

@@ -160,6 +160,19 @@ describe('an invite link', () => {
     expect([rec.cursor, rec.appliedHead, rec.apiKey.startsWith('ow_r_')]).toEqual([undefined, undefined, true]);
   });
 
+  it("a key that fails to mint after the copy went leaves a world that reads again from zero (the S402 gate, G1)", async () => {
+    await db.putWorldRecord({ id: WORLD, name: 'The Reach', kind: 'online', apiKey: `ow_w_${'g'.repeat(30)}`, keyKind: 'write', role: 'owner', cursor: 'c-gm', appliedHead: 90, addedAt: '' } as db.WorldRecord);
+    await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'The drowned crown' }]);
+    keel.members.add(WORLD);
+    const real = keel.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/keys') ? new Response('{}', { status: 503 }) : real(input, init)) as typeof fetch;
+    const { openAccountWorld } = await import('../src/account');
+    await expect(openAccountWorld({ id: WORLD, name: 'The Reach', role: 'collaborator', member_role: 'guest' })).rejects.toThrow();
+    const rec = await db.getWorldRecord(WORLD);
+    expect([rec?.cursor, rec?.appliedHead, (await db.allElements(WORLD)).length]).toEqual([undefined, undefined, 0]);
+  });
+
   it('a world opened with another key: the old copy and where its walk stood go (F1)', async () => {
     await db.putWorldRecord({ id: WORLD, name: 'The Reach', kind: 'online', apiKey: `ow_w_${'g'.repeat(30)}`, keyKind: 'write', role: 'owner', cursor: 'c-gm', appliedHead: 90, addedAt: '' } as db.WorldRecord);
     await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'The drowned crown' }]);

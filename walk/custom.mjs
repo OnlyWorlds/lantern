@@ -41,7 +41,7 @@ const zip = Buffer.from(
         }),
       },
       // A second Character whose own field's name is offered when adding one to Ada.
-      { path: 'elements/character/bo--00000002.json', data: enc({ id: 'c0570000-0000-4000-8000-000000000002', name: 'Bo', x_rank: 'Bosun' }) },
+      { path: 'elements/character/bo--00000002.json', data: enc({ id: 'c0570000-0000-4000-8000-000000000002', name: 'Bo', x_rank: 'Bosun', shadow_secret: 'Owes the ferryman' }) },
     ],
     'custom-walk',
   ),
@@ -132,7 +132,8 @@ async function walk(engine, tag) {
   await page.goto(`${BASE}/#/w/${wid}`);
   await page.waitForSelector('[data-screen="home"] input[type=search]');
   await page.locator('[data-screen="home"] input[type=search]').fill('whoever');
-  await page.waitForSelector('.results .el-row');
+  // The home's own lists (Recent) are results too: wait until the search has replaced them.
+  await page.waitForFunction(() => !document.querySelector('[data-part=recent]') && document.querySelector('.results .el-row'));
   const hit = await page.locator('.results').innerText();
   check(tag, /Ada/.test(hit) && /in your fields/.test(hit), `find reaches a custom field (${JSON.stringify(hit)})`);
 
@@ -154,7 +155,7 @@ async function walk(engine, tag) {
   await page.locator('[data-action=add-field]').tap();
   await page.waitForSelector('.sheet input[aria-label="Field name"]');
   const offered = await page.$$eval('.sheet datalist option', (os) => os.map((o) => o.value));
-  check(tag, JSON.stringify(offered) === JSON.stringify(['Rank']), `the world's own names are offered, not this one's (${JSON.stringify(offered)})`);
+  check(tag, JSON.stringify(offered) === JSON.stringify(['Rank', 'Secret']), `the world's own names are offered, not this one's (${JSON.stringify(offered)})`);
   await page.locator('.sheet input[aria-label="Field name"]').fill('Height');
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
   const said = await page.locator('.sheet .error').innerText();
@@ -165,6 +166,19 @@ async function walk(engine, tag) {
   await page.waitForSelector('.frow[data-field=x_eye_colour]');
   check(tag, (await page.locator('.frow[data-field=x_eye_colour] .v').innerText()) === 'grey' && (await storedOf('x_eye_colour')) === '"grey"', 'a new field is stored as Atlas would name it (x_eye_colour)');
   await page.locator('[data-section=custom]').screenshot({ path: `${OUT}/custom-${tag}-03-added.png` });
+  // A suggestion is the field it names (the S402 gate, G3): Secret is Bo's shadow_secret, not a new x_secret.
+  await page.locator('[data-action=add-field]').tap();
+  await page.locator('.sheet input[aria-label="Field name"]').fill('Secret');
+  await page.locator('.sheet textarea[aria-label="Value"]').fill('Fears the river');
+  await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
+  await page.waitForSelector('.frow[data-field=shadow_secret]');
+  check(tag, (await storedOf('x_secret')) === '"absent"', 'a suggested name is the field it names (shadow_secret), never a new x_ one');
+  // A number emptied stays a field (G6): only Remove removes.
+  await page.locator('.frow[data-field=x_height_cm]').tap();
+  await page.locator('.sheet input[type=number]').fill('');
+  await page.locator('.sheet').getByRole('button', { name: 'Save' }).tap();
+  await page.waitForFunction(() => !document.querySelector('.sheet'));
+  check(tag, (await storedOf('x_height_cm')) === '""', `an emptied number is kept empty, not removed (${await storedOf('x_height_cm')})`);
 
   await page.locator('.frow[data-field=x_mood]').tap();
   await page.waitForSelector('.sheet [data-action=remove-field]');

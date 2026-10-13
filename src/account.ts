@@ -5,7 +5,7 @@ import { OwV2Client, detectKeyKind, isDemoKey, type OwKeyKind } from '@onlyworld
 import * as db from './db';
 import { API_BASE, forgetSession } from './world';
 import { plural } from './dom';
-import { forgetAccountPin } from './pin';
+import { forgetAccountPin, setPin } from './pin';
 
 export interface AccountWorld {
   id: string;
@@ -119,8 +119,13 @@ async function takeOver(existing: db.WorldRecord | undefined, key?: string): Pro
       `${existing.name} is on this phone with ${plural(waiting, 'change')} not sent yet. Send ${waiting === 1 ? 'it' : 'them'}, or remove the world from this phone, before opening it another way.`,
     );
   }
-  await db.clearElements(existing.id);
   forgetSession(existing.id);
+  await db.clearElements(existing.id);
+  // Where the old key's walk stood goes with its copy: if what follows fails (the new key's mint),
+  // the world reads again from zero, never from a cursor past pages it no longer holds (the S402
+  // gate, G1). The world's own PIN goes too: it was the old key holder's (G6).
+  await db.updateWorldRecord(existing.id, { cursor: undefined, appliedHead: undefined, appliedEpoch: undefined, count: undefined, lastSync: undefined });
+  if (!existing.role) setPin({ id: existing.id }, undefined);
   return true;
 }
 

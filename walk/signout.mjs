@@ -56,7 +56,7 @@ async function walk(engine, tag) {
           const t = r.result.transaction(['worlds', 'kv'], 'readwrite');
           const st = t.objectStore('worlds');
           const a = st.get(mine);
-          a.onsuccess = () => st.put({ ...a.result, kind: 'online', role: 'owner', memberRole: 'owner', apiKey: 'ow_w_' + 'm'.repeat(30), keyKind: 'write' });
+          a.onsuccess = () => st.put({ ...a.result, kind: 'online', role: 'owner', apiKey: 'ow_w_' + 'm'.repeat(30), keyKind: 'write' });
           const b = st.get(lent);
           b.onsuccess = () => st.put({ ...b.result, kind: 'online', apiKey: 'ow_r_' + 'l'.repeat(30), keyKind: 'read' });
           t.objectStore('kv').put('ow_a_' + 'w'.repeat(40), 'accountToken');

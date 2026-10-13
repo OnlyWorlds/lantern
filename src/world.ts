@@ -73,12 +73,24 @@ export function openWorld(id: string): Promise<WorldSession> {
   return p;
 }
 
+// A forgotten session may still have a read or a send in flight. Each forget bumps the world's
+// generation, and a session from an older one writes nothing more: after a world is opened under
+// another key, the old key's walk must not put its pages or its cursor back (the S402 gate, G2).
+const generations = new Map<string, number>();
+const RETIRED = new Error('retired');
+
 export function forgetSession(id: string): void {
   sessions.delete(id);
+  generations.set(id, (generations.get(id) ?? 0) + 1);
 }
 
 export class WorldSession {
   rec: WorldRecord;
+  private readonly generation: number;
+  /** Let go (forgetSession): what it was doing ends without writing. */
+  get retired(): boolean {
+    return (generations.get(this.rec.id) ?? 0) !== this.generation;
+  }
   /** The server's truth (or, for a world on this phone only, the only truth). */
   private truth = new Map<string, OwElement>();
 
@@ -117,6 +129,7 @@ export class WorldSession {
 
   private constructor(rec: WorldRecord) {
     this.rec = rec;
+    this.generation = generations.get(rec.id) ?? 0;
   }
 
   static async load(id: string): Promise<WorldSession> {
@@ -288,7 +301,8 @@ export class WorldSession {
    * role may be the owner's own: it is let try, and keel's answer is said.
    */
   get canMoveNow(): boolean {
-    return this.isLocal || (this.canWrite && this.rec.role !== 'collaborator' && this.rec.memberRole !== 'guest');
+    // A member role (from the account list, or learned from /me for a key) is never the owner's (the S402 gate, G4).
+    return this.isLocal || (this.canWrite && this.rec.role !== 'collaborator' && !this.rec.memberRole);
   }
 
   /**
@@ -404,6 +418,7 @@ export class WorldSession {
         } else {
           // A page fetched before a send settled must not put back the older copy.
           puts = puts.filter((el) => this.isNewer(el));
+          if (this.retired) throw RETIRED;
           await db.applyElements(this.id, puts, dels);
           if (quiet) for (const el of puts) if (!this.truth.has(el.id)) this.arrived.push(el);
           for (const el of puts) this.truth.set(el.id, el);
@@ -428,10 +443,12 @@ export class WorldSession {
               if (held && (!page || (held.change_seq ?? 0) >= (page.change_seq ?? 0))) fresh.set(id, held);
             }
             this.settledDuringWalk = null;
+            if (this.retired) throw RETIRED;
             await db.clearElements(this.id);
             await db.applyElements(this.id, [...fresh.values()]);
             this.truth = fresh;
           }
+          if (this.retired) throw RETIRED;
           const rec2 = await db.updateWorldRecord(this.id, {
             cursor: r.value.cursor,
             appliedHead: r.value.head,
@@ -458,6 +475,8 @@ export class WorldSession {
       this.statusText = '';
     } catch (e) {
       this.settledDuringWalk = null;
+      // Let go mid-walk (the world was opened under another key): it ends here, writing nothing.
+      if (e === RETIRED) return;
       if (e instanceof OwApiError && e.isResyncRequired && !resynced) {
         // What this key may see changed: walk from zero and replace the copy (not merge into it).
         return this.doPull(true);
@@ -606,7 +625,7 @@ export class WorldSession {
   }
 
   private async doFlush(): Promise<void> {
-    if (buildBehind) return;
+    if (buildBehind || this.retired) return;
     const rows = this.outbox.filter((r) => r.state === 'waiting').sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     if (!rows.length) return;
     if (!pinFor(this.rec)) {

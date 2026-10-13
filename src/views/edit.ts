@@ -80,7 +80,8 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
         }
       } else {
         const raw = input.value.trim();
-        if (!raw) v = null;
+        // A custom number emptied stays a field (Atlas: '' is live, null is removed); removing is Remove's.
+        if (!raw) v = custom ? '' : null;
         else {
           const n = Number(raw);
           if (custom && !Number.isFinite(n)) {
@@ -121,10 +122,15 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
 export function addFieldSheet(s: WorldSession, el: OwElement): void {
   const base = s.serverCopy(el.id);
   // The names this world already uses come first, so "Mood" here is the same field as "Mood" there.
-  const used = [...new Set(s.elements().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))]
-    .filter((f) => el[f] === undefined || el[f] === null)
-    .map(fieldLabel)
-    .sort((a, b) => a.localeCompare(b));
+  // A suggestion is the key it names (shadow_ included): picked, it is that field, never a new x_ one
+  // (the S402 gate, G3). Two keys with one label offer the x_ one.
+  const byLabel = new Map<string, string>();
+  for (const f of new Set(s.elements().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))) {
+    if (el[f] !== undefined && el[f] !== null) continue;
+    const k = fieldLabel(f).toLowerCase();
+    if (!byLabel.has(k) || f.startsWith('x_')) byLabel.set(k, f);
+  }
+  const used = [...byLabel.values()].map(fieldLabel).sort((a, b) => a.localeCompare(b));
   sheet((close) => {
     const listId = `used-fields-${el.id}`;
     const name = h('input', { class: 'input', type: 'text', 'aria-label': 'Field name', placeholder: 'Mood', list: used.length ? listId : null, autocapitalize: 'sentences' });
@@ -142,7 +148,7 @@ export function addFieldSheet(s: WorldSession, el: OwElement): void {
     );
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const key = customFieldKey(name.value);
+      const key = byLabel.get(name.value.trim().toLowerCase()) ?? customFieldKey(name.value);
       const problem = customFieldProblem(el, key);
       if (problem) {
         err.textContent = problem;

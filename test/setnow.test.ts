@@ -62,6 +62,10 @@ describe('moving now', () => {
 
   it("a co-builder is not offered it, and a member's key that tries is told why", async () => {
     expect((await session(MEMBER, 'collaborator')).canMoveNow).toBe(false);
+    // A key whose member role keel's /me named (the S402 gate, G4): not offered either.
+    const cb = await session(MEMBER);
+    cb.rec = { ...cb.rec, memberRole: 'co_builder' };
+    expect(cb.canMoveNow).toBe(false);
     const s = await session(MEMBER); // a key with no account role: let try
     setPin(s.rec, '4321');
     await expect(s.setNow(460)).rejects.toThrow(/Only the world's owner/);

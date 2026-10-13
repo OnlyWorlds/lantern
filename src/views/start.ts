@@ -633,5 +633,13 @@ export async function removeWorldFromPhone(id: string): Promise<void> {
   forgetSession(id);
   // A world opened with a key takes its own PIN with it; your account's PIN stays for your other worlds.
   setPin({ id }, undefined);
+  // The phone's own lists for it go too (the S402 gate): a shared phone keeps nothing of a removed world.
+  for (const k of [`lantern-tonight-${id}`, `lantern-recent-${id}`]) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* storage refused: the lists name a world no longer here, and show nothing */
+    }
+  }
   await db.removeWorld(id);
 }

@@ -185,6 +185,16 @@ describe('pull', () => {
     expect(keel.calls.filter((c) => c.startsWith('GET /changes')).length).toBe(2);
   });
 
+  it('a session let go mid-walk writes nothing more: no pages, no cursor (the S402 gate, G2)', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    const walk = s.pull();
+    forgetSession(s.id); // the world opened under another key while the old key's walk was in flight
+    await walk;
+    expect(await db.allElements(s.id)).toEqual([]);
+    expect((await db.getWorldRecord(s.id))?.cursor).toBeUndefined();
+  });
+
   it('on resync_required drops the copy and walks from zero', async () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld();
