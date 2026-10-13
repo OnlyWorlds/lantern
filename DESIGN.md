@@ -23,6 +23,7 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 | Look | Two themes from day one, **warm** (default) and **house**, each one theme file of colours and fonts; a switch in settings. Seethe owns the theme files. Type chips always from the SDK's `FAMILY_COLORS` | #3409, Seethe #3389 |
 | Ask | Lookup and review of what exists only: no inventing, no building, sources shown, "your world does not say" a real answer. The phone's own copy answers first (search, then follow links); a model only for what that walk can't. The model sits behind keel's proxy (Keel #159), never in the page | #3393, Kael #3387, Skeld #3411 |
 | Address | `lantern.onlyworlds.com`; a public build is fine ("no one will know it") | #3413 |
+| Custom fields | Atlas's custom fields (`x_`, `shadow_`) shown, changed, added and removed on the phone, as Atlas names them; Settings chooses the fields on a page: Filled, All or Yours. A player sees every field of what their Character knows (keel filters elements, not fields) | the Captain h37 #4061; Skeld #4053 |
 | AI trials | The Captain's Anthropic key, up to about $8, to test Haiku 5.5 on lookup: from local scripts only (`Forge/.env`, `Comms/var/secrets/anthropic-api-key.txt`), never in a bundle. Rotate when the proxy takes over | #3413 |
 
 ## How it works
