@@ -3,7 +3,8 @@
 // world this phone opens, named for the phone and revocable on the portal.
 import { OwV2Client, detectKeyKind, isDemoKey, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
-import { API_BASE } from './world';
+import { API_BASE, forgetSession } from './world';
+import { plural } from './dom';
 import { forgetAccountPin } from './pin';
 
 export interface AccountWorld {
@@ -104,10 +105,31 @@ export function deviceName(): string {
   return 'this device';
 }
 
+/**
+ * A world already on this phone, opened again under another key (a player joining on the game
+ * master's phone, a second member's key): what the old key saw and queued is not this key's (the
+ * security pass, 2026-10-13, F1). Changes still waiting are refused, never sent under another key;
+ * otherwise the copy goes, and the world is read afresh with the new key.
+ */
+async function takeOver(existing: db.WorldRecord | undefined, key?: string): Promise<boolean> {
+  if (!existing || (key !== undefined && existing.apiKey === key)) return false;
+  const waiting = (await db.outboxRows(existing.id)).length;
+  if (waiting) {
+    throw new Error(
+      `${existing.name} is on this phone with ${plural(waiting, 'change')} not sent yet. Send ${waiting === 1 ? 'it' : 'them'}, or remove the world from this phone, before opening it another way.`,
+    );
+  }
+  await db.clearElements(existing.id);
+  forgetSession(existing.id);
+  return true;
+}
+
 /** Open an account world on this phone: mint its own key, then keep the world record. */
 export async function openAccountWorld(w: AccountWorld): Promise<db.WorldRecord> {
   const token = await accountToken();
   if (!token) throw new Error('Sign in first.');
+  // Before a key is minted: a refusal leaves nothing behind on keel.
+  await takeOver(await db.getWorldRecord(w.id));
   const c = accountClient(token);
   const name = `Lantern on ${deviceName()}`;
   // Guests read; everyone else writes. A member without an account PIN gets 409 pin_required
@@ -145,10 +167,14 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
   const meta = await c.getWorld();
   const existing = await db.getWorldRecord(meta.id);
   const sameKey = existing?.apiKey === key;
+  await takeOver(existing, key);
   const rec: db.WorldRecord = {
     ...existing,
-    // Who the old key was (its Character, its role) is not who this key is.
-    ...(sameKey ? {} : { characterId: undefined, memberRole: undefined, role: undefined }),
+    // Who the old key was (its Character, its role) is not who this key is, and where its walk
+    // stood is not where this key's starts.
+    ...(sameKey
+      ? {}
+      : { characterId: undefined, memberRole: undefined, role: undefined, cursor: undefined, appliedHead: undefined, appliedEpoch: undefined, count: undefined, lastSync: undefined }),
     id: meta.id,
     name: meta.name,
     kind: isDemoKey(key) ? 'demo' : 'online',

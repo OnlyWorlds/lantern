@@ -139,6 +139,45 @@ describe('an invite link', () => {
     expect(keel.members.has(WORLD)).toBe(true);
   });
 
+  it("a player joining on the game master's phone never sees the game master's copy, nor sends their changes (the security pass, F1)", async () => {
+    const gm = { id: WORLD, name: 'The Reach', kind: 'online' as const, apiKey: `ow_w_${'g'.repeat(30)}`, keyKind: 'write' as const, role: 'owner', cursor: 'c-gm', appliedHead: 90, appliedEpoch: 0, addedAt: '' };
+    const secret = { id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'The drowned crown' };
+    await db.putWorldRecord(gm as db.WorldRecord);
+    await db.applyElements(WORLD, [secret]);
+    await db.putOutboxRow(WORLD, { op: 'patch', type: 'object', id: secret.id, values: { name: 'The crown' }, state: 'waiting' } as db.OutboxRow);
+    // A change still waiting under the game master's key: refused, nothing minted, the copy kept for them.
+    keel.members.add(WORLD);
+    const { openAccountWorld } = await import('../src/account');
+    const as = { id: WORLD, name: 'The Reach', role: 'collaborator', member_role: 'guest' as const };
+    await expect(openAccountWorld(as)).rejects.toThrow(/1 change not sent yet/);
+    expect(keel.calls.filter((c) => c.includes('/keys'))).toHaveLength(0);
+    expect(await db.allElements(WORLD)).toHaveLength(1);
+    // Sent (or dropped): the player's open reads the world afresh, from zero.
+    for (const r of await db.outboxRows(WORLD)) await db.deleteOutboxRow(WORLD, r.seq!);
+    const rec = await openAccountWorld(as);
+    expect(await db.allElements(WORLD)).toHaveLength(0);
+    expect(rec).toMatchObject({ memberRole: 'guest' });
+    expect([rec.cursor, rec.appliedHead, rec.apiKey.startsWith('ow_r_')]).toEqual([undefined, undefined, true]);
+  });
+
+  it('a world opened with another key: the old copy and where its walk stood go (F1)', async () => {
+    await db.putWorldRecord({ id: WORLD, name: 'The Reach', kind: 'online', apiKey: `ow_w_${'g'.repeat(30)}`, keyKind: 'write', role: 'owner', cursor: 'c-gm', appliedHead: 90, addedAt: '' } as db.WorldRecord);
+    await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'The drowned crown' }]);
+    const real = keel.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      new URL(String(input)).pathname.replace(/\/+$/, '') === '/api/v2/world'
+        ? new Response(JSON.stringify({ id: WORLD, name: 'The Reach' }), { status: 200, headers: { 'content-type': 'application/json' } })
+        : real(input, init)) as typeof fetch;
+    const { openWithKey } = await import('../src/account');
+    const rec = await openWithKey(`ow_r_${'p'.repeat(30)}`);
+    expect(await db.allElements(WORLD)).toHaveLength(0);
+    expect([rec.cursor, rec.appliedHead, rec.role]).toEqual([undefined, undefined, undefined]);
+    // The same key again keeps what it has.
+    await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000002', type: 'object', name: 'A known cup' }]);
+    await openWithKey(`ow_r_${'p'.repeat(30)}`);
+    expect(await db.allElements(WORLD)).toHaveLength(1);
+  });
+
   it('a used or agent code, and no account: refused before anything is kept', async () => {
     await expect(join.acceptJoin('ow_j_agent')).rejects.toThrow(/does not work/);
     await db.kvSet('accountToken', undefined);
