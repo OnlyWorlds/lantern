@@ -190,13 +190,18 @@ async function walk(engine, deviceName, tag) {
 
   // 5b. The other map (wider than tall): the whole of it fits the phone
   const space = maps.find((m) => m.id !== overview.id && m.image_url);
+  // The map just left is still drawn when the new address lands, and the new screen measures its
+  // picture before it builds the map: a wait on any layer passed on the old one, then found none
+  // (S406: red at this step on HEAD's build too). The old layer is marked, and only a new one counts.
+  await page.evaluate(() => document.querySelectorAll('.leaflet-image-layer').forEach((i) => (i.dataset.left = '1')));
   await page.goto(`${BASE}/#/w/${worldId}/map/${space.id}`);
-  await page.waitForFunction(() => document.querySelector('.leaflet-image-layer')?.complete && document.querySelector('.leaflet-image-layer').naturalWidth > 0, null, { timeout: 20000 });
+  const LAYER = '.leaflet-image-layer:not([data-left])';
+  await page.waitForFunction((sel) => document.querySelector(sel)?.complete && document.querySelector(sel).naturalWidth > 0, LAYER, { timeout: 20000 });
   await page.waitForTimeout(400);
-  const fits = await page.evaluate(() => {
-    const r = document.querySelector('.leaflet-image-layer').getBoundingClientRect();
+  const fits = await page.evaluate((sel) => {
+    const r = document.querySelector(sel).getBoundingClientRect();
     return { w: Math.round(r.width), vw: innerWidth };
-  });
+  }, LAYER);
   check(tag, fits.w <= fits.vw + 1 && fits.w > fits.vw * 0.8, `${space.name} opens whole (${fits.w} of ${fits.vw} px wide)`);
   await shot('map-space');
 
