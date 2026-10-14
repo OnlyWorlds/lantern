@@ -4,7 +4,7 @@
 
 ## CURRENT STATE
 
-Built, tested and walked: the spine of DESIGN.md's tonight list. Preview: https://preview.lantern-6nd.pages.dev (Boss flies each announced sha; `lantern.onlyworlds.com` waits for the Captain's yes).
+Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; noindex kept) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `b864f8d` (Boss #4222).
 
 | Piece | State | Where |
 |---|---|---|
@@ -48,7 +48,7 @@ Session and gate records (S395 to S398): `docs/PROGRESS-history.md`.
 - Where: `src/sortplan.ts` (pure: slice, payload, rows checked on arrival, writes planned with every route check made again, the slice re-checked, an allow-list of fields: never image_url, kind words set only when empty), `src/sort.ts`, `src/sortwrite.ts` (the write run), `src/views/sort.ts`, `test/sortplan.test.ts`, `test/sortwrite.test.ts` (the write run on a fake keel), `walk/sort.mjs` (both engines, a routed fake of the route, keel cut off).
 - Its gates (S398 sort, S399, the merge gate, S400) and what each fixed: `docs/PROGRESS-history.md`.
 
-His next walk and the player round: `Forge/Notes/2026-10-14-lantern-smoke-3.md` (S403, the deploy smoke: the AI the whole way, S402's pieces, the player round with a second account; on his shelf). The preview runs `5dbf37d` (Boss h37 #4197); `lantern.onlyworlds.com` waits on his Q1 there. Production has the AI key (Skeld #4202).
+His next walk and the player round: `Forge/Notes/2026-10-14-lantern-smoke-3.md` (S403, the deploy smoke: the AI the whole way, S402's pieces, the player round with a second account; on his shelf). Production has the AI key (Skeld #4202), and Ask and Sort spend from the account's daily token rating since keel a6244db (Skeld #4233); `remaining` stays a count of answers, `tokens_remaining` and `token_rating` are there if Lantern ever shows the allowance in words.
 
 **From the old Flutter app** (S402 post-mortem; the Captain h37 #4061, #4072 "go now"): **before now** and **tonight's cast**, both built (the table). The rest of that app (progression, its timeline code) is not worth carrying. **His proper walk of S402's pieces is later this week** (#4072).
 
