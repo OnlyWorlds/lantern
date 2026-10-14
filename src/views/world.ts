@@ -30,6 +30,7 @@ import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
+import { accessUrl, canInvite } from '../invite';
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
 function isUnsortedNote(el: OwElement): boolean {
@@ -286,6 +287,15 @@ export function homeView(s: WorldSession): View {
       h('p', { class: 'section-label' }, 'In this world'),
       h('div', { class: 'type-grid' }, ...tiles),
       more ?? '',
+      // Invite someone (S407): only the website makes an invite link, so the owner goes there.
+      canInvite(s.rec)
+        ? h(
+            'a',
+            { class: 'choice', href: accessUrl(s.id), target: '_blank', rel: 'noopener', 'data-action': 'invite' },
+            h('b', null, 'Invite someone'),
+            h('span', null, 'On onlyworlds.com, under Access: make an invite link to send. They need a free account.'),
+          )
+        : '',
     );
   };
 

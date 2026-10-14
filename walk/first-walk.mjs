@@ -43,6 +43,12 @@ async function walk(engine, tag) {
   check(tag, steps.length === 2, `the install button opens the steps (${JSON.stringify(steps[0] ?? '')})`);
   await shot('install-steps');
   await page.locator('.sheet').getByRole('button', { name: 'Got it' }).tap();
+  // S407: Sign in says where an account comes from (an invited friend lands here with none).
+  await page.goto(`${BASE}/#/signin`);
+  await page.waitForSelector('[data-screen="signin"]');
+  const signup = page.locator('[data-part="no-account"] a');
+  check(tag, (await signup.getAttribute('href')) === 'https://www.onlyworlds.com/accounts/signup/' && (await signup.getAttribute('target')) === '_blank', 'Sign in links to making an account, in a new tab');
+  await shot('signin-no-account');
   await page.goto(`${BASE}/#/settings`);
   // Settings draws after the storage question, which WebKit answers slowly.
   await page.waitForSelector('[data-screen="settings"] [data-action=install]', { timeout: 5000 }).catch(() => {});
@@ -53,6 +59,7 @@ async function walk(engine, tag) {
   await page.locator('input[aria-label="World name"]').fill('First walk');
   await page.getByRole('button', { name: 'Start the world' }).tap();
   await page.waitForSelector('[data-screen="home"]');
+  check(tag, (await page.locator('[data-action=invite]').count()) === 0, 'a world on this phone only offers no invite (S407)');
   const catchTab = page.locator('.tabbar [data-tab=catch]');
   check(tag, (await catchTab.count()) === 1, 'the tab bar has Catch');
   await catchTab.tap();
@@ -212,6 +219,11 @@ async function walk(engine, tag) {
   );
   await page.goto(`${BASE}/#/w/${worldId}`);
   await page.waitForSelector('[data-screen="home"]');
+  // S407: an owner's online world offers Invite someone: the website's Access pane, a new tab.
+  const invite = page.locator('[data-action=invite]');
+  check(tag, (await invite.getAttribute('href')) === `https://www.onlyworlds.com/account/worlds/${worldId}#access` && (await invite.getAttribute('target')) === '_blank', 'an owner\'s world offers Invite someone, at Access on onlyworlds.com');
+  await invite.scrollIntoViewIfNeeded();
+  await shot('invite');
   await page.goto(`${BASE}/#/w/${worldId}/t/character`);
   await page.locator('.el-row').first().tap();
   await page.waitForSelector('[data-screen="element"] .el-head');

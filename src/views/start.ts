@@ -18,6 +18,7 @@ import {
 import { forgetSession } from '../world';
 import { setPin } from '../pin';
 import { pendingJoin } from '../join';
+import { SIGNUP_URL } from '../invite';
 import { uuid7 } from '../uuid7';
 import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
@@ -169,6 +170,14 @@ export function signInView(): HTMLElement {
     form,
     reveal,
     tokenForm,
+    // No account yet (S407): an invited friend lands here, and only the website makes one.
+    h(
+      'p',
+      { class: 'dim', 'data-part': 'no-account', style: 'margin:0' },
+      'No account yet? ',
+      h('a', { href: SIGNUP_URL, target: '_blank', rel: 'noopener' }, 'Make a free one on onlyworlds.com'),
+      ', set its PIN there, then sign in here.',
+    ),
   );
 }
 
