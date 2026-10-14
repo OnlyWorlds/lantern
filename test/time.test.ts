@@ -64,6 +64,14 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
     expect(calendarOf([calendar('c1', { grain: 7 })])).toBeNull();
   });
 
+  it("follows this phone's choice: a calendar by id, null for the numbers, a removed one as never chosen", () => {
+    const two = [calendar('c1', cfg), calendar('c2', { version: 1, grain: 'Year', step_name: 'Turn' })];
+    expect(calendarOf(two, 'c1')).toEqual(cfg);
+    expect(calendarOf([calendar('c1', cfg)], null)).toBeNull();
+    // A dangling choice (the calendar deleted in Atlas) resolves to nothing, as Atlas's lens does.
+    expect(calendarOf(two, 'gone')).toBeNull();
+  });
+
   it("speaks the calendar's words, and the numbers without one", () => {
     const cal = calendarOf([calendar('c1', cfg)])!;
     expect(dateText(412, 'Year', cal)).toBe(formatStep(cal, 412));

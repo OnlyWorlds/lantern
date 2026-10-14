@@ -23,9 +23,12 @@ export function clockFrom(world: Record<string, unknown>): WorldClock {
   return { now: num(world.time_range_current) ?? num(world.time_current), unit };
 }
 
-/** The world's calendar: its only one (Atlas's `fallbackToOnly`), or none when it has none or several. */
-export function calendarOf(elements: Iterable<OwElement>): CalendarConfig | null {
-  return resolveCalendarLens(elements, undefined, { fallbackToOnly: true })?.config ?? null;
+/**
+ * The world's calendar, as Atlas resolves it: the one chosen on this phone (`null`: the numbers),
+ * else its only one; with several and no choice, none (nothing guessed).
+ */
+export function calendarOf(elements: Iterable<OwElement>, chosen?: string | null): CalendarConfig | null {
+  return resolveCalendarLens(elements, chosen, { fallbackToOnly: true })?.config ?? null;
 }
 
 /** "3 Frost 412 AE" in the world's calendar; else "Year 412", or the bare number when the world names no unit. */

@@ -75,9 +75,26 @@ async function walk(engine, deviceName, tag) {
   await page.goto(`${BASE}/#/w/${id(2, 0)}/time`);
   await page.waitForSelector('.now-line');
   check(tag, (await page.locator('.now-line').textContent()).trim() === 'Now · Year 453', 'two calendars: Year 453, nothing guessed');
+  check(tag, /2 calendars/.test(await page.locator('[data-part=calendar]').innerText()), 'and Before now says why');
   await page.goto(`${BASE}/#/w/${id(2, 0)}/e/${id(2, 1)}`);
   await page.waitForSelector('[data-screen=element]');
   check(tag, (await page.locator('[data-part=calendar-date]').count()) === 0, 'and the date fields stay numbers');
+
+  // This phone's choice (Kael h37 #4287): one of them, kept; then the numbers again.
+  await page.goto(`${BASE}/#/w/${id(2, 0)}/time`);
+  await page.locator('[data-action=pick-calendar]').tap();
+  await page.getByRole('button', { name: /Calendar 1/ }).tap();
+  await page.waitForFunction((t) => document.querySelector('.now-line')?.textContent?.trim() === t, `Now · ${formatStep(CAL, 453)}`);
+  check(tag, /Dates in\s+Calendar 1/.test(await page.locator('[data-part=calendar]').innerText()), 'Calendar 1 chosen: the now line and the row say so');
+  await page.screenshot({ path: `${OUT}/calendar-${tag}-03-chosen.png` });
+  await page.goto(`${BASE}/#/w/${id(2, 0)}/e/${id(2, 1)}`);
+  await page.waitForSelector('[data-part=calendar-date]');
+  check(tag, (await page.locator('[data-part=calendar-date]').first().textContent()) === `${formatStep(CAL, 400)} · 400`, 'kept across screens: the Event page speaks it');
+  await page.goto(`${BASE}/#/w/${id(2, 0)}/time`);
+  await page.locator('[data-action=pick-calendar]').tap();
+  await page.getByRole('button', { name: /^Numbers/ }).tap();
+  await page.waitForFunction(() => document.querySelector('.now-line')?.textContent?.trim() === 'Now · Year 453');
+  check(tag, true, 'Numbers: back to Year 453');
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();

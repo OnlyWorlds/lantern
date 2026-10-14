@@ -1,5 +1,7 @@
 // Before now: a world's Events in the order they happened, the world's now between what has
 // happened and what has not (src/time.ts holds the rules). Read only: dates change on an Event's page.
+import { worldCalendars, type WorldCalendar } from '@onlyworlds/sdk';
+import { chosenCalendar } from '../calendarpick';
 import { h, plural } from '../dom';
 import { dateText, ongoing, spanText, timeline } from '../time';
 import { elRow, errorText, sheet, tabbar, toast, topbar } from '../ui';
@@ -51,6 +53,31 @@ function changeNowSheet(s: WorldSession): void {
   }, 'Move now');
 }
 
+function calendarSheet(s: WorldSession, cals: WorldCalendar[]): void {
+  sheet((close) => {
+    const current = chosenCalendar(s.id);
+    const choice = (id: string | null, title: string, hint: string) => {
+      const b = h('button', { class: 'choice', type: 'button', 'aria-pressed': (current ?? null) === id && current !== undefined ? 'true' : null }, h('b', null, title), h('span', null, hint));
+      b.addEventListener('click', () => {
+        s.pickCalendar(id);
+        close();
+      });
+      return b;
+    };
+    const now = s.rec.timeNow;
+    return [
+      h('h2', null, 'Dates in which calendar?'),
+      h('p', { class: 'dim', style: 'margin:0' }, 'Lantern keeps your choice for this world on this phone. Atlas keeps its own.'),
+      h(
+        'div',
+        { class: 'stack' },
+        ...cals.map((c) => choice(c.id, c.name, now === undefined ? 'A calendar from Atlas' : `Now is ${dateText(now, s.rec.timeUnit, c.config)}`)),
+        choice(null, 'Numbers', now === undefined ? 'The numbers the dates are kept as' : `Now is ${dateText(now, s.rec.timeUnit)}`),
+      ),
+    ];
+  }, 'Dates in which calendar?');
+}
+
 export function beforeNowView(s: WorldSession): View {
   const body = h('div', { class: 'stack' });
   const refresh = () => {
@@ -88,6 +115,14 @@ export function beforeNowView(s: WorldSession): View {
       const b = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'change-now', style: 'align-self:flex-start' }, now === undefined ? 'Set now' : 'Move now');
       b.addEventListener('click', () => changeNowSheet(s));
       parts.splice(1, 0, b);
+    }
+    // Several calendars: which one the dates are in is this phone's choice (Kael h37 #4287).
+    const cals = worldCalendars(s.elements());
+    if (cals.length > 1) {
+      const chosen = cals.find((c) => c.id === chosenCalendar(s.id));
+      const change = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'pick-calendar' }, chosen ? 'Change' : 'Choose one');
+      change.addEventListener('click', () => calendarSheet(s, cals));
+      parts.splice(1, 0, h('div', { class: 'give-row', 'data-part': 'calendar' }, h('span', { class: 'dim', style: 'flex:1;min-width:0' }, chosen ? ['Dates in ', h('b', null, chosen.name)] : `This world has ${cals.length} calendars. Dates show as numbers.`), change));
     }
     body.replaceChildren(...parts);
   };

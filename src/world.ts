@@ -19,6 +19,7 @@ import { uuid7 } from './uuid7';
 import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
 import { calendarOf, clockFrom } from './time';
+import { chooseCalendar, chosenCalendar } from './calendarpick';
 import type { CalendarConfig } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -330,8 +331,15 @@ export class WorldSession {
 
   /** The world's calendar (src/time.ts `calendarOf`), worked out once per change. */
   calendar(): CalendarConfig | null {
-    if (this.calendarCache === undefined) this.calendarCache = calendarOf(this.view.values());
+    if (this.calendarCache === undefined) this.calendarCache = calendarOf(this.view.values(), chosenCalendar(this.id));
     return this.calendarCache;
+  }
+
+  /** Which calendar this world's dates are in on this phone (`null`: the numbers). */
+  pickCalendar(id: string | null): void {
+    chooseCalendar(this.id, id);
+    this.calendarCache = undefined;
+    this.emit();
   }
 
   /** Elements whose link fields point at this one. */
