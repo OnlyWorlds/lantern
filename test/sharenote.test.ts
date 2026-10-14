@@ -183,7 +183,7 @@ describe("the first share's key (the S406 gate, G1)", () => {
         minted.push(JSON.parse(String(init.body)));
         return json(201, { key: WRITE, scope: 'write' });
       }
-      if (path === '/me') return json(200, me);
+      if (path === '/me' || path === '/me/') return json(200, me);
       return json(404, { error: { code: 'not_found', message: 'x', type: 'x' } });
     }) as typeof fetch;
     return minted;

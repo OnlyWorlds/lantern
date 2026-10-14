@@ -103,7 +103,7 @@ async function walk(engine, deviceName, tag) {
     if (req.method() === 'GET' && path === '/account/worlds') {
       return json(200, { data: [{ id: WID, name: 'The Reach', ...(seat === 'owner' ? { role: 'owner' } : { role: 'collaborator', member_role: 'guest' }) }] });
     }
-    if (req.method() === 'GET' && path === '/me' && auth.includes(WRITE)) return json(200, { role: 'guest', character: meChar, scope: 'write' });
+    if (req.method() === 'GET' && (path === '/me' || path === '/me/') && auth.includes(WRITE)) return json(200, { role: 'guest', character: meChar, scope: 'write' });
     if (req.method() === 'POST' && path === '/narrative' && refuseNext) {
       refuseNext = false;
       notes.push({ refused: true });

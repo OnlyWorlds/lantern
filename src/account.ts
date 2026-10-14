@@ -192,7 +192,7 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
     throw e;
   }
   // Another player of the same world is a guest too: the new key must be this Character's seat.
-  const me = await new OwV2Client({ apiKey: key, baseUrl: API_BASE }).request<{ role?: string; character?: string | null }>('GET', '/me');
+  const me = await new OwV2Client({ apiKey: key, baseUrl: API_BASE }).me();
   if (me.role !== 'guest' || me.character !== characterId) throw other;
   return key;
 }
