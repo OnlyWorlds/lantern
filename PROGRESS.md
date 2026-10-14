@@ -4,7 +4,7 @@
 
 ## CURRENT STATE
 
-Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; noindex kept) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `7b0db08` (Boss #4360).
+Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; noindex kept) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `2f3b0f6` (Boss #4412).
 
 | Piece | State | Where |
 |---|---|---|
@@ -46,6 +46,10 @@ Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https:/
 Session and gate records (S395 to S398): `docs/PROGRESS-history.md`.
 
 ## Next
+
+**Waiting on the Captain (h37 #4419)**: a player's notes reaching the world, now that keel allows it (#241, keel db48d30, Skeld #4417: a player's note is narrated by their own Character, keel fills `narrator` in when left out; shared only with Collectives their Character is in; a seat with no Character gets 403 guest_not_supported). Options A (as is), B (private by default plus "Share with the party", my lean), C (every note to the world). Nothing changes until he answers.
+
+**SDK**: Lantern is on 4.19.0, the registry's blessed pin 4.21.0 (Boss h37 #4412).
 
 **The morning after** (Unsorted into elements): on main since S399, on SDK 4.18.1's `client.sort()` against keel's POST /account/sort (keel main 90961fa, Skeld h37 #3663; B30 taken as ticked from the Captain's #3660). Design and rulings: `Forge/Notes/2026-10-12-lantern-morning-after.md` (Skeld's route h37 #3591, pictures #3594, `then` #3596, slice 100 #3597; Simmer's row contract #3571, Neither #3598). **Owed**: the first live sort, which needs an account sign-in no crew mind holds (the Captain's phone; Simmer's rule: at least one ask should fire), and Skeld's dead-picture call (#3663).
 - What it does: Sort on Unsorted; up to 8 notes (16,000 characters; a note over 4,000 is said, never cut); the slice from the phone's lookup (up to 100, anchors, never the notes); a note's picture rides along once online (four a sort; a picture keel refuses sends the sort again as words); cards in Simmer's shape, nothing ticked at first, a make's name and type editable, an ask's pick writes through its `then`, Neither opens an empty card; Write is one plan fixed at the first tap and resumed step by step (never twice); the notes filed as Sorted; a spent sort kept on the phone until written or let go; one sort in flight per world.
