@@ -48,7 +48,7 @@ Session and gate records (S395 to S398): `docs/PROGRESS-history.md`.
 
 ## Next
 
-**Owed on Share with the party** (built S406, the table): the live receipt, a real player's key on production sharing a note (no crew mind holds one; Skeld #4417 had none either): the Captain's player round. Then whether the game master's phone wants a list of what the party shared (today it is the world's Narratives, narrated by a player's Character).
+**Owed on Share with the party** (built S406, the table): keel's side is proven as a player (Kael h37 #4471, a guest seat on staging, keel 5cc793d, 9 of 9: the narrator filled in, a group the Character is not in the same 400 `invalid_link` as a missing one, which Lantern's refusal sentence takes; `Assembly/engines/ow-v2-client/verify/player-notes-staging.mjs`). Owed: Lantern itself on a real player's key on production (the mint, the PIN, the share): the Captain's player round. Then whether the game master's phone wants a list of what the party shared (today it is the world's Narratives, narrated by a player's Character).
 
 **SDK**: on 4.21.0, the blessed pin (S406). 4.21's `client.allowance()` (the account's AI allowance in words) is there if Ask ever shows it.
 
