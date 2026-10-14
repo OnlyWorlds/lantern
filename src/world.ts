@@ -56,10 +56,14 @@ export function headBehind(head: unknown, applied: unknown): boolean {
   return head != null && applied != null && Number.isFinite(h) && Number.isFinite(a) && h < a;
 }
 
-/** Whether this phone can change the world: one on this phone, or a write key (not the demo). */
+/**
+ * Whether this phone can change the world: one on this phone, or a write key (not the demo). A
+ * player never does, whatever their key: a player's write key is only for sharing a note.
+ */
 export function recordCanWrite(rec: WorldRecord): boolean {
   if (rec.kind === 'local') return true;
   if (rec.kind === 'demo' || !rec.apiKey || isDemoKey(rec.apiKey)) return false;
+  if (rec.memberRole === 'guest') return false;
   return kindCanWrite(rec.keyKind ?? detectKeyKind(rec.apiKey));
 }
 
@@ -196,6 +200,46 @@ export class WorldSession {
     } catch {
       /* no signal, or an older keel: asked again on the next open */
     }
+  }
+
+  /** A player (a guest of the world, Keel #213), on any key. */
+  get isPlayer(): boolean {
+    return this.rec.memberRole === 'guest' && this.rec.kind === 'online';
+  }
+
+  /** A player's key that can send a shared note (a member write key; a read key cannot). */
+  get playerCanSend(): boolean {
+    const key = this.rec.apiKey;
+    return this.isPlayer && !!key && kindCanWrite(this.rec.keyKind ?? detectKeyKind(key));
+  }
+
+  /**
+   * A player's write key for the same membership, taken for their first shared note (the Captain
+   * h37 #4420). The same membership sees the same world, so the copy and the feed's cursor stay.
+   * The key is the signed-in account's membership, so the PIN asked is that account's (a world
+   * opened with a key had no account role until now).
+   */
+  async takePlayerKey(apiKey: string): Promise<void> {
+    const rec = await db.updateWorldRecord(this.id, { apiKey, keyKind: detectKeyKind(apiKey), role: this.rec.role ?? 'collaborator' });
+    if (rec) {
+      this.rec = rec;
+      this.emit();
+    }
+  }
+
+  /**
+   * A player's note shared with the party (keel #241): a Narrative from the player's key, through
+   * the outbox like any change, so a note shared without signal goes when there is some. keel
+   * fills in `narrator` (the player's own Character) and refuses any Collective theirs is not in.
+   */
+  async shareNote(values: Record<string, unknown>, id: string): Promise<string> {
+    if (!this.playerCanSend) throw new Error('This key cannot share notes.');
+    return this.queueCreate('narrative', values, undefined, undefined, id);
+  }
+
+  /** A refused row for an element, still in the outbox (said where the element is shown). */
+  refusedRow(id: string): OutboxRow | undefined {
+    return this.outbox.find((r) => r.id === id && r.state === 'refused');
   }
 
   /** Which Collective is the party, kept for this world on this phone. */
@@ -620,6 +664,11 @@ export class WorldSession {
       this.emit();
       return id;
     }
+    return this.queueCreate(type, values, photo, fixed, id);
+  }
+
+  /** A create as an outbox row, sent in order when there is signal. */
+  private async queueCreate(type: string, values: Record<string, unknown>, photo?: Blob, fixed?: { id: string; idempotencyKey: string }, id = fixed?.id ?? uuid7()): Promise<string> {
     const row: OutboxRow = {
       op: 'create',
       type,
@@ -900,6 +949,12 @@ export class WorldSession {
         await keep('waiting');
         return true;
       }
+      if (e.status === 403 && e.code === 'guest_not_supported') {
+        // A player's note with no Character of theirs to tell it (keel #241): only the owner can
+        // fix that, so this row is refused and the key keeps working (sending again changes nothing).
+        await keep('refused', 'You have no Character in this world to tell it. Ask your game master for one.');
+        return false;
+      }
       if (e.status === 403 && !e.isNotAuthor) {
         await keep('waiting');
         this.status = 'error';
@@ -911,6 +966,11 @@ export class WorldSession {
         await keep('waiting');
         this.retryLater((e.retryAfter ?? (e.status === 429 ? 60 : 10)) * 1000);
         return true;
+      }
+      if (this.isPlayer && row.op === 'create' && row.type === 'narrative' && (e.status === 400 || e.status === 422)) {
+        // keel #241: a group the player's Character is not in answers as a missing link.
+        await keep('refused', 'Your Character is not in that group now. Ask your game master.');
+        return false;
       }
       await keep('refused', e.isNotAuthor ? 'You can change only what you made in this world' : e.message);
       return false;

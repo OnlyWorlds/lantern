@@ -6,6 +6,7 @@ import * as db from './db';
 import { API_BASE, forgetSession } from './world';
 import { plural } from './dom';
 import { forgetAccountPin, setPin } from './pin';
+import { clearNotes } from './notes';
 
 export interface AccountWorld {
   id: string;
@@ -120,6 +121,9 @@ async function takeOver(existing: db.WorldRecord | undefined, key?: string): Pro
     );
   }
   forgetSession(existing.id);
+  // A player's notes are the old key holder's (the S406 gate, G4): they go with the copy, so the
+  // next holder can neither read nor share them.
+  clearNotes(existing.id);
   await db.clearElements(existing.id);
   // Where the old key's walk stood goes with its copy: if what follows fails (the new key's mint),
   // the world reads again from zero, never from a cursor past pages it no longer holds (the S402
@@ -160,6 +164,37 @@ export async function openAccountWorld(w: AccountWorld): Promise<db.WorldRecord>
   };
   await db.putWorldRecord(rec);
   return rec;
+}
+
+/**
+ * A player's write key, minted for their first shared note (the Captain h37 #4420): a player's
+ * phone reads with a read key until then, so it holds a write key only once they share. keel lets
+ * a member mint one only with an account PIN set (409 pin_required).
+ */
+export async function mintPlayerKey(worldId: string, characterId: string): Promise<string> {
+  const token = await accountToken();
+  if (!token) throw new Error('Sign in with the account you play with first: sharing a note goes from it.');
+  const other = new Error("This phone is signed in to another account than the one you play this world with, so your note can't go from it. Sign in as yourself first.");
+  // keel mints the signed-in account's own key: an owner's key on the game master's phone, another
+  // player's on a friend's (the S406 gate, G1). Only a player's seat of this world is asked for.
+  const listed = (await fetchAccountWorlds(token)).find((w) => w.id === worldId);
+  if (!listed || listed.member_role !== 'guest') throw other;
+  let key: string;
+  try {
+    key = (
+      await accountClient(token).request<{ key: string }>('POST', `/account/worlds/${worldId}/keys`, {
+        body: { scope: 'write', name: `Lantern on ${deviceName()}` },
+      })
+    ).key;
+  } catch (e) {
+    if ((e as { code?: string }).code === 'pin_required') throw new Error('Set a PIN on onlyworlds.com first: sharing a note needs one.');
+    if ((e as { status?: number }).status === 404) throw other;
+    throw e;
+  }
+  // Another player of the same world is a guest too: the new key must be this Character's seat.
+  const me = await new OwV2Client({ apiKey: key, baseUrl: API_BASE }).request<{ role?: string; character?: string | null }>('GET', '/me');
+  if (me.role !== 'guest' || me.character !== characterId) throw other;
+  return key;
 }
 
 /** Open a world with a key someone gave you (and its PIN, checked once by a read that sends it). */

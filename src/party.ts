@@ -4,6 +4,7 @@
 // that Collective knows it (the Who-knows convention, keel D95). The thing itself stays hidden:
 // the Narrative links it for the game master, and keel strips that link for a player.
 import { FIELD_SCHEMA, type OwElement } from '@onlyworlds/sdk';
+import { elementFromNote } from './note';
 
 /**
  * Not given this way: map furniture; a Narrative (told by adding the party to it); a Collective,
@@ -33,6 +34,23 @@ export function partyChoices(elements: Iterable<OwElement>): OwElement[] {
 export function partySize(party: OwElement | undefined): number {
   const cs = party?.characters;
   return Array.isArray(cs) ? cs.length : 0;
+}
+
+/**
+ * The Collectives a player may share a note with: those their Character is in (keel #241 refuses
+ * any other, as missing), the Party ones first. keel shows a player every Collective theirs is in.
+ */
+export function circlesOf(elements: Iterable<OwElement>, characterId: string | null | undefined): OwElement[] {
+  if (!characterId) return [];
+  return partyChoices(elements).filter((c) => Array.isArray(c.characters) && (c.characters as unknown[]).includes(characterId));
+}
+
+/**
+ * A shared note's values: its first line the name, the rest its description (a cut first line
+ * keeps the whole note there), told to the party. No `narrator`: keel fills in the player's own.
+ */
+export function sharedNoteValues(text: string, partyId: string): Record<string, unknown> {
+  return { ...elementFromNote(text), collectives: [partyId] };
 }
 
 /** The reveal's values: its own name, line and picture, told to the party, linked to the thing. */

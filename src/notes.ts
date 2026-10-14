@@ -1,12 +1,14 @@
-// A player's own notes (the Captain h37 #4113, option B): a guest's key only reads, so what a
-// player jots down at the table stays on their phone, per world, and is never sent. Letting a guest
-// write into the world (option A) would be keel's rule to change, kept for later.
+// A player's own notes (the Captain h37 #4113, option B): what a player jots down at the table stays
+// on their phone, per world. Since keel #241 one can be shared with the party (the Captain h37
+// #4420, B): it goes to the world as a Narrative, and the note here keeps where it went.
 const key = (worldId: string) => `lantern-notes-${worldId}`;
 
 export interface Note {
   id: string;
   text: string;
   at: string;
+  /** Shared with the party: the Narrative made from it, the Collective's name then, and when. */
+  shared?: { id: string; to: string; at: string };
 }
 
 export function notes(worldId: string): Note[] {
@@ -33,6 +35,21 @@ export function addNote(worldId: string, text: string, now = new Date()): boolea
   const t = text.trim();
   if (!t) return true;
   return keep(worldId, [{ id: `${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, text: t, at: now.toISOString() }, ...notes(worldId)]);
+}
+
+/** The note as shared with the party. Returns whether the phone kept it. */
+export function markShared(worldId: string, id: string, narrativeId: string, to: string, now = new Date()): boolean {
+  return keep(worldId, notes(worldId).map((n) => (n.id === id ? { ...n, shared: { id: narrativeId, to, at: now.toISOString() } } : n)));
+}
+
+/** The note as not shared again (its share never reached the outbox). */
+export function unmarkShared(worldId: string, id: string): void {
+  keep(worldId, notes(worldId).map((n) => (n.id === id ? { id: n.id, text: n.text, at: n.at } : n)));
+}
+
+/** Every note of a world: they belong to whoever held its key. */
+export function clearNotes(worldId: string): void {
+  keep(worldId, []);
 }
 
 export function removeNote(worldId: string, id: string): void {
