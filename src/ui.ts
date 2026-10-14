@@ -120,6 +120,36 @@ export function sheet(build: (close: () => void) => Node[], label: string): () =
   return close;
 }
 
+/**
+ * A screen's main button kept in sight while its text box is typed in (the Captain's smoke, h37
+ * #4359: on Catch the keyboard hid it). While the box has focus the button sits at the bottom of what
+ * is visible: above the keyboard where Chrome shrinks the page, and where Safari shrinks only the
+ * visible part, as far up as that part ends. It goes back into the page 350 ms after the box lets go,
+ * as the tab bar returns: the tap that takes the focus away is aimed at the button where it was.
+ */
+export function pinWhileTyping(btn: HTMLElement, field: HTMLElement): void {
+  const vv = window.visualViewport;
+  let unpin: ReturnType<typeof setTimeout> | undefined;
+  const place = () => {
+    const below = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    btn.style.setProperty('--below', `${Math.round(below)}px`);
+  };
+  field.addEventListener('focus', () => {
+    clearTimeout(unpin);
+    place();
+    btn.classList.add('pinned');
+    vv?.addEventListener('resize', place);
+    vv?.addEventListener('scroll', place);
+  });
+  field.addEventListener('blur', () => {
+    unpin = setTimeout(() => {
+      btn.classList.remove('pinned');
+      vv?.removeEventListener('resize', place);
+      vv?.removeEventListener('scroll', place);
+    }, 350);
+  });
+}
+
 export function errorText(e: unknown): string {
   if (e instanceof Error) {
     if (/Failed to fetch|NetworkError|Load failed|network/i.test(e.message)) return 'No connection. Try again when you have signal.';

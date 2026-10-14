@@ -1,7 +1,7 @@
 // Before now: a world's Events in order, split at the world's now (src/time.ts).
 import { describe, expect, it } from 'vitest';
 import type { OwElement } from '@onlyworlds/sdk';
-import { clockFrom, dateText, ongoing, spanText, timeline } from '../src/time';
+import { clockFrom, dateText, hasDatedEvent, ongoing, spanText, timeline } from '../src/time';
 
 const ev = (id: string, name: string, start?: number, end?: number) =>
   ({ id, type: 'event', name, start_date: start, end_date: end }) as unknown as OwElement;
@@ -41,5 +41,11 @@ describe('before now', () => {
     expect(ongoing(ev('a', 'a', 440, 470), 453)).toBe(true);
     expect(ongoing(ev('a', 'a', 440, 450), 453)).toBe(false);
     expect(ongoing(ev('a', 'a', 440), 453)).toBe(false);
+  });
+
+  it('is offered only once an Event has a date (the Captain, h37 #4359)', () => {
+    expect(hasDatedEvent([])).toBe(false);
+    expect(hasDatedEvent([ev('6', 'A rumour'), { id: '7', type: 'character', name: 'Ada', start_date: 1 } as unknown as OwElement])).toBe(false);
+    expect(hasDatedEvent([ev('6', 'A rumour'), ev('1', 'The founding', 0)])).toBe(true);
   });
 });

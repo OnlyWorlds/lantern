@@ -1,7 +1,10 @@
 // After a live walk: no scratch element may remain. Run with the same env as live-write.mjs.
 import './guard.mjs';
+import { readFileSync } from 'node:fs';
 import { OwV2Client } from '@onlyworlds/sdk';
-const api = new OwV2Client({ apiKey: process.env.OW_WRITE_KEY ?? process.env.OW_DEMO_WRITE_KEY });
+import { WRITE_WORLD_KEY } from './live-world.mjs';
+// W11's key is a ten-digit one, so its reads need the PIN too.
+const api = new OwV2Client({ apiKey: process.env.OW_WRITE_KEY ?? WRITE_WORLD_KEY, apiPin: readFileSync(process.env.OW_PIN_FILE, 'utf8').trim() });
 const left = [];
 for (const q of ['Lantern probe', 'Mine: the phone', 'Theirs: another hand', 'A page, ']) {
   const page = await api.list('narrative', { filter: { name__icontains: q } });

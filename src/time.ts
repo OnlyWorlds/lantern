@@ -63,6 +63,15 @@ export function timeline(elements: Iterable<OwElement>, now?: number): Timeline 
   };
 }
 
+/**
+ * Whether Before now has anything to put in order: an Event with a start date. Events with none
+ * would make it a screen of the now line and nothing around it (the Captain, h37 #4359).
+ */
+export function hasDatedEvent(elements: Iterable<OwElement>): boolean {
+  for (const e of elements) if (e.type === 'event' && num(e.start_date) !== undefined) return true;
+  return false;
+}
+
 /** Under way at now: started, and its end (if it has one) not yet reached. */
 export function ongoing(el: OwElement, now?: number): boolean {
   const start = num(el.start_date);

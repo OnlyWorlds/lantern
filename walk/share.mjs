@@ -39,7 +39,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('[data-screen="capture"]');
   const text = await page.locator('textarea').inputValue();
   check(tag, text === NOTE, `one world: its catch screen holds the note ${JSON.stringify(text)}`);
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   // A note stays on Catch now (S404); its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
@@ -100,7 +100,7 @@ async function walk(engine, deviceName, tag) {
   const both = await page.locator('textarea').inputValue();
   check(tag, both === `Half a thought about the\n\n${NOTE}`, `the half-typed note comes back, the share under it: ${JSON.stringify(both)}`);
   check(tag, /Your note from before is still here/.test(await page.locator('main').innerText()), 'it says the note is from before');
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   // A note stays on Catch now (S404); its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');

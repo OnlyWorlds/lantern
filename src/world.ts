@@ -363,7 +363,12 @@ export class WorldSession {
 
   private client(withPin: boolean): OwV2Client {
     if (!this.rec.apiKey) throw new Error('This world has no key.');
-    const pin = withPin ? pinFor(this.rec) : undefined;
+    // A ten-digit key (not the demo's) needs the PIN to read a private world too (the SDK's
+    // OwKeyKind 'legacy'): without it every read came back 401 and the home said "This key no
+    // longer opens the world" (S405, the live write walk on W11). Prefixed keys read without one.
+    const key = this.rec.apiKey;
+    const readsNeedPin = !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
+    const pin = withPin || readsNeedPin ? pinFor(this.rec) : undefined;
     return new OwV2Client({ apiKey: this.rec.apiKey, apiPin: pin, baseUrl: API_BASE });
   }
 

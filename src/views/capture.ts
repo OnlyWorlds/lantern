@@ -4,7 +4,7 @@
 // instead: the first line its name, the rest its description (the Captain's walk, 2026-10-12).
 import { h } from '../dom';
 import { icon, typeIcon } from '../icons';
-import { errorText, go, tabbar, toast, topbar } from '../ui';
+import { errorText, go, pinWhileTyping, tabbar, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 import { consumeShared } from '../share';
@@ -84,7 +84,8 @@ export function captureView(s: WorldSession, fromShare = false): View {
   // What is it? Unsorted first (the catch is fast by default), then the common kinds, then More.
   const kinds = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'What is it?' });
   const kindHint = h('p', { class: 'muted small', style: 'margin:0' });
-  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' });
+  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit', 'data-action': 'catch-save' });
+  pinWhileTyping(saveBtn, text);
   const renderKinds = () => {
     const rest = TYPES.filter((t) => !MAP_TYPES.has(t) && !FIRST_KINDS.includes(t));
     const offered = [UNSORTED, ...FIRST_KINDS, ...(showAllKinds || rest.includes(kind as never) ? rest : [])];
@@ -127,7 +128,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       kind === UNSORTED
         ? 'The first line names the note. Sort it into elements later.'
         : 'The first line is its name, the rest its description.';
-    saveBtn.textContent = kind === UNSORTED ? 'Keep it in Unsorted' : `Make the ${typeLabel(kind).toLowerCase()}`;
+    saveBtn.textContent = kind === UNSORTED ? 'Add to Unsorted' : `Make the ${typeLabel(kind).toLowerCase()}`;
   };
   renderKinds();
 
@@ -164,7 +165,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       }
       const id = await s.create(type, values, photo ?? undefined);
       writeDraft(s.id, '');
-      const where = kind === UNSORTED ? 'Kept in Unsorted.' : `Made the ${typeLabel(kind).toLowerCase()}.`;
+      const where = kind === UNSORTED ? 'Added to Unsorted.' : `Made the ${typeLabel(kind).toLowerCase()}.`;
       // A note's own line under the button says where it went, so its toast would only cover the
       // button; the offline sentence still matters for either.
       if (!s.isLocal && !navigator.onLine) toast('Kept on this phone. It sends when you have signal.');
@@ -184,7 +185,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       kept.remove();
       saveBtn.disabled = false;
       const open = h('a', { href: `#/w/${s.id}/e/${id}`, 'data-action': 'open-kept' }, 'Open it');
-      keptLine.replaceChildren(`Kept in Unsorted: ${values.name as string}. `, open);
+      keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. `, open);
       text.focus();
     } catch (ex) {
       err.textContent = errorText(ex);

@@ -235,7 +235,7 @@ async function walk(engine, deviceName, tag) {
   await page.locator('textarea').tap();
   await page.keyboard.type('The ferryman owes the bell-founder three years of crossings.\nHe pays in fish.');
   await shot('capture');
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   // A note stays on Catch now (S404); its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');

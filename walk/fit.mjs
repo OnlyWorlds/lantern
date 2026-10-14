@@ -166,7 +166,7 @@ async function walk(engine, tag) {
   await page.locator('.tabbar [data-tab=catch]').click();
   await page.waitForSelector('[data-screen="capture"]');
   await page.locator('textarea').fill('Last night at the Copper Kettle\nMira Vell argued with a stranger from the northern marches about the price of iron.');
-  await page.getByRole('button', { name: 'Keep it in Unsorted' }).click();
+  await page.getByRole('button', { name: 'Add to Unsorted' }).click();
   await page.waitForTimeout(300);
   await page.goto(`${BASE}/#/w/${worldId}/sort`);
   await page.waitForSelector('[data-screen="sort"] .note-pick');

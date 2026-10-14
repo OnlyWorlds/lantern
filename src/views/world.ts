@@ -24,7 +24,7 @@ import { givenTonight } from '../given';
 import { notes } from '../notes';
 import { addFieldSheet, deleteSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
-import { dateText } from '../time';
+import { dateText, hasDatedEvent } from '../time';
 import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
@@ -273,8 +273,9 @@ export function homeView(s: WorldSession): View {
             h('span', null, 'Your caught notes, kept as Narratives until you sort them'),
           )
         : '',
-      // Before now (src/views/time.ts): only once the world has an Event to put in order.
-      (counts.get('event') ?? 0) > 0
+      // Before now (src/views/time.ts): only once the world has an Event with a date to put in order
+      // (the Captain, h37 #4359: with none it opened onto nothing).
+      hasDatedEvent(s.elements())
         ? h(
             'a',
             { class: 'choice', href: `#/w/${s.id}/time`, 'data-action': 'before-now' },

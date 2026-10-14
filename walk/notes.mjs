@@ -65,7 +65,7 @@ async function walk(engine, tag) {
   await page.waitForSelector('[data-screen=notes]');
   for (const t of ['The ferryman lied about the tide.', 'Mira owes Bo a silver coin.']) {
     await page.locator('textarea[aria-label="A note"]').fill(t);
-    await page.getByRole('button', { name: 'Keep it' }).tap();
+    await page.getByRole('button', { name: 'Save the note' }).tap();
     await page.waitForFunction((x) => [...document.querySelectorAll('.note-card p')].some((p) => p.textContent === x), t);
   }
   const listed = await page.$$eval('.note-card p', (ps) => ps.map((p) => p.textContent));

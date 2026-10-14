@@ -6,9 +6,10 @@ import './guard.mjs';
 import { chromium, devices } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { OwV2Client } from '@onlyworlds/sdk';
+import { WRITE_WORLD_KEY } from './live-world.mjs';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
-const KEY = process.env.OW_WRITE_KEY ?? process.env.OW_DEMO_WRITE_KEY;
+const KEY = process.env.OW_WRITE_KEY ?? WRITE_WORLD_KEY;
 const PIN = readFileSync(process.env.OW_PIN_FILE, 'utf8').trim();
 if (!KEY || !PIN) throw new Error('OW_WRITE_KEY and OW_PIN_FILE are needed');
 const OUT = 'walk/shots';
@@ -55,7 +56,7 @@ try {
   await page.locator('.tabbar [data-tab=catch]').tap();
   await page.locator('textarea').tap();
   await page.keyboard.type('Lantern probe, delete me\nA scratch element from the overnight walk.');
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   // A note stays on Catch now (S404); its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
@@ -134,7 +135,7 @@ try {
   await page.locator('input[data-photo="gallery"]').setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: png });
   await page.waitForSelector('.photo-preview');
   await shot('photo');
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   // A note stays on Catch now (S404); its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');

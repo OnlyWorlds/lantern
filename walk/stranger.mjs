@@ -41,15 +41,15 @@ async function walk(engine, tag) {
   const hint = await page.locator('[data-screen="capture"] .chips + p').innerText();
   check(tag, /first line names the note/i.test(hint), `the Unsorted hint says the first line names it (${JSON.stringify(hint)})`);
   await page.locator('textarea[aria-label="What to keep"]').fill('Old Marta\nSells charms by the bridge, and knows the ferryman owes her.');
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   await page.waitForSelector('[data-part="kept"] [data-action="open-kept"]');
   check(tag, (await page.locator('[data-screen="capture"]').count()) === 1, 'after Keep, Catch stays open');
   check(tag, (await page.locator('textarea[aria-label="What to keep"]').inputValue()) === '', 'the box is empty for the next one');
-  check(tag, /Kept in Unsorted: Old Marta/.test(await page.locator('[data-part="kept"]').innerText()), 'it says what was kept');
+  check(tag, /Added to Unsorted: Old Marta/.test(await page.locator('[data-part="kept"]').innerText()), 'it says what was kept');
   await shot('kept');
   // A second catch in a row, no round trip.
   await page.locator('textarea[aria-label="What to keep"]').fill('A bell that rings under the water');
-  await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
   await page.waitForFunction(() => /A bell that rings/.test(document.querySelector('[data-part="kept"]')?.textContent ?? ''));
 
   // 1 and 2: Unsorted says what it is and what sorting needs, before any tap.

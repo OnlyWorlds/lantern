@@ -68,6 +68,33 @@ async function walk(engine, tag) {
   await page.waitForTimeout(150);
   const back = await page.evaluate(() => Math.round(document.querySelector('.backdrop').getBoundingClientRect().height));
   check(tag, back === (await page.evaluate(() => window.innerHeight)), `with the keyboard gone the sheet's ground is the whole screen again (${back})`);
+  await page.locator('.backdrop').click({ position: { x: 5, y: 5 } });
+
+  // Catch (the Captain's smoke, h37 #4359): the keyboard hid its button. While the box is typed in,
+  // the button sits above the keyboard, a tap on it still lands, and the note is added.
+  await page.goto(`${BASE}/#/w/${WID}/capture`);
+  await page.waitForSelector('[data-screen="capture"] textarea');
+  const box = page.locator('[data-screen="capture"] textarea');
+  await box.tap();
+  await box.fill('Old Marta at the well');
+  await page.evaluate(() => window.__keyboard(340));
+  await page.waitForTimeout(150);
+  const catchFit = await page.evaluate(() => {
+    const b = document.querySelector('[data-action="catch-save"]').getBoundingClientRect();
+    return { visible: window.visualViewport.height, top: Math.round(b.top), bottom: Math.round(b.bottom), text: document.querySelector('[data-action="catch-save"]').textContent };
+  });
+  if (OUT) await page.screenshot({ path: `${OUT}/${tag}-catch-keyboard.png` });
+  check(tag, catchFit.top >= 0 && catchFit.bottom <= catchFit.visible, `Catch's "${catchFit.text}" is above the keyboard (${catchFit.top} to ${catchFit.bottom} of ${catchFit.visible} visible)`);
+  await page.locator('[data-action="catch-save"]').tap();
+  await page.waitForTimeout(500);
+  const kept = await page.locator('[data-part="kept"]').innerText();
+  check(tag, /Added to Unsorted: Old Marta at the well/.test(kept), `the tap on it added the note (${kept.trim()})`);
+  // The box lets go (the keyboard's Done): a tap on a heading keeps the focus on WebKit, as on iOS.
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.evaluate(() => window.__keyboard(0));
+  await page.waitForTimeout(500);
+  const inFlow = await page.evaluate(() => getComputedStyle(document.querySelector('[data-action="catch-save"]')).position);
+  check(tag, inFlow !== 'fixed', `with the box let go the button is back in the page (${inFlow})`);
   await browser.close();
 }
 

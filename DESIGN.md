@@ -27,6 +27,8 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 | The table, S402 | Before now (Events around the world's now), tonight's cast and Recent, a player's own notes kept on their phone (option B; a guest writing into the world, option A, kept for later), given tonight from this phone's reveals (no new element in the world); moving now for the owner and a co-builder (Keel #240, the Captain's "accepted 240") | the Captain h37 #4061, #4072, #4087, #4113, #4192; Skeld #4085, #4214 |
 | Sign out on a shared phone | Offers to remove the account's worlds too; not the default | the Captain h37 #4072 |
 | Deleting elements | Anyone who can change the world deletes from an element's page, after one warning ("a warning is enough to let it be on the users' head"); it goes through the outbox, and keel removes the links to it. Players never can (they cannot change a world) | the Captain h37 #4292, on Quillon's walk #4275 |
+| Before now when nothing is dated | Offered on a world's home only once an Event has a start date; with none it opened onto the now line alone | the Captain h37 #4359 |
+| The buttons that keep a note | Catch's says where the note goes, "Add to Unsorted"; a player's own Notes says "Save the note" ("Keep it" read as unclear) | the Captain h37 #4359 |
 | AI trials | The Captain's Anthropic key, up to about $8, to test Haiku 5.5 on lookup: from local scripts only (`Forge/.env`, `Comms/var/secrets/anthropic-api-key.txt`), never in a bundle. Rotate when the proxy takes over | #3413 |
 
 ## How it works

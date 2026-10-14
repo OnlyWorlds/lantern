@@ -158,6 +158,16 @@ h2 {
   font-weight: 700;
 }
 
+/* A main button held above the keyboard while its text box is typed in (`pinWhileTyping`, src/ui.ts). */
+.btn.pinned {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(var(--below, 0px) + 10px);
+  z-index: 30;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.45);
+}
+
 .btn-quiet {
   background: transparent;
   border-color: transparent;

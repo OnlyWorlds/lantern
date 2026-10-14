@@ -10,7 +10,7 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday:
 export function notesView(s: WorldSession): View {
   const input = h('textarea', { class: 'textarea', 'aria-label': 'A note', placeholder: 'What you want to remember' });
   const list = h('div', { class: 'stack', 'data-part': 'notes' });
-  const save = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Keep it');
+  const save = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Save the note');
   const form = h('form', { class: 'stack' }, input, save);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
