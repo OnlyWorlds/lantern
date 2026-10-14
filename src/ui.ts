@@ -20,7 +20,9 @@ export function elName(el: OwElement | undefined): string {
 }
 
 export function elRow(worldId: string, el: OwElement, extra?: string): HTMLElement {
-  const hint = [typeLabel(el.type).toLowerCase(), el.supertype, extra].filter(Boolean).join(' · ');
+  // A caught note reads as one in every list, as on its own page (Quillon, h37 #4275).
+  const note = el.type === 'narrative' && el.supertype === 'Unsorted';
+  const hint = [...(note ? ['unsorted note'] : [typeLabel(el.type).toLowerCase(), el.supertype]), extra].filter(Boolean).join(' · ');
   return h(
     'a',
     { class: 'el-row', href: `#/w/${worldId}/e/${el.id}` },

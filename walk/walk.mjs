@@ -234,10 +234,12 @@ async function walk(engine, deviceName, tag) {
   await page.keyboard.type('The ferryman owes the bell-founder three years of crossings.\nHe pays in fish.');
   await shot('capture');
   await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  // A note stays on Catch now (S404); its page is one tap away.
+  await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
   const caught = await page.locator('[data-screen="element"] h1').innerText();
   const kind = await page.locator('.el-head .muted').innerText();
-  check(tag, /ferryman/.test(caught) && /Narrative · Unsorted/.test(kind), `caught as ${JSON.stringify(caught)} (${kind})`);
+  check(tag, /ferryman/.test(caught) && /Unsorted note/.test(kind), `caught as ${JSON.stringify(caught)} (${kind})`);
   await shot('caught');
   await page.locator('.el-head h1').tap();
   await page.waitForSelector('.sheet input');
@@ -245,7 +247,10 @@ async function walk(engine, deviceName, tag) {
   await page.getByRole('button', { name: 'Save' }).tap();
   await page.waitForFunction(() => document.querySelector('[data-screen="element"] h1')?.textContent?.startsWith("The ferryman's debt"));
   check(tag, true, 'renaming through the sheet shows at once');
+  // Back returns to Catch, where "Open it" came from (S404); the World tab goes home.
   await page.locator('[aria-label="Back"]').tap();
+  await page.waitForSelector('[data-screen="capture"]');
+  await page.locator('.tabbar [data-tab=world]').tap();
   await page.waitForSelector('[data-screen="home"]');
   const unsorted = await page.locator('a.choice').first().innerText().catch(() => '');
   check(tag, /Unsorted · 1/.test(unsorted), `home shows ${JSON.stringify(unsorted.split('\n')[0])}`);

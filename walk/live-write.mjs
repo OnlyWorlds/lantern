@@ -56,6 +56,8 @@ try {
   await page.locator('textarea').tap();
   await page.keyboard.type('Lantern probe, delete me\nA scratch element from the overnight walk.');
   await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  // A note stays on Catch now (S404); its page is one tap away.
+  await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
   const id = await elementId();
   made.add(id);
@@ -129,10 +131,12 @@ try {
       return [...new Uint8Array(await b.arrayBuffer())];
     }),
   );
-  await page.locator('input[type="file"]').setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: png });
+  await page.locator('input[data-photo="gallery"]').setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: png });
   await page.waitForSelector('.photo-preview');
   await shot('photo');
   await page.getByRole('button', { name: /Keep it in Unsorted/ }).tap();
+  // A note stays on Catch now (S404); its page is one tap away.
+  await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
   const pid = await elementId();
   made.add(pid);

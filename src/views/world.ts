@@ -29,6 +29,12 @@ import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
+import { makeFromNoteSheet } from './makeit';
+
+/** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
+function isUnsortedNote(el: OwElement): boolean {
+  return el.type === 'narrative' && el.supertype === 'Unsorted';
+}
 
 export interface View {
   el: HTMLElement;
@@ -263,7 +269,8 @@ export function homeView(s: WorldSession): View {
             'a',
             { class: 'choice', href: `#/w/${s.id}/t/narrative?unsorted` },
             h('b', null, `Unsorted · ${unsorted.length}`),
-            h('span', null, 'Caught and not yet turned into elements'),
+            // They are Narratives underneath and counted there too, so the card says so (Quillon, h37 #4275).
+            h('span', null, 'Your caught notes, kept as Narratives until you sort them'),
           )
         : '',
       // Before now (src/views/time.ts): only once the world has an Event to put in order.
@@ -323,10 +330,11 @@ function myNotesLink(s: WorldSession): HTMLElement[] {
 }
 
 export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): View {
+  const what = onlyUnsorted ? 'your notes' : typePlural(type).toLowerCase();
   const input = h('input', {
     type: 'search',
-    placeholder: `Search ${typePlural(type).toLowerCase()}`,
-    'aria-label': `Search ${typePlural(type).toLowerCase()}`,
+    placeholder: `Search ${what}`,
+    'aria-label': `Search ${what}`,
     autocomplete: 'off',
   });
   const list = h('div', { class: 'results' });
@@ -338,14 +346,27 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
     if (onlyUnsorted) els = els.filter((e) => e.supertype === 'Unsorted');
     const q = input.value.trim();
     const shown = q ? search(els, q, 500).map((x) => x.el) : els;
-    count.textContent = q ? `${shown.length} of ${els.length}` : plural(els.length, typeLabel(type).toLowerCase());
+    count.textContent = q ? `${shown.length} of ${els.length}` : plural(els.length, onlyUnsorted ? 'note' : typeLabel(type).toLowerCase());
     list.replaceChildren(...shown.slice(0, 400).map((e) => elRow(s.id, e)));
     if (shown.length > 400) list.appendChild(h('p', { class: 'muted small' }, `Showing 400 of ${shown.length}. Search to narrow it.`));
   };
   input.addEventListener('input', refresh);
-  // Unsorted: the notes can be sorted into the world (the morning after, src/views/sort.ts).
+  // Unsorted: the notes can be sorted into the world (the morning after, src/views/sort.ts), which
+  // needs an online world. A world on this phone says so here, before any tap, and points at the
+  // by-hand way (Quillon, h37 #4275: the Sort link led to a disabled button and a grey line).
+  const sortable = s.canWrite && s.rec.kind === 'online';
+  const byHand =
+    onlyUnsorted && s.canWrite
+      ? h(
+          'p',
+          { class: 'muted small', style: 'margin:0', 'data-part': 'sort-hint' },
+          sortable
+            ? 'Sort reads your notes with the AI and proposes elements. Or open a note to make it one by hand.'
+            : 'Open a note to make it an element. Sorting with the AI comes once this world is online, in your account.',
+        )
+      : '';
   const add = onlyUnsorted
-    ? s.canWrite
+    ? sortable
       ? h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/sort`, 'data-action': 'sort' }, icon('spark', 16), 'Sort')
       : null
     : s.canWrite && !MAP_TYPES.has(type)
@@ -362,6 +383,7 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
       { class: 'screen has-tabbar', 'data-screen': 'type' },
       topbar(onlyUnsorted ? 'Unsorted' : typePlural(type), `#/w/${s.id}`, ...(add ? [add] : [])),
       banner,
+      byHand,
       h('label', { class: 'search' }, icon('search', 20), input),
       count,
       list,
@@ -442,7 +464,15 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     const tapRow = (f: string, row: HTMLElement) => {
       if (!editable) return row;
       row.addEventListener('click', (e) => {
-        if ((e.target as HTMLElement).closest('a')) return;
+        if ((e.target as HTMLElement).closest('a, button')) return;
+        editField(s, el, f);
+      });
+      // A button to a screen reader and a keyboard too (Quillon's walk: a tap by role found no row).
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.addEventListener('keydown', (e) => {
+        if (e.target !== row || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
         editField(s, el, f);
       });
       row.style.cursor = 'pointer';
@@ -474,7 +504,9 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       : avatar;
     if (tapToAdd) avatar.addEventListener('click', () => pictureSheet(s, el, false));
 
-    const kind = [typeLabel(el.type), el.supertype, el.subtype].filter(Boolean).join(' · ');
+    // A caught note is a Narrative underneath (Skeld's convention), but it reads as what it is to the
+    // one who caught it (Quillon, h37 #4275: "Narrative · Unsorted" beside a card that said "not elements").
+    const kind = isUnsortedNote(el) ? 'Unsorted note' : [typeLabel(el.type), el.supertype, el.subtype].filter(Boolean).join(' · ');
     // A caught line can be a sentence long: the title steps down so it does not fill the screen.
     const len = [...elName(el)].length;
     const nameH = h('h1', { style: len > 44 ? 'font-size:1.2rem' : len > 26 ? 'font-size:1.4rem' : null }, elName(el), wait('name'));
@@ -630,7 +662,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         : [h('div', { class: 'fields' }, ...schemaRows, backNode ?? '')]),
       toggle ?? '',
       editable ? addField : '',
-      editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap a value to change it.') : '',
+      editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap the name or a value to change it.') : '',
       tabbar(s, null),
     );
   };
@@ -696,6 +728,12 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     if (!toggleTonight(s.id, el.id)) toast('This phone would not keep the list.');
     s.touch();
   });
+  // An Unsorted note made into an element by hand (src/views/makeit.ts): no AI, works in any world you can write.
+  if (s.canWrite && isUnsortedNote(el)) {
+    const b = h('button', { class: 'btn btn-pill', type: 'button', 'data-action': 'make-from-note' }, icon('spark', 16), 'Make it an element');
+    b.addEventListener('click', () => makeFromNoteSheet(s, el));
+    acts.unshift(b);
+  }
   acts.push(keepBtn);
   // An Event's start as the world's now (Before now): the owner's, at the table. A world-wide
   // change, so the first tap says what it does and the second makes it.

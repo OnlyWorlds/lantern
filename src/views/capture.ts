@@ -17,7 +17,7 @@ import { elementFromNote, titleFrom } from '../note';
 export const UNSORTED = 'Unsorted';
 
 /** The kinds offered first; the rest of the types (map furniture aside) behind "More". */
-const FIRST_KINDS = ['character', 'location', 'object', 'creature', 'event'];
+export const FIRST_KINDS = ['character', 'location', 'object', 'creature', 'event'];
 
 export function captureView(s: WorldSession, fromShare = false): View {
   let photo: Blob | null = null;
@@ -54,6 +54,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
   });
   const preview = h('div', { class: 'stack' });
   const err = h('p', { class: 'error', role: 'alert' });
+  const keptLine = h('p', { class: 'muted small', role: 'status', 'data-part': 'kept', style: 'margin:0' });
   const picker = photoPicker(
     (p) => {
       err.textContent = '';
@@ -121,8 +122,11 @@ export function captureView(s: WorldSession, fromShare = false): View {
           })()
         : null;
     kinds.replaceChildren(...offered.map(chip), more ?? '');
+    // The first line names it either way, so the hint says so before a type is picked (Quillon, h37 #4275).
     kindHint.textContent =
-      kind === UNSORTED ? 'Sort it later, into elements.' : 'The first line is its name, the rest its description.';
+      kind === UNSORTED
+        ? 'The first line names the note. Sort it into elements later.'
+        : 'The first line is its name, the rest its description.';
     saveBtn.textContent = kind === UNSORTED ? 'Keep it in Unsorted' : `Make the ${typeLabel(kind).toLowerCase()}`;
   };
   renderKinds();
@@ -137,6 +141,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
     h('div', { class: 'stack', style: 'gap:8px' }, h('p', { class: 'section-label' }, 'What is it?'), kinds, kindHint),
     err,
     saveBtn,
+    keptLine,
   );
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -160,9 +165,27 @@ export function captureView(s: WorldSession, fromShare = false): View {
       const id = await s.create(type, values, photo ?? undefined);
       writeDraft(s.id, '');
       const where = kind === UNSORTED ? 'Kept in Unsorted.' : `Made the ${typeLabel(kind).toLowerCase()}.`;
-      toast(s.isLocal || navigator.onLine ? where : 'Kept on this phone. It sends when you have signal.');
+      // A note's own line under the button says where it went, so its toast would only cover the
+      // button; the offline sentence still matters for either.
+      if (!s.isLocal && !navigator.onLine) toast('Kept on this phone. It sends when you have signal.');
+      else if (kind !== UNSORTED) toast(where);
       if (photoUrl) URL.revokeObjectURL(photoUrl);
-      go(`#/w/${s.id}/e/${id}${kind === UNSORTED ? '' : '?fill'}`, true);
+      if (kind !== UNSORTED) {
+        // A typed catch opens with its empty fields, to fill in (the Captain, h37 #3555).
+        go(`#/w/${s.id}/e/${id}?fill`, true);
+        return;
+      }
+      // A note stays on Catch, the box empty for the next one (Quillon, h37 #4275: three catches took
+      // three round trips), and says where it went.
+      text.value = '';
+      photo = null;
+      photoUrl = null;
+      showPhoto();
+      kept.remove();
+      saveBtn.disabled = false;
+      const open = h('a', { href: `#/w/${s.id}/e/${id}`, 'data-action': 'open-kept' }, 'Open it');
+      keptLine.replaceChildren(`Kept in Unsorted: ${values.name as string}. `, open);
+      text.focus();
     } catch (ex) {
       err.textContent = errorText(ex);
       saveBtn.disabled = false;
