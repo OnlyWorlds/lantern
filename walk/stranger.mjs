@@ -91,6 +91,18 @@ async function walk(engine, tag) {
   const left = await page.locator('.results a').allInnerTexts();
   check(tag, left.length === 1 && /A bell/.test(left[0]), `Unsorted holds only the other note (${JSON.stringify(left)})`);
 
+  // 3: delete (the Captain, h37 #4292), after one warning, back to the list it came from.
+  await page.goto(`${BASE}/#/w/${wid}/t/character`);
+  await page.locator('.results a', { hasText: 'Old Marta' }).tap();
+  await page.waitForSelector('[data-screen="element"] h1');
+  await page.locator('[data-action="delete"]').tap();
+  await page.waitForSelector('.sheet [data-action="confirm-delete"]');
+  check(tag, /Delete Old Marta\?/.test(await page.locator('.sheet h2').innerText()), 'the warning names it');
+  await shot('delete-sheet');
+  await page.locator('.sheet [data-action="confirm-delete"]').tap();
+  await page.waitForSelector('[data-screen="type"]');
+  check(tag, (await page.locator('.results a', { hasText: 'Old Marta' }).count()) === 0, 'deleted, and back on the list');
+
   check(tag, sent.length === 0, `nothing left the phone (${sent.length})`);
   check(tag, errors.length === 0, `no page errors ${errors.join(' | ')}`);
   await browser.close();

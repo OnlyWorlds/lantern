@@ -2,6 +2,8 @@
 // production build (vite preview on :5181, so the worker is real), airplane mode included.
 // Run: npm run build && (npx vite preview &) && node walk/walk.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
@@ -27,7 +29,7 @@ async function walk(engine, deviceName, tag) {
   let expect400 = false; // the deliberate wrong password
   page.on('console', (m) => {
     // Offline, a failed fetch is the expected answer, not an error.
-    if (m.type() === 'error' && !((offline || expect400) && /Failed to load resource/.test(m.text()))) errors.push('console: ' + m.text());
+    if (m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !((offline || expect400) && /Failed to load resource/.test(m.text()))) errors.push('console: ' + m.text());
   });
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/${tag}-${String(++n).padStart(2, '0')}-${name}.png` });

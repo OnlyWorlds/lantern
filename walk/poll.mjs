@@ -4,6 +4,8 @@
 // in front, quiet (no banner); a reveal arrives on the player's home without a tap; hidden, no poll.
 // Run: npm run build && (npx vite preview &) && node walk/poll.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
@@ -20,7 +22,7 @@ async function walk(engine, deviceName, tag) {
   const page = await (await browser.newContext({ ...devices[deviceName], serviceWorkers: 'block' })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
 
   await page.goto(BASE);
   await page.getByRole('button', { name: /Explore Moppetopia/ }).tap();

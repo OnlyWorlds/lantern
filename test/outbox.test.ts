@@ -147,6 +147,25 @@ class FakeKeel {
       }
       return answer(this.json(200, this.put({ ...el, ...body })));
     }
+    if (method === 'DELETE') {
+      // keel: a tombstone, and the id scrubbed from every other element's links in the same
+      // transaction (the SDK's delete doc; keel's _scrub_cross_type), each scrubbed one bumped.
+      const el = this.els.get(id);
+      if (!el) return this.err(404, 'not_found');
+      this.els.delete(id);
+      this.deleted.push({ id, type, seq: ++this.seq });
+      for (const other of [...this.els.values()]) {
+        let hit = false;
+        const next: El = { ...other };
+        for (const [k, v] of Object.entries(other)) {
+          if (k === 'id') continue;
+          if (v === id) (next[k] = null), (hit = true);
+          else if (Array.isArray(v) && v.includes(id)) (next[k] = v.filter((x) => x !== id)), (hit = true);
+        }
+        if (hit) this.put(next);
+      }
+      return answer(new Response(null, { status: 204 }));
+    }
     return this.err(405, 'method_not_allowed');
   };
 }
@@ -727,5 +746,118 @@ describe('outbox', () => {
     expect(s.get('a')?.name).toBe('Ada');
     expect(s.get('b')?.name).toBe('Tharn');
     expect(s.status).toBe('offline');
+  });
+});
+
+// Delete (the Captain, h37 #4292): anyone who can change the world, after a warning.
+describe('delete', () => {
+  const sent = (m: string) => keel.calls.filter((c) => c.startsWith(m));
+
+  it('leaves the screen at once, links to it too; sent, then gone from the store, and keel scrubs the links', async () => {
+    keel.put({ id: 'b', type: 'location', name: 'Tharn' });
+    keel.put({ id: 'a', type: 'character', name: 'Ada', location: 'b' });
+    const s = await freshWorld();
+    await s.pull();
+    await s.remove('b');
+    expect(s.get('b')).toBeUndefined();
+    expect(s.get('a')?.location).toBeNull(); // hidden on the screen before anything is sent
+    expect(sent('DELETE')).toEqual([]); // no PIN yet: it waits
+    setPin(s.rec, '1234');
+    await s.flush();
+    expect(sent('DELETE')).toEqual(['DELETE /location/b']);
+    expect(keel.els.has('b')).toBe(false);
+    expect(s.outbox.length).toBe(0);
+    expect((await db.allElements(s.id)).map((e) => e.id)).not.toContain('b');
+    expect(s.get('a')?.location).toBeNull(); // still hidden until keel's copy arrives...
+    await s.pull();
+    expect(s.serverCopy('a')?.location).toBeNull(); // ...and keel's own copy has it scrubbed
+  });
+
+  it('a catch that never left the phone is dropped, and nothing is sent', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    const id = await s.create('character', { name: 'A mistake' }); // no PIN: never tried
+    await s.edit(id, { description: 'and an edit on it' });
+    await s.remove(id);
+    expect(s.get(id)).toBeUndefined();
+    expect(s.outbox.length).toBe(0);
+    setPin(s.rec, '1234');
+    await s.flush();
+    expect(sent('POST')).toEqual([]);
+    expect(sent('DELETE')).toEqual([]);
+  });
+
+  it('a create whose answer was lost may be on keel: it is sent, then deleted', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.dropAnswerOnce = true;
+    const id = await s.create('character', { name: 'Landed, answer lost' });
+    await s.flush();
+    expect(keel.els.has(id)).toBe(true); // it reached keel; the phone does not know
+    await s.remove(id);
+    keel.offline = false;
+    await s.flush();
+    expect(keel.els.has(id)).toBe(false);
+    expect(sent('DELETE')).toEqual([`DELETE /character/${id}`]);
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('waits offline and goes when signal comes back; edits waiting on it are let go', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    await s.edit('a', { name: 'Ada Vell' }); // waits on the PIN
+    await s.remove('a');
+    expect(s.outbox.map((r) => r.op)).toEqual(['delete']);
+    keel.offline = true;
+    setPin(s.rec, '1234');
+    await s.flush();
+    expect(s.outbox[0].state).toBe('waiting');
+    expect(s.get('a')).toBeUndefined();
+    keel.offline = false;
+    await s.flush();
+    expect(sent('PATCH')).toEqual([]);
+    expect(keel.els.has('a')).toBe(false);
+  });
+
+  it('deleted elsewhere first: the 404 is the same outcome, and the row settles', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    keel.els.delete('a');
+    setPin(s.rec, '1234');
+    await s.remove('a');
+    await s.flush();
+    expect(s.outbox.length).toBe(0);
+    expect(s.get('a')).toBeUndefined();
+  });
+
+  it('refused (not the author) comes back on the screen and says so', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.nextError = { status: 403, code: 'not_author' };
+    await s.remove('a');
+    await s.flush();
+    expect(s.outbox[0]).toMatchObject({ op: 'delete', state: 'refused', name: 'Ada' });
+    expect(s.get('a')?.name).toBe('Ada');
+  });
+
+  it('a world on this phone deletes in place and scrubs its own links', async () => {
+    const id = `w-${++n}`;
+    await db.putWorldRecord({ id, name: 'Phone world', kind: 'local', addedAt: '' });
+    forgetSession(id);
+    const s = await openWorld(id);
+    const b = await s.create('location', { name: 'Tharn' });
+    const a = await s.create('character', { name: 'Ada', location: b, friends: [b] });
+    await s.remove(b);
+    expect(s.get(b)).toBeUndefined();
+    expect(s.serverCopy(a)?.location).toBeNull();
+    expect((await db.allElements(id)).find((e) => e.id === a)?.location).toBeNull();
+    expect((await db.allElements(id)).map((e) => e.id)).toEqual([a]);
+    expect(s.rec.count).toBe(1);
+    expect(keel.calls).toEqual([]);
   });
 });

@@ -6,6 +6,8 @@
 // picture, is told to the party and links the thing; Change keeps what was typed.
 // Run: npm run build && (npx vite preview &) && node walk/party.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -57,7 +59,7 @@ async function walk(engine, deviceName, tag) {
   const page = await (await browser.newContext({ ...devices[deviceName], serviceWorkers: 'block' })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/party-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
 

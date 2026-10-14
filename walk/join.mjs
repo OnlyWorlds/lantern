@@ -4,6 +4,8 @@
 // invite; "Sign in to join" keeps it through the sign-in; no PIN gets its own sentence.
 // Run: npm run build && (npx vite preview &) && node walk/join.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -26,7 +28,7 @@ async function walk(engine, deviceName, tag) {
   const errors = [];
   let expect4xx = false;
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && !(expect4xx && /Failed to load resource/.test(m.text())) && errors.push(m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !(expect4xx && /Failed to load resource/.test(m.text())) && errors.push(m.text()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/join-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
 

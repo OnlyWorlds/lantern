@@ -271,6 +271,39 @@ export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void
   }, 'The picture');
 }
 
+/**
+ * Delete, after one warning (the Captain, h37 #4292: "a warning is enough to let it be on the users'
+ * head"). Leaves for the list it came from, since the page it was on is gone.
+ */
+export function deleteSheet(s: WorldSession, el: OwElement): void {
+  sheet((close) => {
+    const name = elName(el);
+    const err = h('p', { class: 'error', role: 'alert' });
+    const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');
+    cancel.addEventListener('click', close);
+    const ok = h('button', { class: 'btn btn-primary btn-delete-confirm', type: 'button', 'data-action': 'confirm-delete' }, 'Delete');
+    ok.addEventListener('click', async () => {
+      ok.disabled = true;
+      try {
+        await s.remove(el.id);
+        close();
+        const unsorted = el.type === 'narrative' && el.supertype === 'Unsorted';
+        toast(s.isLocal || navigator.onLine ? `Deleted ${name}.` : `Deleted ${name} on this phone. It sends when you have signal.`);
+        go(`#/w/${s.id}/t/${el.type}${unsorted ? '?unsorted' : ''}`, true);
+      } catch (ex) {
+        err.textContent = errorText(ex);
+        ok.disabled = false;
+      }
+    });
+    return [
+      h('h2', null, `Delete ${name}?`),
+      h('p', { class: 'dim', style: 'margin:0' }, `This can't be undone. Links to it from the rest of the world go too.`),
+      err,
+      h('div', { class: 'row-gap' }, cancel, ok),
+    ];
+  }, `Delete ${elName(el)}`);
+}
+
 export function newElementSheet(s: WorldSession, type: string): void {
   sheet((close) => {
     const name = h('input', { class: 'input', type: 'text', 'aria-label': 'Name', placeholder: 'Name' });

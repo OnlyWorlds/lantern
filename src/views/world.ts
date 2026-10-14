@@ -22,7 +22,7 @@ import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { noteOpened, recent } from '../recent';
 import { givenTonight } from '../given';
 import { notes } from '../notes';
-import { addFieldSheet, editField, newElementSheet, pictureSheet } from './edit';
+import { addFieldSheet, deleteSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
 import { dateText } from '../time';
 import { moveNow } from './time';
@@ -663,6 +663,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       toggle ?? '',
       editable ? addField : '',
       editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap the name or a value to change it.') : '',
+      editable ? deleteButton(s, el) : '',
       tabbar(s, null),
     );
   };
@@ -765,6 +766,14 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     acts.push(b, pictureWait);
   }
   return acts.some(Boolean) ? h('div', { class: 'chips map-links' }, ...acts) : '';
+}
+
+/** Delete, last on the page and quiet: the sheet asks once (src/views/edit.ts `deleteSheet`). */
+function deleteButton(s: WorldSession, el: OwElement): HTMLElement {
+  const what = isUnsortedNote(el) ? 'note' : typeLabel(el.type).toLowerCase();
+  const b = h('button', { class: 'btn btn-quiet btn-delete', type: 'button', 'data-action': 'delete' }, icon('close', 16), `Delete this ${what}`);
+  b.addEventListener('click', () => deleteSheet(s, el));
+  return b;
 }
 
 /** What the page shows as a picture: online, held in a local world, or a photo waiting to send. */

@@ -2,6 +2,8 @@
 // text and url in its query (the manifest's GET share_target). Both engines.
 // Run: npm run build && (npx vite preview &) && node walk/share.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
@@ -19,7 +21,7 @@ async function walk(engine, deviceName, tag) {
   const page = await (await browser.newContext({ ...devices[deviceName] })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && errors.push(m.text()));
 
   // 1. No world takes changes: say how to get one
   await page.goto(SHARE);

@@ -3,6 +3,8 @@
 // text and numbers change from their row, a list reads only, find finds them, nothing spills at 320.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/custom.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';
@@ -54,7 +56,7 @@ async function walk(engine, tag) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && errors.push('console: ' + m.text()));
 
   await page.goto(`${BASE}/#/worlds`);
   await page.waitForSelector('input[aria-label="A world file"]', { state: 'attached' });

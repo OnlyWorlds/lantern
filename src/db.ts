@@ -43,9 +43,16 @@ export type OutboxState = 'waiting' | 'sending' | 'needs-you' | 'gone' | 'refuse
 
 export interface OutboxRow {
   seq?: number;
-  op: 'patch' | 'create';
+  op: 'patch' | 'create' | 'delete';
   type: string;
   id: string;
+  /** A delete: what the element was called, for Waiting to send (it is no longer on the screen). */
+  name?: string;
+  /**
+   * A create: false until its first send starts. A create never tried has never reached keel, so a
+   * delete can drop it with nothing sent; a row from before this flag (undefined) counts as tried.
+   */
+  tried?: boolean;
   /** The element as it was when the edit started (patch only): the base the conflict rule compares. */
   base?: OwElement;
   /** The edit follows an unsettled row for the same element: its base is taken when it is sent. */

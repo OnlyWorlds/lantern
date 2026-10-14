@@ -2,6 +2,8 @@
 // markers) as a phone taps it, both engines. Read only, so it runs against live keel safely.
 // Run: npm run build && (npx vite preview &) && node walk/map.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';
@@ -39,7 +41,7 @@ async function walk(engine, deviceName, tag) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push('console: ' + m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && errors.push('console: ' + m.text()));
   page.on('requestfailed', (r) => errors.push('requestfailed: ' + r.url()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/map-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });

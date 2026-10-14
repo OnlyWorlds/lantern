@@ -149,6 +149,21 @@ try {
   await page.waitForTimeout(1500);
   await shot('photo-element');
 
+  // Delete through the app (S404, the Captain h37 #4292): one warning, then keel no longer has it.
+  await page.locator('[data-action="delete"]').tap();
+  await page.locator('.sheet [data-action="confirm-delete"]').tap();
+  await page.waitForSelector('[data-screen="type"]');
+  await until(async () => {
+    try {
+      await api.get('narrative', pid);
+      return false;
+    } catch (e) {
+      return e.status === 404;
+    }
+  }, 'the delete reaches keel');
+  made.delete(pid);
+  check(true, 'deleted from the phone: keel answers 404 for it');
+
   check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
 } catch (e) {
   failures++;

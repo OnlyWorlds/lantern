@@ -312,6 +312,19 @@ h2 {
   margin: 0;
 }
 
+/* Delete: the error colour, quiet until its sheet asks (the Captain, h37 #4292). A token is Seethe's call. */
+.btn-delete {
+  color: #ff8a7a;
+  align-self: flex-start;
+  gap: 6px;
+}
+
+.btn-delete-confirm {
+  background: #ff8a7a;
+  border-color: #ff8a7a;
+  color: #1a0d0b;
+}
+
 /* ---------- world list ---------- */
 
 .world-card {
@@ -1007,7 +1020,8 @@ select.input {
 .sheet {
   width: 100%;
   max-width: 640px;
-  max-height: 92dvh;
+  /* Of the backdrop, which follows the part of the screen above the keyboard (src/ui.ts sheet). */
+  max-height: min(92dvh, 92%);
   overflow-y: auto;
   background: var(--lan-bg);
   border-top: 1px solid var(--lan-border);

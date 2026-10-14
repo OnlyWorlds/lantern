@@ -26,6 +26,7 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 | Custom fields | Atlas's custom fields (`x_`, `shadow_`) shown, changed, added and removed on the phone, as Atlas names them; Settings chooses the fields on a page: Filled, All or Yours. A player sees every field of what their Character knows (keel filters elements, not fields) | the Captain h37 #4061; Skeld #4053 |
 | The table, S402 | Before now (Events around the world's now), tonight's cast and Recent, a player's own notes kept on their phone (option B; a guest writing into the world, option A, kept for later), given tonight from this phone's reveals (no new element in the world); moving now for the owner and a co-builder (Keel #240, the Captain's "accepted 240") | the Captain h37 #4061, #4072, #4087, #4113, #4192; Skeld #4085, #4214 |
 | Sign out on a shared phone | Offers to remove the account's worlds too; not the default | the Captain h37 #4072 |
+| Deleting elements | Anyone who can change the world deletes from an element's page, after one warning ("a warning is enough to let it be on the users' head"); it goes through the outbox, and keel removes the links to it. Players never can (they cannot change a world) | the Captain h37 #4292, on Quillon's walk #4275 |
 | AI trials | The Captain's Anthropic key, up to about $8, to test Haiku 5.5 on lookup: from local scripts only (`Forge/.env`, `Comms/var/secrets/anthropic-api-key.txt`), never in a bundle. Rotate when the proxy takes over | #3413 |
 
 ## How it works
@@ -72,7 +73,7 @@ The rule for the night: each piece is its owner's whole, built in their own plac
 Players at the table and "give it to the party" (after #213 and #212) · a character's page for anyone (an Atlas sharing block: what one character knows) · Ask through the proxy (#159) · the morning after (the resolve method, Simmer's extraction, through the proxy) · maps, if Quillon's numbers hold · the Android share target · stored voice.
 
 ## Out of scope
-Drawing maps, charts, the writing room, building pages (Atlas) · deleting elements · folders (no phone browser writes one back) · v1 of the API.
+Drawing maps, charts, the writing room, building pages (Atlas) · folders (no phone browser writes one back) · v1 of the API.
 
 ## Traps the crew already knows
 

@@ -16,7 +16,7 @@ import {
 import * as db from './db';
 import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
-import { isEmptyValue } from './schema';
+import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
 import { clockFrom } from './time';
 
@@ -111,6 +111,8 @@ export class WorldSession {
       this.settledDuringWalk?.add(el.id);
     }
   }
+  /** Deleted from this phone this session: their links stay hidden until keel's scrubbed copies arrive. */
+  private deletedHere = new Set<string>();
   /** Ids whose send settled while a fresh read was walking; the swap keeps their answers. */
   private settledDuringWalk: Set<string> | null = null;
   outbox: OutboxRow[] = [];
@@ -215,13 +217,27 @@ export class WorldSession {
 
   private rebuild(): void {
     this.view = new Map(this.truth);
+    const gone = new Set(this.deletedHere);
     for (const row of [...this.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
       if (row.state === 'refused') continue;
+      if (row.op === 'delete') {
+        gone.add(row.id);
+        continue;
+      }
       const cur = this.view.get(row.id) ?? ({ id: row.id, type: row.type, name: '' } as OwElement);
       const next = { ...cur, ...row.values, type: row.type, id: row.id };
       // A photo waiting to be uploaded shows as itself, from the phone.
       if (row.photo) next.image_url = photoUrl(row.photo);
       this.view.set(row.id, next);
+    }
+    // A delete waiting to send (or sent, until keel's scrubbed copies arrive) leaves the screen
+    // whole: the element goes, and so do the links to it, as keel removes them.
+    for (const id of gone) this.view.delete(id);
+    if (gone.size) {
+      for (const [id, el] of this.view) {
+        const scrubbed = withoutLinksTo(el, gone);
+        if (scrubbed) this.view.set(id, scrubbed);
+      }
     }
     this.backlinkCache = null;
     this.lookupCache = null;
@@ -607,6 +623,7 @@ export class WorldSession {
       idempotencyKey: fixed?.idempotencyKey ?? uuid7(),
       photo,
       state: 'waiting',
+      tried: false,
       createdAt: new Date().toISOString(),
     };
     row.seq = await db.putOutboxRow(this.id, row);
@@ -615,6 +632,77 @@ export class WorldSession {
     this.emit();
     void this.flush();
     return id;
+  }
+
+  /**
+   * Delete an element (the Captain, h37 #4292: anyone who can change the world, after a warning).
+   * keel removes the links to it in the same transaction; a world on this phone removes them here.
+   * Online it is a row like any change: hidden at once, sent in order behind anything already in
+   * flight for it. A catch that never left the phone is simply dropped, and nothing is sent.
+   */
+  async remove(id: string): Promise<void> {
+    if (!this.canWrite) throw new Error('This world is read-only here.');
+    const el = this.view.get(id);
+    if (!el) return;
+    if (this.isLocal) {
+      const gone = new Set([id]);
+      const now = new Date().toISOString();
+      const referrers: OwElement[] = [];
+      for (const other of this.truth.values()) {
+        const scrubbed = other.id === id ? null : withoutLinksTo(other, gone);
+        if (scrubbed) referrers.push({ ...scrubbed, updated_at: now });
+      }
+      await db.applyElements(this.id, referrers, [id]);
+      this.truth.delete(id);
+      for (const r of referrers) this.truth.set(r.id, r);
+      const rec = await db.updateWorldRecord(this.id, { count: this.truth.size });
+      if (rec) this.rec = rec;
+      this.rebuild();
+      this.emit();
+      return;
+    }
+    if (this.outbox.some((r) => r.id === id && r.op === 'delete')) return;
+    const rows = this.outbox.filter((r) => r.id === id);
+    const create = rows.find((r) => r.op === 'create');
+    // Rows not in flight are moot once it is deleted: let them go. One sending stays, and the delete follows it.
+    // Never on keel: a create never tried. (A create keel refused is not on the screen, so it has no
+    // Delete; Waiting to send lets it go.)
+    const settledFirst = !!create && create.tried === false && create.state === 'waiting';
+    for (const r of rows) {
+      if (r.state === 'sending') continue;
+      if (r === create && !settledFirst) continue; // a create that may have reached keel is sent, then deleted
+      await db.settleOutboxRow(this.id, r.seq!, null);
+      this.outbox = this.outbox.filter((x) => x !== r);
+    }
+    if (settledFirst && !this.outbox.some((r) => r.id === id)) {
+      // Never left the phone: gone with nothing sent.
+      this.rebuild();
+      this.emit();
+      return;
+    }
+    const row: OutboxRow = {
+      op: 'delete',
+      type: el.type,
+      id,
+      name: typeof el.name === 'string' ? el.name : undefined,
+      values: {},
+      state: 'waiting',
+      createdAt: new Date().toISOString(),
+    };
+    row.seq = await db.putOutboxRow(this.id, row);
+    this.outbox.push(row);
+    this.rebuild();
+    this.emit();
+    void this.flush();
+  }
+
+  /** A delete keel answered (or had already done): the element leaves this phone's copy. */
+  private async settleDelete(row: OutboxRow): Promise<void> {
+    await db.settleOutboxRow(this.id, row.seq!, null);
+    this.outbox = this.outbox.filter((r) => r !== row);
+    this.deletedHere.add(row.id);
+    this.truth.delete(row.id);
+    await db.applyElements(this.id, [], [row.id]);
   }
 
   /**
@@ -669,9 +757,19 @@ export class WorldSession {
       row.lateBase = undefined;
       await db.putOutboxRow(this.id, row);
     }
+    // From here the create may reach keel: a delete can no longer drop it unsent.
+    if (row.tried === false) {
+      row.tried = true;
+      await db.putOutboxRow(this.id, row);
+    }
     row.state = 'sending';
     this.emit();
     try {
+      if (row.op === 'delete') {
+        await c.delete(row.type, row.id);
+        await this.settleDelete(row);
+        return false;
+      }
       if (row.photo) {
         let up: Awaited<ReturnType<OwV2Client['uploadImage']>> | undefined;
         try {
@@ -751,6 +849,11 @@ export class WorldSession {
       return false;
     }
     if (e instanceof OwApiError) {
+      // Already gone (deleted elsewhere, or this delete landed and its answer was lost): done.
+      if (e.status === 404 && row.op === 'delete') {
+        await this.settleDelete(row);
+        return false;
+      }
       if (e.status === 404 && row.op === 'patch') {
         await keep('gone', 'Deleted elsewhere');
         return false;

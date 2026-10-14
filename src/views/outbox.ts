@@ -91,8 +91,8 @@ function refusedCard(s: WorldSession, row: OutboxRow): HTMLElement {
     'div',
     { class: 'conflict' },
     // A refused row is not laid over the view, so a refused create has only its own values.
-    h('b', null, s.get(row.id) ? elName(s.get(row.id)) : String(row.values.name ?? 'A change')),
-    h('p', { class: 'dim small', style: 'margin:0' }, `Not sent: ${row.error ?? 'the server refused it'}`),
+    h('b', null, s.get(row.id) ? elName(s.get(row.id)) : String(row.name ?? row.values.name ?? 'A change')),
+    h('p', { class: 'dim small', style: 'margin:0' }, `${row.op === 'delete' ? 'Not deleted' : 'Not sent'}: ${row.error ?? 'the server refused it'}`),
     h('div', { class: 'row-gap' }, retry, drop),
   );
 }
@@ -136,12 +136,13 @@ export function outboxView(s: WorldSession): View {
                 h(
                   'span',
                   { class: 'label' },
-                  h('b', null, elName(s.get(r.id))),
+                  // A delete's element is off the screen already: the row keeps its name.
+                  h('b', null, r.op === 'delete' ? (r.name || 'Unnamed') : elName(s.get(r.id))),
                   ' ',
                   h(
                     'span',
                     { class: 'muted' },
-                    `· ${[r.op === 'create' ? 'new' : Object.keys(r.values).map(fieldLabel).join(', '), r.photo ? 'a photo' : '', r.state === 'sending' ? 'sending' : ''].filter(Boolean).join(' · ')}`,
+                    `· ${[r.op === 'create' ? 'new' : r.op === 'delete' ? 'delete' : Object.keys(r.values).map(fieldLabel).join(', '), r.photo ? 'a photo' : '', r.state === 'sending' ? 'sending' : ''].filter(Boolean).join(' · ')}`,
                   ),
                 ),
               ),

@@ -5,6 +5,8 @@
 // every screen, World going home; Ask says why it gives no sentence.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/first-walk.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -27,7 +29,7 @@ async function walk(engine, tag) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   let cutOff = false; // keel cut off on purpose (step 7): its failed loads are expected
-  page.on('console', (m) => m.type() === 'error' && !(cutOff && /Failed to load resource/.test(m.text())) && errors.push('console: ' + m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !(cutOff && /Failed to load resource/.test(m.text())) && errors.push('console: ' + m.text()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/first-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
   const screen = () => page.evaluate(() => document.querySelector('main')?.dataset.screen ?? '?');

@@ -5,6 +5,8 @@
 // Workers blocked: with one in control, Playwright's WebKit does not route the page's requests.
 // Run: npm run build && (npx vite preview &) && node walk/ask.mjs [webkit|chromium]
 import './guard.mjs';
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -25,7 +27,7 @@ async function walk(engine, deviceName, tag) {
   const page = await (await browser.newContext({ ...devices[deviceName], serviceWorkers: 'block' })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/ask-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
   let answer = json(200, { answer: 'Admiral Fluffington commands the Puddle Navy from the USS Fuzzball.', model: 'claude-haiku-5-5', stop_reason: 'end_turn', usage: { input_tokens: 812, output_tokens: 19 }, remaining: 49 });

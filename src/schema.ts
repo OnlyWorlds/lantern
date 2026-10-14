@@ -29,6 +29,29 @@ export interface FieldRow {
   section: string;
 }
 
+/**
+ * An element with the deleted ids taken out of its link fields (a single link to null, a multi link
+ * filtered), or null when it links to none of them. keel does the same on a delete, for every element,
+ * in the delete's own transaction; a world on this phone does it here, and the screen does it while
+ * a delete waits to send.
+ */
+export function withoutLinksTo<T extends { type: string } & Record<string, unknown>>(el: T, gone: ReadonlySet<string>): T | null {
+  if (!isType(el.type) || !gone.size) return null;
+  const all = (FIELD_SCHEMA as unknown as Record<string, Record<string, FieldInfo>>)[el.type];
+  let next: T | null = null;
+  for (const [f, info] of Object.entries(all)) {
+    const v = el[f];
+    if (info.type === 'single_link' && typeof v === 'string' && gone.has(v)) {
+      next ??= { ...el };
+      (next as Record<string, unknown>)[f] = null;
+    } else if (info.type === 'multi_link' && Array.isArray(v) && v.some((x) => gone.has(String(x)))) {
+      next ??= { ...el };
+      (next as Record<string, unknown>)[f] = v.filter((x) => !gone.has(String(x)));
+    }
+  }
+  return next;
+}
+
 /** The type's fields after the base ones, in the schema's section order. */
 export function typeFields(type: string): FieldRow[] {
   if (!isType(type)) return [];

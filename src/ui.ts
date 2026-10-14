@@ -90,9 +90,23 @@ export function sheet(build: (close: () => void) => Node[], label: string): () =
   if (document.querySelector('.backdrop')) return () => undefined;
   const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label });
   const back = h('div', { class: 'backdrop' }, panel);
+  // The keyboard covered Save (the Captain's phone, h43 #4293). Chrome on Android shrinks the page for
+  // it (`interactive-widget` in index.html); Safari shrinks only the visible part, so the backdrop
+  // follows that part, and the sheet's bottom, Save with it, sits above the keyboard.
+  const vv = window.visualViewport;
+  const fit = () => {
+    if (!vv) return;
+    back.style.top = `${vv.offsetTop}px`;
+    back.style.height = `${vv.height}px`;
+    back.style.bottom = 'auto';
+  };
+  vv?.addEventListener('resize', fit);
+  vv?.addEventListener('scroll', fit);
   const close = () => {
     back.remove();
     window.removeEventListener('hashchange', close);
+    vv?.removeEventListener('resize', fit);
+    vv?.removeEventListener('scroll', fit);
   };
   back.addEventListener('click', (e) => {
     if (e.target === back) close();
@@ -100,6 +114,7 @@ export function sheet(build: (close: () => void) => Node[], label: string): () =
   window.addEventListener('hashchange', close);
   for (const n of build(close)) panel.appendChild(n);
   document.body.appendChild(back);
+  fit();
   const first = panel.querySelector<HTMLElement>('input, textarea');
   first?.focus();
   return close;
