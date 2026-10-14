@@ -48,7 +48,7 @@ Session and gate records (S395 to S398): `docs/PROGRESS-history.md`.
 - Where: `src/sortplan.ts` (pure: slice, payload, rows checked on arrival, writes planned with every route check made again, the slice re-checked, an allow-list of fields: never image_url, kind words set only when empty), `src/sort.ts`, `src/sortwrite.ts` (the write run), `src/views/sort.ts`, `test/sortplan.test.ts`, `test/sortwrite.test.ts` (the write run on a fake keel), `walk/sort.mjs` (both engines, a routed fake of the route, keel cut off).
 - Its gates (S398 sort, S399, the merge gate, S400) and what each fixed: `docs/PROGRESS-history.md`.
 
-His next walk and the player round: `Forge/Notes/2026-10-12-lantern-smoke-2.md`.
+His next walk and the player round: `Forge/Notes/2026-10-14-lantern-smoke-3.md` (S403, the deploy smoke: the AI the whole way, S402's pieces, the player round with a second account; on his shelf). The preview runs `5dbf37d` (Boss h37 #4197); `lantern.onlyworlds.com` waits on his Q1 there. Production has the AI key (Skeld #4202).
 
 **From the old Flutter app** (S402 post-mortem; the Captain h37 #4061, #4072 "go now"): **before now** and **tonight's cast**, both built (the table). The rest of that app (progression, its timeline code) is not worth carrying. **His proper walk of S402's pieces is later this week** (#4072).
 
