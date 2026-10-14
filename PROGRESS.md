@@ -47,7 +47,7 @@ Session and gate records (S395 to S398): `docs/PROGRESS-history.md`.
 
 ## Next
 
-**Waiting on the Captain (h37 #4419)**: a player's notes reaching the world, now that keel allows it (#241, keel db48d30, Skeld #4417: a player's note is narrated by their own Character, keel fills `narrator` in when left out; shared only with Collectives their Character is in; a seat with no Character gets 403 guest_not_supported). Options A (as is), B (private by default plus "Share with the party", my lean), C (every note to the world). Nothing changes until he answers.
+**Build next, ruled (the Captain h37 #4420, "b sounds reasonable" to #4419)**: a player's notes stay on the phone by default, and each gets "Share with the party", which sends it as a Narrative from the player's key with the party's Collective in `collectives` and `narrator` left out. The facts it stands on: a player's notes reaching the world, now that keel allows it (#241, keel db48d30, Skeld #4417: a player's note is narrated by their own Character, keel fills `narrator` in when left out; shared only with Collectives their Character is in; a seat with no Character gets 403 guest_not_supported). Options A (as is), B (private by default plus "Share with the party", my lean), C (every note to the world). Nothing changes until he answers.
 
 **SDK**: Lantern is on 4.19.0, the registry's blessed pin 4.21.0 (Boss h37 #4412).
 
