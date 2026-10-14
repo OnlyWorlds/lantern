@@ -15,7 +15,7 @@ export async function moveNow(s: WorldSession, n: number): Promise<boolean> {
   }
   try {
     await s.setNow(n);
-    toast(`Now is ${dateText(n, s.rec.timeUnit)}.`);
+    toast(`Now is ${dateText(n, s.rec.timeUnit, s.calendar())}.`);
     return true;
   } catch (e) {
     toast(errorText(e));
@@ -56,8 +56,9 @@ export function beforeNowView(s: WorldSession): View {
   const refresh = () => {
     const now = s.rec.timeNow;
     const unit = s.rec.timeUnit;
+    const cal = s.calendar();
     const t = timeline(s.elements(), now);
-    const row = (e: Parameters<typeof elRow>[1]) => elRow(s.id, e, [spanText(e, unit), ongoing(e, now) ? 'still going' : ''].filter(Boolean).join(' · '));
+    const row = (e: Parameters<typeof elRow>[1]) => elRow(s.id, e, [spanText(e, unit, cal),ongoing(e, now) ? 'still going' : ''].filter(Boolean).join(' · '));
     const parts: (HTMLElement | string)[] = [];
     if (!t.before.length && !t.after.length && !t.undated.length) {
       parts.push(h('p', { class: 'dim', style: 'margin:0' }, 'No Events in this world yet. An Event with a start date shows here in its place.'));
@@ -66,12 +67,12 @@ export function beforeNowView(s: WorldSession): View {
         h(
           'p',
           { class: 'dim', style: 'margin:0', 'data-now': now === undefined ? '' : String(now) },
-          now === undefined ? 'This world has no now set, so every dated Event is listed. Set it in Atlas.' : `Now is ${dateText(now, unit)}.`,
+          now === undefined ? 'This world has no now set, so every dated Event is listed. Set it in Atlas.' : `Now is ${dateText(now, unit, cal)}.`,
         ),
       );
       if (t.before.length) parts.push(h('div', { class: 'results', 'data-part': 'before' }, ...t.before.map(row)));
       if (now !== undefined) {
-        parts.push(h('div', { class: 'now-line', role: 'separator', 'aria-label': `Now, ${dateText(now, unit)}` }, h('span', null, `Now · ${dateText(now, unit)}`)));
+        parts.push(h('div', { class: 'now-line', role: 'separator', 'aria-label': `Now, ${dateText(now, unit, cal)}` }, h('span', null, `Now · ${dateText(now, unit, cal)}`)));
         if (t.after.length) {
           parts.push(h('p', { class: 'section-label' }, 'After now'), h('div', { class: 'results after', 'data-part': 'after' }, ...t.after.map(row)));
         }

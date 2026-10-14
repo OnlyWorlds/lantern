@@ -1,7 +1,7 @@
 // Before now: a world's Events in order, split at the world's now (src/time.ts).
 import { describe, expect, it } from 'vitest';
-import type { OwElement } from '@onlyworlds/sdk';
-import { clockFrom, dateText, hasDatedEvent, ongoing, spanText, timeline } from '../src/time';
+import { formatStep, type OwElement } from '@onlyworlds/sdk';
+import { calendarOf, clockFrom, dateText, hasDatedEvent, isDateField, ongoing, spanText, timeline } from '../src/time';
 
 const ev = (id: string, name: string, start?: number, end?: number) =>
   ({ id, type: 'event', name, start_date: start, end_date: end }) as unknown as OwElement;
@@ -47,5 +47,37 @@ describe('before now', () => {
     expect(hasDatedEvent([])).toBe(false);
     expect(hasDatedEvent([ev('6', 'A rumour'), { id: '7', type: 'character', name: 'Ada', start_date: 1 } as unknown as OwElement])).toBe(false);
     expect(hasDatedEvent([ev('6', 'A rumour'), ev('1', 'The founding', 0)])).toBe(true);
+  });
+});
+
+describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
+  const cfg = { version: 1, grain: 'Year', eras: [{ name: 'After the Eruption', abbrev: 'AE', start: 0 }] };
+  const calendar = (id: string, value: unknown) => ({ id, type: 'construct', name: id, supertype: 'calendar', atlas_calendar: value }) as unknown as OwElement;
+
+  it('names dates only when the world holds exactly one calendar, as Atlas does on a device that never chose', () => {
+    expect(calendarOf([ev('1', 'x', 3), calendar('c1', cfg)])).toEqual(cfg);
+    // Moppetopia, the Captain's own world, holds two: numbers, nothing guessed.
+    expect(calendarOf([calendar('c1', cfg), calendar('c2', { version: 1, grain: 'Year' })])).toBeNull();
+    expect(calendarOf([ev('1', 'x', 3)])).toBeNull();
+    // A JSON string is read as Atlas's object (another tool may serialize it); a broken one is no calendar.
+    expect(calendarOf([calendar('c1', JSON.stringify(cfg))])).toEqual(cfg);
+    expect(calendarOf([calendar('c1', { grain: 7 })])).toBeNull();
+  });
+
+  it("speaks the calendar's words, and the numbers without one", () => {
+    const cal = calendarOf([calendar('c1', cfg)])!;
+    expect(dateText(412, 'Year', cal)).toBe(formatStep(cal, 412));
+    expect(dateText(412, 'Year', cal)).toMatch(/AE/);
+    expect(dateText(412, 'Year', null)).toBe('Year 412');
+    // Where the calendar only gives the number back (before every era, a bare calendar), the unit says more.
+    expect(dateText(-3, 'Year', cal)).toBe('Year -3');
+    expect(dateText(412, 'Year', { version: 1, grain: 'Year' })).toBe('Year 412');
+    expect(spanText(ev('1', 'War', 10, 20), 'Year', cal)).toBe(`${formatStep(cal, 10)} to ${formatStep(cal, 20)}`);
+    expect(spanText(ev('1', 'War', 10, 20), 'Year')).toBe('Year 10 to 20');
+  });
+
+  it("knows a schema date field by Atlas's rule, never a custom one", () => {
+    for (const f of ['date', 'start_date', 'end_date', 'birth_date', 'formation_date']) expect(isDateField(f)).toBe(true);
+    for (const f of ['x_wedding_date', 'shadow_birth_date', 'atlas_calendar', 'update', 'dates']) expect(isDateField(f)).toBe(false);
   });
 });

@@ -4,9 +4,11 @@
 //
 // The time line is keel's: a world's now is `time_range_current` (Atlas's folder writes it as
 // `time_current`), its unit `time_basic_unit`, an Event's dates the integers `start_date` and
-// `end_date`. Atlas can name those numbers with a calendar (`atlas_calendar`); Lantern shows the
-// numbers with the unit, which a calendar never changes the order of.
-import type { OwElement } from '@onlyworlds/sdk';
+// `end_date`. Atlas can name those numbers with a calendar (`atlas_calendar`, SDK 4.20's copy of
+// Atlas's kernel): a world with exactly one names its dates here as Atlas does on a device that
+// never chose (which one a device chose is Atlas's own, not the world's); otherwise the numbers
+// with the unit. A calendar never changes the order.
+import { formatStep, resolveCalendarLens, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
 
 export interface WorldClock {
   now?: number;
@@ -21,17 +23,31 @@ export function clockFrom(world: Record<string, unknown>): WorldClock {
   return { now: num(world.time_range_current) ?? num(world.time_current), unit };
 }
 
-/** "Year 412", or the bare number when the world names no unit. */
-export function dateText(n: number, unit?: string): string {
+/** The world's calendar: its only one (Atlas's `fallbackToOnly`), or none when it has none or several. */
+export function calendarOf(elements: Iterable<OwElement>): CalendarConfig | null {
+  return resolveCalendarLens(elements, undefined, { fallbackToOnly: true })?.config ?? null;
+}
+
+/** "3 Frost 412 AE" in the world's calendar; else "Year 412", or the bare number when the world names no unit. */
+export function dateText(n: number, unit?: string, cal?: CalendarConfig | null): string {
+  // A calendar that only gives the number back (no era reaches it, a bare one) says less than the unit does.
+  const named = cal && Number.isInteger(n) ? formatStep(cal, n) : '';
+  if (named && named !== String(n)) return named;
   return unit ? `${unit} ${n}` : String(n);
 }
 
 /** "Year 412", "Year 412 to 430" (an end before its start is left out, never shown backwards). */
-export function spanText(el: OwElement, unit?: string): string {
+export function spanText(el: OwElement, unit?: string, cal?: CalendarConfig | null): string {
   const start = num(el.start_date);
   const end = num(el.end_date);
-  if (start === undefined) return end === undefined ? '' : `until ${dateText(end, unit)}`;
-  return end !== undefined && end > start ? `${dateText(start, unit)} to ${end}` : dateText(start, unit);
+  if (start === undefined) return end === undefined ? '' : `until ${dateText(end, unit, cal)}`;
+  if (end === undefined || end <= start) return dateText(start, unit, cal);
+  return `${dateText(start, unit, cal)} to ${cal ? dateText(end, unit, cal) : end}`;
+}
+
+/** A schema date field (`birth_date`, `start_date`, …): Atlas's rule, never a custom field. */
+export function isDateField(field: string): boolean {
+  return !/^(x|shadow|atlas)_/.test(field) && (field === 'date' || /^[a-z]+(?:_[a-z]+)*_date$/.test(field));
 }
 
 export interface Timeline {

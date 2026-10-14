@@ -18,7 +18,8 @@ import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
 import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
-import { clockFrom } from './time';
+import { calendarOf, clockFrom } from './time';
+import type { CalendarConfig } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 
@@ -127,6 +128,7 @@ export class WorldSession {
   needPin = false;
   private listeners = new Set<() => void>();
   private backlinkCache: Map<string, string[]> | null = null;
+  private calendarCache: CalendarConfig | null | undefined = undefined;
   private lookupCache: OwWorldIndex<OwElement> | null = null;
   private pulling: Promise<void> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
@@ -284,6 +286,7 @@ export class WorldSession {
       }
     }
     this.backlinkCache = null;
+    this.calendarCache = undefined;
     this.lookupCache = null;
   }
 
@@ -323,6 +326,12 @@ export class WorldSession {
       if (row.op === 'create') m.set('*', row);
     }
     return m;
+  }
+
+  /** The world's calendar (src/time.ts `calendarOf`), worked out once per change. */
+  calendar(): CalendarConfig | null {
+    if (this.calendarCache === undefined) this.calendarCache = calendarOf(this.view.values());
+    return this.calendarCache;
   }
 
   /** Elements whose link fields point at this one. */

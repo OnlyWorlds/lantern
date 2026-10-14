@@ -24,7 +24,7 @@ import { givenTonight } from '../given';
 import { notes } from '../notes';
 import { addFieldSheet, deleteSheet, editField, newElementSheet, pictureSheet } from './edit';
 import { fieldsShown } from '../app-state';
-import { dateText, hasDatedEvent } from '../time';
+import { dateText, hasDatedEvent, isDateField } from '../time';
 import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
@@ -280,7 +280,7 @@ export function homeView(s: WorldSession): View {
             'a',
             { class: 'choice', href: `#/w/${s.id}/time`, 'data-action': 'before-now' },
             h('b', null, 'Before now'),
-            h('span', null, s.rec.timeNow === undefined ? 'The Events in the order they happened' : `The Events in order, up to ${dateText(s.rec.timeNow, s.rec.timeUnit)}`),
+            h('span', null, s.rec.timeNow === undefined ? 'The Events in the order they happened' : `The Events in order, up to ${dateText(s.rec.timeNow, s.rec.timeUnit, s.calendar())}`),
           )
         : '',
       h('p', { class: 'section-label' }, 'In this world'),
@@ -413,6 +413,10 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
   if (info?.type === 'single_link' && typeof v === 'string') return h('div', { class: 'chips' }, linkChip(s, v));
   if (info?.type === 'multi_link' && Array.isArray(v)) return h('div', { class: 'chips' }, ...v.map((id) => linkChip(s, String(id))));
   if (info?.type === 'integer_max' && info.max) return document.createTextNode(`${v} / ${info.max}`);
+  // A date in the world's calendar, with the number it is kept as (Atlas's element page does the same).
+  const cal = typeof v === 'number' && Number.isInteger(v) && isDateField(field) ? s.calendar() : null;
+  const named = cal ? dateText(v as number, undefined, cal) : '';
+  if (named && named !== String(v)) return h('span', { 'data-part': 'calendar-date' }, named, h('span', { class: 'muted small' }, ` · ${v}`));
   return document.createTextNode(String(v));
 }
 
@@ -746,7 +750,7 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     b.addEventListener('click', () => {
       if (!armed) {
         armed = true;
-        b.lastChild!.textContent = `Move now to ${dateText(start, s.rec.timeUnit)}? Tap again`;
+        b.lastChild!.textContent = `Move now to ${dateText(start, s.rec.timeUnit, s.calendar())}? Tap again`;
         return;
       }
       void moveNow(s, start);
