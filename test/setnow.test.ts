@@ -1,6 +1,7 @@
 // Moving the world's now (h37 #4087) against a fake keel shaped by Skeld's read of keel's
-// patch_world (h37 #4085): the owner's key with the PIN moves it and gets the world back; a member's
-// key is refused with owner_only before the body is read; a wrong PIN is a 401.
+// patch_world (h37 #4085) and Keel #240 (h37 #4214): the owner's key with the PIN moves it and gets
+// the world back; a co-builder's key may send time_range_current alone (anything beside it is
+// owner_only); any other member's key is refused with owner_only; a wrong PIN is a 401.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -23,10 +24,12 @@ const db = await import('../src/db');
 
 const OWNER = 'ow_w_' + 'o'.repeat(40);
 const MEMBER = 'ow_w_' + 'm'.repeat(40);
+const CO_BUILDER = 'ow_w_' + 'c'.repeat(40);
 let world: Record<string, unknown>;
 let patches: unknown[];
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const ownerOnly = () => json(403, { error: { code: 'owner_only', message: "Only the world's owner can change the world's own settings." } });
 beforeEach(() => {
   world = { id: 'w-now', name: 'Fake world', time_range_current: 453, time_basic_unit: 'Year' };
   patches = [];
@@ -34,9 +37,11 @@ beforeEach(() => {
     const url = new URL(String(input));
     const headers = new Headers(init.headers);
     if (url.pathname.replace(/\/+$/, '') !== '/api/v2/world' || (init.method ?? 'GET').toUpperCase() !== 'PATCH') return json(500, { error: { code: 'unexpected' } });
-    if (headers.get('API-Key') !== OWNER) return json(403, { error: { code: 'owner_only', message: "Only the world's owner can change the world's own settings." } });
+    const key = headers.get('API-Key');
+    if (key !== OWNER && key !== CO_BUILDER) return ownerOnly();
     if (headers.get('API-Pin') !== '4321') return json(401, { error: { code: 'invalid_pin', message: 'PIN' } });
     const body = JSON.parse(String(init.body));
+    if (key === CO_BUILDER && Object.keys(body).join() !== 'time_range_current') return ownerOnly();
     patches.push(body);
     world = { ...world, ...body };
     return json(200, world);
@@ -60,15 +65,36 @@ describe('moving now', () => {
     expect((await db.getWorldRecord(s.id))?.timeNow).toBe(460);
   });
 
-  it("a co-builder is not offered it, and a member's key that tries is told why", async () => {
+  it("a co-builder is offered it and moves the now alone (Keel #240)", async () => {
+    // From the account list: a collaborator whose member role is co_builder.
+    const listed = await session(CO_BUILDER, 'collaborator');
+    listed.rec = { ...listed.rec, memberRole: 'co_builder' };
+    expect(listed.canMoveNow).toBe(true);
+    // A key whose member role keel's /me named.
+    const s = await session(CO_BUILDER);
+    s.rec = { ...s.rec, memberRole: 'co_builder' };
+    expect(s.canMoveNow).toBe(true);
+    setPin(s.rec, '4321');
+    await s.setNow(470);
+    expect(patches).toEqual([{ time_range_current: 470 }]);
+    expect((await db.getWorldRecord(s.id))?.timeNow).toBe(470);
+  });
+
+  it("a contributor or a guest is not offered it, and a member's key that tries is told why", async () => {
+    // A collaborator with no member role named (an older list): not offered.
     expect((await session(MEMBER, 'collaborator')).canMoveNow).toBe(false);
+    for (const memberRole of ['contributor', 'guest'] as const) {
+      const m = await session(MEMBER, 'collaborator');
+      m.rec = { ...m.rec, memberRole };
+      expect(m.canMoveNow).toBe(false);
+    }
     // A key whose member role keel's /me named (the S402 gate, G4): not offered either.
-    const cb = await session(MEMBER);
-    cb.rec = { ...cb.rec, memberRole: 'co_builder' };
-    expect(cb.canMoveNow).toBe(false);
+    const c = await session(MEMBER);
+    c.rec = { ...c.rec, memberRole: 'contributor' };
+    expect(c.canMoveNow).toBe(false);
     const s = await session(MEMBER); // a key with no account role: let try
     setPin(s.rec, '4321');
-    await expect(s.setNow(460)).rejects.toThrow(/Only the world's owner/);
+    await expect(s.setNow(460)).rejects.toThrow(/Only the world's owner or a co-builder/);
     expect((await db.getWorldRecord(s.id))?.timeNow).toBe(453);
   });
 

@@ -301,13 +301,17 @@ export class WorldSession {
   }
 
   /**
-   * Who may move the world's now from this phone: keel lets only the owner change a world's own
-   * settings, a co-builder's key included (403 owner_only, Skeld h37 #4085). A key with no account
-   * role may be the owner's own: it is let try, and keel's answer is said.
+   * Who may move the world's now from this phone: keel lets the owner change a world's own settings,
+   * and a co-builder change its now alone (Keel #240, live in 36b3010, Skeld h37 #4214); a
+   * contributor or a guest gets 403 owner_only. A key with no account role may be the owner's own:
+   * it is let try, and keel's answer is said.
    */
   get canMoveNow(): boolean {
-    // A member role (from the account list, or learned from /me for a key) is never the owner's (the S402 gate, G4).
-    return this.isLocal || (this.canWrite && this.rec.role !== 'collaborator' && !this.rec.memberRole);
+    if (this.isLocal) return true;
+    if (!this.canWrite) return false;
+    // The member role, from the account list or learned from /me for a key (the S402 gate, G4).
+    if (this.rec.memberRole) return this.rec.memberRole === 'co_builder';
+    return this.rec.role !== 'collaborator';
   }
 
   /**
@@ -325,7 +329,7 @@ export class WorldSession {
         n = k.now ?? n;
         if (k.unit) this.rec = { ...this.rec, timeUnit: k.unit };
       } catch (e) {
-        if (e instanceof OwApiError && e.isOwnerOnly) throw new Error("Only the world's owner can move its now.");
+        if (e instanceof OwApiError && e.isOwnerOnly) throw new Error("Only the world's owner or a co-builder can move its now.");
         if (e instanceof OwApiError && e.status === 401) {
           // A wrong PIN: cleared, never retried (keel throttles wrong PINs).
           setPin(this.rec, undefined);
