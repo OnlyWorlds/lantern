@@ -115,10 +115,16 @@ async function route(): Promise<void> {
     case 'catch':
       mount(await shareView(true));
       return;
-    case 'join':
-      mount(await joinView(sharedJoin));
+    case 'join': {
+      // keel's join page hands the code on as #/join/<code> (Keel #294). It leaves the address bar
+      // at once, as Atlas's door clears it, so a spent code never sits in history; replaceState
+      // fires no hashchange, so this screen is the one that opens.
+      const fromLink = joinCode(parts[1] ?? '');
+      if (fromLink) history.replaceState(null, '', '/#/join');
+      mount(await joinView(fromLink ?? sharedJoin));
       sharedJoin = null;
       return;
+    }
     default:
       mount(notFound('That page is not in Lantern.'));
   }

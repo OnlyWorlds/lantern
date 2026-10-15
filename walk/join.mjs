@@ -65,6 +65,16 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('input[aria-label="Invite link"]').inputValue()).includes('ow_j_fromachat'), 'the link is in the field');
   await shot('invite');
 
+  // keel's join page hands the code on in the fragment (Keel #294): a fresh load, then the same
+  // link followed from inside the app (a hashchange). Each opens the invite with the code, and
+  // the code leaves the address bar, as Atlas's door clears it (its R2).
+  for (const [how, url] of [['a fresh load', `${BASE}/?from=keel#/join/ow_j_fromkeel`], ['inside the app', `${BASE}/?from=keel#/join/ow_j_fromkeel2`]]) {
+    await page.goto(url);
+    await page.waitForFunction((c) => document.querySelector('.invite') && document.querySelector('input[aria-label="Invite link"]')?.value.includes(c), url.split('/').pop(), { timeout: 15000 });
+    check(tag, true, `keel's door, ${how}: the invite opens with the code`);
+    check(tag, (await page.evaluate(() => location.hash)) === '#/join', `and the code leaves the address bar (${await page.evaluate(() => location.hash)})`);
+  }
+
   // Not signed in: the code waits through the sign-in, and the invite comes back
   await page.getByRole('button', { name: 'Sign in to join' }).tap();
   await page.waitForSelector('[data-screen="signin"]');
