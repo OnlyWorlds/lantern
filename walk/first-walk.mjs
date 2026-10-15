@@ -211,6 +211,7 @@ async function walk(engine, tag) {
           const st = t.objectStore('worlds');
           const g = st.get(id);
           g.onsuccess = () => st.put({ ...g.result, kind: 'online', role: 'owner', apiKey: 'ow_w_' + 'x'.repeat(40), keyKind: 'write' });
+          r.result.transaction('kv', 'readwrite').objectStore('kv').put('ow_a_' + 'w'.repeat(40), 'accountToken'); // the owner signed in
           t.oncomplete = () => res(true);
           t.onerror = () => rej(t.error);
         };
@@ -219,11 +220,35 @@ async function walk(engine, tag) {
   );
   await page.goto(`${BASE}/#/w/${worldId}`);
   await page.waitForSelector('[data-screen="home"]');
-  // S407: an owner's online world offers Invite someone: the website's Access pane, a new tab.
+  // S411: an owner's online world offers Invite someone, and the link is made here (keel C1, routed
+  // as keel answers: 201 with the code, the link and the line, shown once).
+  const sent = [];
+  await page.route('**/api/v2/account/worlds/*/links', async (r) => {
+    sent.push(JSON.parse(r.request().postData() ?? '{}'));
+    const code = 'ow_j_walk1234';
+    await r.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'link-1', reader: 'person', role: 'guest', label: '', inviter_name: 'Ada', with_character: false, last4: '1234', created_at: '2026-10-15T17:00:00Z', expires_at: '2026-10-22T17:00:00Z', uses: 0, status: 'pending', code, link: `https://www.onlyworlds.com/join#${code}`, line: `Ada invites you to First world: https://www.onlyworlds.com/join#${code}` }),
+    });
+  });
   const invite = page.locator('[data-action=invite]');
-  check(tag, (await invite.getAttribute('href')) === `https://www.onlyworlds.com/account/worlds/${worldId}#access` && (await invite.getAttribute('target')) === '_blank', 'an owner\'s world offers Invite someone, at Access on onlyworlds.com');
   await invite.scrollIntoViewIfNeeded();
   await shot('invite');
+  await invite.tap();
+  await page.waitForSelector('.sheet [data-action=make-invite]');
+  await page.locator('.sheet [data-role=guest]').tap();
+  await page.locator('.sheet input').fill('Ada');
+  await shot('invite-sheet');
+  await page.locator('.sheet [data-action=make-invite]').tap();
+  await page.waitForSelector('.sheet [data-role=invite-link]');
+  check(tag, (await page.locator('.sheet [data-role=invite-link]').innerText()).trim() === 'https://www.onlyworlds.com/join#ow_j_walk1234', 'Invite someone makes the link on the phone and shows it');
+  check(tag, JSON.stringify(sent) === JSON.stringify([{ reader: 'person', role: 'guest', days: 7, inviter_name: 'Ada' }]), `for a person, as a player, signed with the name typed (${JSON.stringify(sent)})`);
+  check(tag, await page.locator('.sheet svg.invite-qr').waitFor({ timeout: 5000 }).then(() => true, () => false), 'with its QR code');
+  check(tag, (await page.locator('.sheet [data-action=copy-invite]').count()) === 1, 'and Copy');
+  await shot('invite-made');
+  await page.locator('.sheet').getByRole('button', { name: 'Done' }).tap();
+  await page.waitForSelector('.sheet', { state: 'detached' });
   await page.goto(`${BASE}/#/w/${worldId}/t/character`);
   await page.locator('.el-row').first().tap();
   await page.waitForSelector('[data-screen="element"] .el-head');

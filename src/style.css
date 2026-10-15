@@ -222,6 +222,29 @@ h2 {
   box-shadow: inset 0 0 0 1px var(--lan-accent);
 }
 
+/* Invite someone: the link shown once, selectable whole, and its QR code on white to scan. */
+.invite-link {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--lan-border);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.invite-qr-box {
+  align-self: center;
+  width: min(220px, 60vw);
+}
+
+.invite-qr {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
 .choice.primary {
   background: var(--lan-accent);
   border-color: var(--lan-accent);

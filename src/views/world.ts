@@ -30,7 +30,8 @@ import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
-import { accessUrl, canInvite } from '../invite';
+import { canInvite } from '../invite';
+import { inviteSheet } from './invite';
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
 function isUnsortedNote(el: OwElement): boolean {
@@ -287,15 +288,8 @@ export function homeView(s: WorldSession): View {
       h('p', { class: 'section-label' }, 'In this world'),
       h('div', { class: 'type-grid' }, ...tiles),
       more ?? '',
-      // Invite someone (S407): only the website makes an invite link, so the owner goes there.
-      canInvite(s.rec)
-        ? h(
-            'a',
-            { class: 'choice', href: accessUrl(s.id), target: '_blank', rel: 'noopener', 'data-action': 'invite' },
-            h('b', null, 'Invite someone'),
-            h('span', null, 'On onlyworlds.com, under Access: make an invite link to send. They need a free account.'),
-          )
-        : '',
+      // Invite someone: the owner makes the link here (keel C1, SDK 4.24; S407 sent them to the website).
+      canInvite(s.rec) ? inviteRow(s) : '',
     );
   };
 
@@ -335,6 +329,18 @@ export function homeView(s: WorldSession): View {
 // ---------- a type's list ----------
 
 /** A player's own notes (src/notes.ts), one tap away on the home, once there is one. */
+/** Invite someone, last on an owner's home: opens the sheet that makes the link (src/views/invite.ts). */
+function inviteRow(s: WorldSession): HTMLElement {
+  const b = h(
+    'button',
+    { class: 'choice', type: 'button', 'data-action': 'invite' },
+    h('b', null, 'Invite someone'),
+    h('span', null, 'Make a link to send, or show its QR code. They need a free account.'),
+  );
+  b.addEventListener('click', () => inviteSheet(s.id, s.rec.name || 'your world'));
+  return b;
+}
+
 function myNotesLink(s: WorldSession): HTMLElement[] {
   const n = s.takesNotes ? notes(s.id).length : 0;
   return n ? [h('a', { class: 'choice', href: `#/w/${s.id}/notes`, 'data-action': 'my-notes' }, h('b', null, `My notes · ${n}`), h('span', null, 'Kept on this phone only'))] : [];

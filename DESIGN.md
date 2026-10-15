@@ -14,8 +14,8 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 | Frame | OnlyWorlds in your pocket first; the table is its one deep mode. No character sheets, no dice | #3393 on D1 |
 | Shape | A world browser: all your worlds, three kinds (online, on this phone only, the demo) | canvas, D2 |
 | Account | **Open**: a world can start on the phone with no account; signing in is how a world travels to Atlas or a second device | canvas note, #3393 |
-| World control | Lantern edits a world's content, its name, description and picture, its "now" and its units. Keys, members, invites and deleting a world stay on onlyworlds.com | D2, #3393 |
-| Players | Members with an account and a Character, invited as guests; they see the world as their Character knows it. **No player is invited before Keel #213 is live** | #3397, #3409 |
+| World control | Lantern edits a world's content, its name, description and picture, its "now" and its units. An owner makes invite links on the phone (a contributor or a player, seven days; Send it, Copy, a QR). Keys, members and deleting a world stay on onlyworlds.com | D2, #3393; invite links in the app h56 #5322 (B1) |
+| Players | Members with an account and a Character, invited as guests; they see the world as their Character knows it. Keel #213 (the guest rule learns knowing), which players waited on, is live since 10-12, keel 2e5b907 | #3397, #3409 |
 | Knowing | Atlas's model: a Narrative is known by its `narrator` and by the members of its `collectives`. `characters` on a Narrative means "about", never "knows". keel learns this (Keel #213) | #3394, #3397 |
 | Unsorted | Material not yet turned into elements (a photographed page, a spoken ramble) is a Narrative with supertype `Unsorted`, the photo as its picture. Skeld writes the convention for every tool; Lantern shows it first | #3409, #3411 |
 | Conflicts | `If-Match` on element PATCH (Keel #210, live). keel never merges; Lantern re-sends by itself when the fields it touched did not move, and asks "keep mine, take theirs" only when the same field moved on both sides | contract |
