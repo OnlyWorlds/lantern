@@ -223,8 +223,12 @@ async function walk(engine, tag) {
   // S411: an owner's online world offers Invite someone, and the link is made here (keel C1, routed
   // as keel answers: 201 with the code, the link and the line, shown once).
   const sent = [];
+  // Held until the walk has tried to change the choice during the wait (Atlas 1.47's gate, H1).
+  let release;
+  const held = new Promise((r) => { release = r; });
   await page.route('**/api/v2/account/worlds/*/links', async (r) => {
     sent.push(JSON.parse(r.request().postData() ?? '{}'));
+    await held;
     const code = 'ow_j_walk1234';
     await r.fulfill({
       status: 201,
@@ -241,7 +245,11 @@ async function walk(engine, tag) {
   await page.locator('.sheet input').fill('Ada');
   await shot('invite-sheet');
   await page.locator('.sheet [data-action=make-invite]').tap();
+  await page.waitForFunction(() => document.querySelector('.sheet [data-role=contributor]')?.disabled === true);
+  check(tag, await page.locator('.sheet [data-role=contributor]').isDisabled() && await page.locator('.sheet input').isDisabled(), 'while the link is made, the choice and the name are locked');
+  release();
   await page.waitForSelector('.sheet [data-role=invite-link]');
+  check(tag, /as a player:$/.test((await page.locator('.sheet p').first().innerText()).trim()), 'the link says the role it was made for');
   check(tag, (await page.locator('.sheet [data-role=invite-link]').innerText()).trim() === 'https://www.onlyworlds.com/join#ow_j_walk1234', 'Invite someone makes the link on the phone and shows it');
   check(tag, JSON.stringify(sent) === JSON.stringify([{ reader: 'person', role: 'guest', days: 7, inviter_name: 'Ada' }]), `for a person, as a player, signed with the name typed (${JSON.stringify(sent)})`);
   check(tag, await page.locator('.sheet svg.invite-qr').waitFor({ timeout: 5000 }).then(() => true, () => false), 'with its QR code');

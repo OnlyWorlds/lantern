@@ -72,11 +72,17 @@ export function inviteSheet(worldId: string, worldName: string): void {
       h('div', { class: 'row-gap' }, cancel, make),
     );
 
+    // Everything the link is made from is locked while keel makes it: a choice tapped during the
+    // wait named a role the link did not have (Atlas 1.47's gate, H1). The role sent is the role said.
+    const lock = (on: boolean) => {
+      for (const el of [make, cancel, name, ...roles.querySelectorAll('button')] as (HTMLButtonElement | HTMLInputElement)[]) el.disabled = on;
+    };
     make.addEventListener('click', async () => {
-      make.disabled = true;
+      lock(true);
       err.textContent = '';
+      const sentRole = role;
       try {
-        const made = await makeInvite(worldId, role, name.value);
+        const made = await makeInvite(worldId, sentRole, name.value);
         const done = h('button', { class: 'btn', type: 'button' }, 'Done');
         done.addEventListener('click', close);
         const copy = h('button', { class: 'btn', type: 'button', 'data-action': 'copy-invite' }, 'Copy');
@@ -99,7 +105,7 @@ export function inviteSheet(worldId: string, worldName: string): void {
         buttons.push(copy);
         const qr = h('div', { class: 'invite-qr-box' });
         body.replaceChildren(
-          h('p', { style: 'margin:0' }, `Your invite to ${worldName}, as ${role === 'guest' ? 'a player' : 'a contributor'}:`),
+          h('p', { style: 'margin:0' }, `Your invite to ${worldName}, as ${sentRole === 'guest' ? 'a player' : 'a contributor'}:`),
           h('p', { class: 'invite-link', 'data-role': 'invite-link' }, made.link),
           h('div', { class: 'row-gap' }, ...buttons),
           qr,
@@ -110,7 +116,7 @@ export function inviteSheet(worldId: string, worldName: string): void {
         qrCode(made.link).then((svg) => qr.appendChild(svg)).catch(() => qr.remove());
       } catch (e) {
         err.textContent = errorText(e);
-        make.disabled = false;
+        lock(false);
       }
     });
 
