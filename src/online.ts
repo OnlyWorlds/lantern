@@ -13,6 +13,20 @@ import { moveDraft } from './draft';
 export const BULK_MAX = 1000;
 const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by'];
 
+/** A data: address as its picture, read in place: the host's connect-src refuses a fetch of one (S409). */
+export function dataUrlBlob(url: string): Blob {
+  const comma = url.indexOf(',');
+  if (!url.startsWith('data:') || comma < 0) throw new Error('not a data address');
+  const meta = url.slice(5, comma);
+  const body = url.slice(comma + 1);
+  const type = meta.split(';')[0] || 'text/plain';
+  if (!/;base64$/i.test(meta)) return new Blob([decodeURIComponent(body)], { type });
+  const bin = atob(body);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
 export class PinNeeded extends Error {
   constructor() {
     super('Choose a four-digit PIN for your account first.');
@@ -53,7 +67,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   const held = elements.filter((el) => typeof el.image_url === 'string' && el.image_url.startsWith('data:'));
   for (const [i, el] of held.entries()) {
     onStep(`Sending pictures · ${i + 1} of ${held.length}`);
-    const blob = await (await fetch(el.image_url as string)).blob();
+    const blob = dataUrlBlob(el.image_url as string);
     const up = await client.uploadImage(blob);
     el.image_url = up.url;
     await db.applyElements(localId, [el]);

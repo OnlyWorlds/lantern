@@ -28,6 +28,7 @@ class FakeAccountKeel {
   bulks = 0;
   failBulkOnce = false;
   uploads = 0;
+  uploaded: { type: string; bytes: Uint8Array }[] = [];
 
   json(status: number, body: unknown) {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -46,8 +47,12 @@ class FakeAccountKeel {
     const path = url.pathname.replace('/api/v2', '').replace(/\/+$/, '');
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : null;
 
+    // The live host's connect-src names only https origins: a fetch of a data: address is refused
+    // there in both engines (S409, Forge/tools/atlas/Notes/ui-snapshots/2026-10-15-s409/data-fetch-live.mjs).
+    if (url.protocol !== 'https:') throw new TypeError('Failed to fetch');
     if (url.host === 'edge.test') {
       this.uploads++;
+      if (init.body instanceof Blob) this.uploaded.push({ type: init.body.type, bytes: new Uint8Array(await init.body.arrayBuffer()) });
       return this.json(200, { url: `https://media.onlyworlds.com/w/${this.uploads}.webp`, key: `w/${this.uploads}.webp`, bytes: 1, type: 'image/webp', etag: 'x' });
     }
     if (path === '/account/worlds' && method === 'POST') {
@@ -128,6 +133,10 @@ describe('put it online', () => {
     const w = keel.worlds.get(id)!;
     expect(w.els.size).toBe(2);
     expect(w.els.get(ELS[1].id)?.image_url).toMatch(/^https:\/\/media\.onlyworlds\.com\//);
+    // The picture's own bytes reach the edge (the PNG signature the data address holds).
+    expect(keel.uploaded).toHaveLength(1);
+    expect(keel.uploaded[0].type).toBe('image/png');
+    expect([...keel.uploaded[0].bytes]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
     expect(w.els.get(ELS[0].id)).not.toHaveProperty('created_at');
     expect(await db.getWorldRecord(local)).toBeUndefined();
     expect((await db.getWorldRecord(id))?.kind).toBe('online');
