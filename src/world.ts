@@ -12,6 +12,7 @@ import {
   type OwWorldIndex,
   kindCanWrite,
   type OwElement,
+  type OwMember,
 } from '@onlyworlds/sdk';
 import * as db from './db';
 import type { OutboxRow, WorldRecord } from './db';
@@ -174,6 +175,29 @@ export class WorldSession {
   /** A world this key only reads (a player's, a lent read key), not the demo: notes stay on the phone. */
   get takesNotes(): boolean {
     return !this.canWrite && this.rec.kind !== 'demo';
+  }
+
+  private rosterRows: OwMember[] | null = null;
+  private rosterAsked = false;
+
+  /**
+   * The world's roster (keel's GET /members on the world's own key), for the quiet agent mark
+   * (#347): it names an agent seat. Asked once per session, only when a page needs a name and the
+   * phone has signal; a refusal stays quiet (the mark says "an agent" without the name).
+   */
+  roster(): OwMember[] | null {
+    if (!this.rosterAsked && !this.isLocal && this.rec.kind !== 'demo' && this.rec.apiKey && navigator.onLine) {
+      this.rosterAsked = true;
+      this.client(false).members().then(
+        (rows) => {
+          if (this.retired) return;
+          this.rosterRows = rows;
+          this.emit();
+        },
+        () => {},
+      );
+    }
+    return this.rosterRows;
   }
 
   subscribe(fn: () => void): () => void {

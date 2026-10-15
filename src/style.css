@@ -103,6 +103,11 @@ h2 {
   color: var(--lan-ink-faint);
 }
 
+/* The quiet agent mark under an element's kind (#347): smaller than the kind it follows. */
+.agent-mark {
+  font-size: 0.82em;
+}
+
 .dim {
   color: var(--lan-ink-dim);
 }

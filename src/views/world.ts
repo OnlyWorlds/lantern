@@ -28,6 +28,7 @@ import { dateText, hasDatedEvent, isDateField } from '../time';
 import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
+import { agentLine } from '../agentmark';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
@@ -531,7 +532,16 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     // A caught line can be a sentence long: the title steps down so it does not fill the screen.
     const len = [...elName(el)].length;
     const nameH = h('h1', { style: len > 44 ? 'font-size:1.2rem' : len > 26 ? 'font-size:1.4rem' : null }, elName(el), wait('name'));
-    const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind));
+    // Last changed by an agent, said quietly under the kind (#347); none while an edit of mine waits,
+    // and none in a world on this phone only (a world file can carry keel's fields from another time).
+    const agent = pending.size === 0 && !s.isLocal
+      ? agentLine(el, el.changed_via === 'seat' ? s.roster() : null, (cid) => {
+        const c = s.get(cid);
+        return c && c.type === 'character' ? elName(c) : undefined;
+      })
+      : null;
+    const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind),
+      agent ? h('span', { class: 'muted agent-mark', 'data-role': 'agent-mark' }, agent) : null);
     if (editable) {
       headText.style.cursor = 'pointer';
       headText.addEventListener('click', () => editField(s, el, 'name'));
