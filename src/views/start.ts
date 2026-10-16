@@ -176,7 +176,7 @@ export function signInView(): HTMLElement {
       { class: 'dim', 'data-part': 'no-account', style: 'margin:0' },
       'No account yet? ',
       h('a', { href: SIGNUP_URL, target: '_blank', rel: 'noopener' }, 'Make a free one on onlyworlds.com'),
-      ', set its PIN there, then sign in here.',
+      ', then sign in here.',
     ),
   );
 }

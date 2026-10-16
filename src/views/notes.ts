@@ -41,7 +41,13 @@ export function notesView(s: WorldSession): View {
       'main',
       { class: 'screen has-tabbar', 'data-screen': 'notes' },
       topbar('My notes', `#/w/${s.id}`),
-      h('p', { class: 'dim', style: 'margin:0' }, 'Kept on this phone, and they stay here when you have no signal. Nobody else sees one until you share it with the party.'),
+      h(
+        'p',
+        { class: 'dim', style: 'margin:0' },
+        s.rec.playerSeat
+          ? 'Kept on this phone, and they stay here when you have no signal. Nobody else sees them: sharing with the party needs an account, and an invite to join with it.'
+          : 'Kept on this phone, and they stay here when you have no signal. Nobody else sees one until you share it with the party.',
+      ),
       form,
       list,
       tabbar(s, 'catch'),
@@ -66,7 +72,8 @@ function noteCard(s: WorldSession, n: Note, refresh: () => void): HTMLElement {
   const actions = h('div', { class: 'row-gap', style: 'flex-wrap:wrap' });
   const line = n.shared ? sharedLine(s, n.shared) : null;
   // Shareable while it is not on its way or in the world: never shared, refused, or no longer there.
-  if (!line || line.open) {
+  // Never from a player seat (Keel #353): its key only reads, and no account can make one that writes.
+  if (!s.rec.playerSeat && (!line || line.open)) {
     const share = h('button', { class: 'btn', type: 'button', 'data-action': 'share-note' }, n.shared ? 'Share it again' : 'Share with the party');
     share.addEventListener('click', () => shareNote(s, n, refresh));
     actions.append(share, rm);

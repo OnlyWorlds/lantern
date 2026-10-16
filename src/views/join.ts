@@ -1,7 +1,7 @@
 // Join a world with an invite link: paste it (or share it to Lantern), see the invite, join.
 import { h } from '../dom';
 import { accountToken } from '../account';
-import { acceptJoin, joinCode, pendingJoin, previewJoin, roleWords, setPendingJoin, type JoinPreview } from '../join';
+import { acceptJoin, isPlayerLink, joinCode, pendingJoin, previewJoin, redeemPlayer, roleWords, setPendingJoin, type JoinPreview } from '../join';
 import { errorText, go, topbar } from '../ui';
 
 function whenText(iso: string): string {
@@ -35,6 +35,10 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
     const until = whenText(p.expires_at);
     if (p.reader === 'agent') {
       card.replaceChildren(h('p', { class: 'banner' }, 'This link is for an AI agent, not a person. Ask for an invite link for a person.'));
+      return;
+    }
+    if (isPlayerLink(p)) {
+      showPlayer(code, p, who, until);
       return;
     }
     const join = h('button', { class: 'btn btn-primary', type: 'button' }, token ? `Join ${p.world.name}` : 'Sign in to join');
@@ -71,6 +75,45 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
       ),
       join,
       joinErr,
+    );
+  };
+
+  // A player link (Keel #353): no account and no PIN, a name if they like, then the world opens
+  // to read as the Character the game master gave them.
+  const showPlayer = (code: string, p: JoinPreview, who: string, until: string) => {
+    const name = h('input', {
+      class: 'input',
+      type: 'text',
+      maxlength: '80',
+      autocomplete: 'nickname',
+      'aria-label': 'Your name',
+      placeholder: 'Your name (optional)',
+    }) as HTMLInputElement;
+    const open = h('button', { class: 'btn btn-primary', type: 'button' }, `Open ${p.world.name}`) as HTMLButtonElement;
+    const openErr = h('p', { class: 'error', role: 'alert' });
+    open.addEventListener('click', async () => {
+      openErr.textContent = '';
+      open.disabled = true;
+      try {
+        const r = await redeemPlayer(code, name.value);
+        go(`#/w/${r.worldId}`, true);
+      } catch (e) {
+        openErr.textContent = errorText(e);
+        open.disabled = false;
+      }
+    });
+    card.replaceChildren(
+      h(
+        'div',
+        { class: 'invite' },
+        h('p', { style: 'margin:0' }, `${who} invites you to play in `, h('b', null, p.world.name), '.'),
+        p.world.description ? h('p', { class: 'dim small', style: 'margin:0' }, p.world.description) : '',
+        h('p', { class: 'dim small', style: 'margin:0' }, 'You read the world as your Character, with no account. Notes you keep stay on this phone.'),
+        until ? h('p', { class: 'muted small', style: 'margin:0' }, `The link works once, until ${until}.`) : '',
+      ),
+      h('label', { class: 'field-label' }, 'Your name, as the game master sees it', name),
+      open,
+      openErr,
     );
   };
 

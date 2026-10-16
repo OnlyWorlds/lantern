@@ -21,6 +21,8 @@ export interface WorldRecord {
   memberRole?: 'co_builder' | 'contributor' | 'guest';
   /** A player's own Character, from keel's /me (Skeld #3457); null once asked and there is none. */
   characterId?: string | null;
+  /** Joined with a player link, no account (Keel #353): a read key only, so nothing is ever shared from it. */
+  playerSeat?: boolean;
   /** The game master's choice of which Collective is the party (Give it to the party), kept per world. */
   partyId?: string;
   count?: number;

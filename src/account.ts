@@ -339,4 +339,41 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
   return rec;
 }
 
+/**
+ * Keep a player seat's read key (Keel #353), straight from keel's join answer, with no further
+ * call: the key is shown once and the code is spent, so it reaches the phone before anything that
+ * could fail. The world then opens like one opened with a key, as a guest reading as its Character.
+ */
+export async function adoptPlayerSeat(world: { id: string; name: string }, key: string, characterId: string): Promise<db.WorldRecord> {
+  const existing = await db.getWorldRecord(world.id);
+  // Never in place of a copy that is someone's own (an account world, a key with changes not
+  // sent): a game master trying their own player link keeps their world. The seat stays made on
+  // keel and the owner removes it; a copy opened earlier with a key is replaced, as any key does.
+  if (existing && existing.apiKey !== key && (existing.role || (await db.outboxRows(existing.id)).length)) {
+    throw new Error(`${existing.name} is on this phone already as your own copy, so the player link did not replace it. The link is used now: remove the player it made from the world's members on onlyworlds.com.`);
+  }
+  await takeOver(existing, key);
+  const rec: db.WorldRecord = {
+    ...existing,
+    id: world.id,
+    name: world.name,
+    kind: 'online',
+    apiKey: key,
+    keyKind: detectKeyKind(key),
+    // An account role on this phone was the old holder's; this seat has none.
+    role: undefined,
+    memberRole: 'guest',
+    characterId,
+    playerSeat: true,
+    cursor: undefined,
+    appliedHead: undefined,
+    appliedEpoch: undefined,
+    count: undefined,
+    lastSync: undefined,
+    addedAt: existing?.addedAt ?? new Date().toISOString(),
+  };
+  await db.putWorldRecord(rec);
+  return rec;
+}
+
 export const DEMO_KEY = '0000000001';

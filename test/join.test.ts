@@ -22,10 +22,13 @@ const WORLD = '0aaa0000-0000-4000-8000-000000000001';
 const CHAR = '0ccc0000-0000-4000-8000-000000000001';
 
 class FakeKeel {
-  codes = new Map<string, { used: boolean; reader: 'person' | 'agent'; role: string }>([
+  codes = new Map<string, { used: boolean; reader: 'person' | 'agent' | 'player'; role: string }>([
     ['ow_j_good', { used: false, reader: 'person', role: 'guest' }],
     ['ow_j_agent', { used: false, reader: 'agent', role: 'contributor' }],
+    ['ow_j_player', { used: false, reader: 'player', role: 'guest' }],
   ]);
+  /** What POST /join last received: its body, and whether it carried a credential. */
+  redeemed: { body: unknown; credential: boolean }[] = [];
   hasPin = true;
   members = new Set<string>();
   calls: string[] = [];
@@ -50,6 +53,16 @@ class FakeKeel {
       const c = this.codes.get(body?.code);
       if (!c || c.used) return this.notFound();
       return this.json(200, { reader: c.reader, world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: c.role, with_character: false, expires_at: '2026-10-19T00:00:00+00:00' });
+    }
+    // Keel #353 (keel PR 55, accounts/join_api.py): a player code redeems with no credential, 201
+    // PlayerJoined; the code is spent; a person's code here is the one 404.
+    if (path === '/join' && method === 'POST') {
+      this.redeemed.push({ body, credential: headers.has('Authorization') || headers.has('API-Key') });
+      const c = this.codes.get(body?.code);
+      if (!c || c.used || c.reader !== 'player') return this.notFound();
+      if (body.name !== undefined && (typeof body.name !== 'string' || body.name.length > 80)) return this.json(422, { error: { code: 'invalid_request', param: 'name' } });
+      c.used = true;
+      return this.json(201, { kind: 'player', key: `ow_r_${'y'.repeat(30)}`, world: { id: WORLD, name: 'The Reach', description: 'Salt and debts.' }, character: { id: CHAR, name: body.name || 'Player' }, role: 'guest' });
     }
     if (path === '/account/join' && method === 'POST') {
       if (!authed) return this.json(401, { error: { code: 'invalid_credentials' } });
@@ -196,5 +209,57 @@ describe('an invite link', () => {
     await db.kvSet('accountToken', undefined);
     await expect(join.acceptJoin('ow_j_good')).rejects.toThrow(/Sign in first/);
     expect(keel.calls.filter((c) => c.includes('/account/join'))).toHaveLength(1);
+  });
+});
+
+describe('a player link, no account (Keel #353)', () => {
+  beforeEach(async () => {
+    await db.kvSet('accountToken', undefined);
+  });
+
+  it('the preview says player', async () => {
+    const p = await join.previewJoin('ow_j_player');
+    expect(join.isPlayerLink(p)).toBe(true);
+    expect(join.isPlayerLink(await join.previewJoin('ow_j_good'))).toBe(false);
+  });
+
+  it('redeems with no credential and keeps the read key as a player seat; the link is spent', async () => {
+    const r = await join.redeemPlayer('ow_j_player', '  Ana  ');
+    expect(r).toEqual({ worldId: WORLD });
+    expect(keel.redeemed[0]).toEqual({ body: { code: 'ow_j_player', name: 'Ana' }, credential: false });
+    const rec = await db.getWorldRecord(WORLD);
+    expect(rec).toMatchObject({ kind: 'online', apiKey: `ow_r_${'y'.repeat(30)}`, keyKind: 'read', memberRole: 'guest', characterId: CHAR, playerSeat: true });
+    expect(rec?.role).toBeUndefined();
+    await expect(join.redeemPlayer('ow_j_player')).rejects.toThrow(/does not work/);
+  });
+
+  it('a blank name is left out, so keel names the seat', async () => {
+    await join.redeemPlayer('ow_j_player', '   ');
+    expect(keel.redeemed[0].body).toEqual({ code: 'ow_j_player' });
+  });
+
+  it("never replaces the game master's own copy on this phone", async () => {
+    await db.putWorldRecord({ id: WORLD, name: 'The Reach', kind: 'online', apiKey: `ow_w_${'g'.repeat(30)}`, keyKind: 'write', role: 'owner', addedAt: '' } as db.WorldRecord);
+    await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'The drowned crown' }]);
+    await expect(join.redeemPlayer('ow_j_player')).rejects.toThrow(/your own copy/);
+    const rec = await db.getWorldRecord(WORLD);
+    expect([rec?.apiKey, rec?.role, rec?.playerSeat]).toEqual([`ow_w_${'g'.repeat(30)}`, 'owner', undefined]);
+    expect(await db.allElements(WORLD)).toHaveLength(1);
+  });
+
+  it('replaces a copy opened earlier with a key (a player who lost theirs and got a new link)', async () => {
+    await db.putWorldRecord({ id: WORLD, name: 'The Reach', kind: 'online', apiKey: `ow_r_${'o'.repeat(30)}`, keyKind: 'read', memberRole: 'guest', addedAt: '' } as db.WorldRecord);
+    await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'Seen with the old key' }]);
+    await join.redeemPlayer('ow_j_player');
+    expect((await db.getWorldRecord(WORLD))?.apiKey).toBe(`ow_r_${'y'.repeat(30)}`);
+    expect(await db.allElements(WORLD)).toHaveLength(0);
+  });
+
+  it('no answer: says the code may be spent', async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof fetch;
+    await expect(join.redeemPlayer('ow_j_player')).rejects.toThrow(/did not reach this phone/);
+    expect(await db.getWorldRecord(WORLD)).toBeUndefined();
   });
 });

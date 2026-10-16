@@ -5,7 +5,7 @@
 // The wire is the SDK's (4.12: previewJoin, acceptJoin, typed refusals).
 import { OwApiError, OwNetworkError, OwV2Client, type OwJoinPreview } from '@onlyworlds/sdk';
 import * as db from './db';
-import { DEMO_KEY, accountToken, fetchAccountWorlds, openAccountWorld, type AccountWorld } from './account';
+import { DEMO_KEY, accountToken, adoptPlayerSeat, fetchAccountWorlds, openAccountWorld, type AccountWorld } from './account';
 import { API_BASE } from './world';
 
 export type JoinPreview = OwJoinPreview;
@@ -50,6 +50,49 @@ export async function previewJoin(code: string): Promise<JoinPreview> {
     }
     throw said(e, 'The invite could not be read. Try again.');
   }
+}
+
+/** A player link (Keel #353): the preview's third reader, a friend with no account. */
+export function isPlayerLink(p: JoinPreview): boolean {
+  return (p.reader as string) === 'player';
+}
+
+const LOST = 'The answer did not reach this phone. Try once more; if the link says it was used, ask for a new one: each link works once.';
+
+/**
+ * Redeem a player link with no account (Keel #353, keel PR 55): POST /join answers 201 with a
+ * read key shown once (`kind: player`). The code is spent by keel's answer, so the key is kept
+ * before anything else runs. Plain fetch until the SDK has its redeem (Kael, h29 #6087).
+ */
+export async function redeemPlayer(code: string, name?: string): Promise<{ worldId: string }> {
+  let r: Response;
+  try {
+    r = await fetch(`${API_BASE}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(name?.trim() ? { code, name: name.trim() } : { code }),
+    });
+  } catch {
+    // The request may have reached keel and spent the code: say both.
+    throw new Error(LOST);
+  }
+  if (r.status === 404) {
+    if ((await pendingJoin()) === code) await setPendingJoin(undefined);
+    throw new Error(DEAD);
+  }
+  let a: { kind?: string; key?: string; world?: { id?: string; name?: string }; character?: { id?: string } };
+  try {
+    a = await r.json();
+  } catch {
+    throw new Error(r.ok ? LOST : 'Joining did not work. Try again.');
+  }
+  if (r.status === 422) throw new Error('That name is too long: keep it under 80 characters.');
+  if (!r.ok || a.kind !== 'player' || !a.key || !a.world?.id || !a.character?.id) {
+    throw new Error(r.ok ? 'This link did not open as a player\'s. Ask for a new one.' : 'Joining did not work. Try again.');
+  }
+  await setPendingJoin(undefined);
+  const rec = await adoptPlayerSeat({ id: a.world.id, name: a.world.name || 'A world' }, a.key, a.character.id);
+  return { worldId: rec.id };
 }
 
 export type JoinResult = { worldId: string } | { already: true };
