@@ -163,7 +163,58 @@ export async function openAccountWorld(w: AccountWorld): Promise<db.WorldRecord>
     addedAt: new Date().toISOString(),
   };
   await db.putWorldRecord(rec);
+  if (readsForWantOfPin(rec)) {
+    try { sessionStorage.setItem(NO_PIN_MARK + rec.id, '1'); } catch { /* said on the pill anyway */ }
+  }
   return rec;
+}
+
+/** A member's world that opened to read because their account had no PIN then (409 pin_required). */
+export function readsForWantOfPin(rec: db.WorldRecord): boolean {
+  return rec.kind === 'online' && !!rec.role && rec.role !== 'owner' && !!rec.memberRole && rec.memberRole !== 'guest'
+    && !!rec.apiKey && detectKeyKind(rec.apiKey) === 'read';
+}
+
+const NO_PIN_MARK = 'lantern:no-pin-said:';
+
+/** True once per world opened to read for want of a PIN: the home says so the first time. */
+export function takeNoPinMark(worldId: string): boolean {
+  try {
+    if (!sessionStorage.getItem(NO_PIN_MARK + worldId)) return false;
+    sessionStorage.removeItem(NO_PIN_MARK + worldId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const NO_PIN_YET ='Your account has no PIN yet. Set one on onlyworlds.com, in Account settings under World PIN, then try again.';
+
+/**
+ * Once the member has set a PIN: a write key in place of the read one (#294's walk). The read key
+ * is taken back when keel lists it, so the member's keys page keeps one key per phone.
+ */
+export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
+  const token = await accountToken();
+  if (!token) throw new Error('Sign in first.');
+  const c = accountClient(token);
+  let key: { key: string };
+  try {
+    key = await c.request('POST', `/account/worlds/${rec.id}/keys`, { body: { scope: 'write', name: `Lantern on ${deviceName()}` } });
+  } catch (e) {
+    if ((e as { code?: string }).code === 'pin_required') throw new Error(NO_PIN_YET);
+    throw e;
+  }
+  const old = rec.apiKey ?? '';
+  await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: detectKeyKind(key.key) });
+  forgetSession(rec.id);
+  try {
+    const listed = await c.request<{ data: Array<{ id: string; last4: string; scope: string }> }>('GET', `/account/worlds/${rec.id}/keys`);
+    const gone = listed.data.find((k) => k.scope === 'READ' && old.endsWith(k.last4));
+    if (gone) await c.request('DELETE', `/account/worlds/${rec.id}/keys/${gone.id}`);
+  } catch {
+    // The read key stays listed on the member's keys page; it opens nothing more than the world did.
+  }
 }
 
 /**

@@ -33,6 +33,7 @@ import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
 import { inviteSheet } from './invite';
+import { readsForWantOfPin, takeNoPinMark, upgradeMemberKey } from '../account';
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
 function isUnsortedNote(el: OwElement): boolean {
@@ -152,8 +153,48 @@ function headPill(s: WorldSession): HTMLElement | null {
   if (waiting) return h('a', { class: 'pill', href: `#/w/${s.id}/outbox` }, `${waiting} waiting to send`);
   if (s.isLocal) return h('span', { class: 'pill quiet' }, 'On this phone');
   if (s.rec.memberRole === 'guest') return h('span', { class: 'pill quiet' }, 'Player');
+  if (!s.canWrite && readsForWantOfPin(s.rec)) {
+    const b = h('button', { class: 'pill quiet', type: 'button' }, 'Read only · why');
+    b.addEventListener('click', () => noPinSheet(s));
+    return b;
+  }
   if (!s.canWrite) return h('span', { class: 'pill quiet' }, 'Read only');
   return null;
+}
+
+/** A member who joined with no PIN on their account reads; this says why and takes the write key once they set one. */
+export function noPinSheet(s: WorldSession): void {
+  // The home's opening line says to tap here; once tapped it would only cover the sheet's buttons.
+  document.querySelector('.toast')?.remove();
+  sheet((close) => {
+    const err = h('p', { class: 'error', role: 'alert' });
+    const btn = h('button', { class: 'btn btn-primary', type: 'button' }, 'I set my PIN: try again');
+    btn.addEventListener('click', async () => {
+      err.textContent = '';
+      btn.disabled = true;
+      try {
+        await upgradeMemberKey(s.rec);
+        close();
+        toast(`You can change ${s.rec.name} now.`);
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (ex) {
+        err.textContent = errorText(ex);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    return [
+      h('h2', null, 'Read only, for now'),
+      h(
+        'p',
+        { class: 'dim', style: 'margin:0' },
+        `You are a ${s.rec.memberRole} in ${s.rec.name}. Changing it needs a PIN on your account, and yours has none yet. Set one on onlyworlds.com, in Account settings under World PIN, then come back here.`,
+      ),
+      h('a', { class: 'btn', href: 'https://www.onlyworlds.com/account/settings', target: '_blank', rel: 'noopener' }, 'Open Account settings'),
+      err,
+      btn,
+    ];
+  }, 'Read only, for now');
 }
 
 // ---------- home ----------
@@ -307,6 +348,10 @@ export function homeView(s: WorldSession): View {
     banner.replaceChildren(statusBanner(s) ?? '');
     renderBody();
   };
+  // Said once, as the world first opens to read for want of a PIN (`openAccountWorld` leaves the mark).
+  if (readsForWantOfPin(s.rec) && takeNoPinMark(s.id)) {
+    toast(`You can read ${s.rec.name}. Changing it needs a PIN on your account: tap Read only to see how.`);
+  }
 
   let t: number | undefined;
   input.addEventListener('input', () => {
