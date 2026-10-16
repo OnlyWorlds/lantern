@@ -1003,10 +1003,12 @@ export class WorldSession {
         this.statusText = 'This key can no longer write to the world';
         return true;
       }
-      if (e.isBusy || e.status === 429 || e.status >= 500 || (e.status === 409 && e.code === 'upload_pending')) {
+      if (e.isBusy || e.status === 429 || e.status >= 500 || (e.status === 409 && e.code === 'upload_pending') || e.isIdempotencyInFlight) {
         // Busy, throttled (a wrong-PIN throttle included) or a server fault: wait, never refuse.
+        // A create sent again while keel still runs its first try (a lost answer on bad signal)
+        // is 409 idempotency_in_flight (keel #307, D105; SDK 4.27): the same wait, keel says 1 s.
         await keep('waiting');
-        this.retryLater((e.retryAfter ?? (e.status === 429 ? 60 : 10)) * 1000);
+        this.retryLater((e.retryAfter ?? (e.status === 429 ? 60 : e.isIdempotencyInFlight ? 1 : 10)) * 1000);
         return true;
       }
       if (this.isPlayer && row.op === 'create' && row.type === 'narrative' && (e.status === 400 || e.status === 422)) {

@@ -579,6 +579,23 @@ describe('outbox', () => {
     expect(s.get(id)?.change_seq).toBeTypeOf('number');
   });
 
+  it('a create sent again while keel still runs its first try (409 idempotency_in_flight) waits, never refuses', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.offline = true;
+    const id = await s.create('narrative', { name: 'A page' });
+    await s.flush(); // the create's own flush, while offline
+    keel.offline = false;
+    keel.nextError = { status: 409, code: 'idempotency_in_flight' }; // keel #307, D105
+    await s.flush();
+    expect(s.outbox.length).toBe(1);
+    expect(s.outbox[0].state).toBe('waiting');
+    await s.flush();
+    expect(s.outbox.length).toBe(0);
+    expect(keel.els.get(id)?.name).toBe('A page');
+  });
+
   it('deleted elsewhere: the edit offers keep-as-new', async () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld();
