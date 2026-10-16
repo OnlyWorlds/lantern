@@ -8,7 +8,7 @@ Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https:/
 
 | Piece | State | Where |
 |---|---|---|
-| Repo, Vite + TS, SDK 4.21.0, the registry's blessed pin (S406: 4.20's calendar kernel names dates, the row below; S404's 4.19: custom fields reach Ask's lookup and context, Kael h37 #4271) | done | `package.json` (`typecheck`, `build`, `test`) |
+| Repo, Vite + TS, SDK 4.27.2, the registry's blessed pin (S406: 4.20's calendar kernel names dates, the row below; S404's 4.19: custom fields reach Ask's lookup and context, Kael h37 #4271) | done | `package.json` (`typecheck`, `build`, `test`) |
 | Opens offline (worker) | done; precaches exactly what the build emitted, `/` itself (Pages 308s `/index.html`); shell only for `/`; other paths reach the host's 404 | `sw/sw.js`, `vite.config.ts` |
 | Old builds | done; `version.json` checked on open and on return to the front; banner, outbox held, Reload lands the new build | `src/app-state.ts`, `src/main.ts`, `walk/update.mjs` |
 | The store | done; IndexedDB, one app db, one per world | `src/db.ts` |
