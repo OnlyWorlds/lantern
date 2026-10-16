@@ -320,7 +320,9 @@ export function homeView(s: WorldSession): View {
               return b;
             })()
           : '';
-      body.replaceChildren(empty, h('div', { style: 'text-align:center' }, types));
+      // An empty world can still be shared: a game master may invite before adding anything (S419's L8).
+      const invite = canInvite(s.rec) && s.status !== 'syncing' ? [inviteRow(s)] : [];
+      body.replaceChildren(empty, h('div', { style: 'text-align:center' }, types), ...invite);
       return;
     }
     const shown = showAll ? all : present.slice(0, 9);

@@ -185,7 +185,13 @@ export function captureView(s: WorldSession, fromShare = false): View {
       kept.remove();
       saveBtn.disabled = false;
       const open = h('a', { href: `#/w/${s.id}/e/${id}`, 'data-action': 'open-kept' }, 'Open it');
-      keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. `, open);
+      // Sending waits on the PIN when the phone holds none (the flush's own gate): say so here, where
+      // the note was made, not only on the home (S419's L12).
+      if (!s.isLocal && !s.pinKnown()) {
+        const enter = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'kept-pin' }, 'Enter your PIN');
+        enter.addEventListener('click', () => void import('./world').then((m) => m.pinSheet(s)));
+        keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. It sends once Lantern has your PIN. `, enter, ' ', open);
+      } else keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. `, open);
       text.focus();
     } catch (ex) {
       err.textContent = errorText(ex);
