@@ -19,6 +19,7 @@ import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
 import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
+import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import type { CalendarConfig } from '@onlyworlds/sdk';
@@ -588,6 +589,7 @@ export class WorldSession {
       }
       this.status = 'idle';
       this.keyRefused = false;
+      this.keyRefusal = null;
       this.statusText = '';
     } catch (e) {
       this.settledDuringWalk = null;
@@ -608,17 +610,20 @@ export class WorldSession {
   /** Elements new to this phone that a quiet poll brought in; the app takes them to say so. */
   arrived: OwElement[] = [];
 
-  /** The last read was refused for the key itself (401/403): the poll stops asking until a full pull. */
+  /** The last read or send was refused for the key itself (401/403): the poll and the outbox stop asking until a full pull. */
   keyRefused = false;
+  /** Why, when keel said (`keyRefusalOf`); null for a refusal it did not name. */
+  keyRefusal: KeyRefusal | null = null;
 
   private setError(e: unknown): void {
     this.keyRefused = e instanceof OwApiError && (e.status === 401 || e.status === 403);
+    this.keyRefusal = this.keyRefused ? keyRefusalOf(e) : null;
     if (e instanceof OwNetworkError || (e instanceof TypeError && /fetch|network/i.test(e.message))) {
       this.status = 'offline';
       this.statusText = 'No connection: showing what this phone has';
     } else if (e instanceof OwApiError) {
       this.status = 'error';
-      this.statusText = e.status === 401 || e.status === 403 ? 'This key no longer opens the world' : e.message;
+      this.statusText = e.status === 401 || e.status === 403 ? keyRefusalText(this.keyRefusal) : e.message;
     } else {
       this.status = 'error';
       this.statusText = e instanceof Error ? e.message : String(e);
@@ -821,6 +826,11 @@ export class WorldSession {
     if (buildBehind || this.retired) return;
     const rows = this.outbox.filter((r) => r.state === 'waiting').sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     if (!rows.length) return;
+    // A key keel no longer takes: sending again changes nothing until a new key is in place.
+    if (this.keyRefused && (this.keyRefusal === 'key_revoked' || this.keyRefusal === 'key_unknown')) {
+      this.emit();
+      return;
+    }
     if (!pinFor(this.rec)) {
       this.needPin = true;
       this.emit();
@@ -982,6 +992,17 @@ export class WorldSession {
         // The media edge's ticket expired or was used: a new one on the next try, the PIN is fine.
         await keep('waiting');
         this.retryLater(2000);
+        return true;
+      }
+      const refusal = keyRefusalOf(e);
+      if (e.status === 401 && (refusal === 'key_revoked' || refusal === 'key_unknown')) {
+        // The key died, not the PIN (Atlas #198's twin): the PIN is kept, the change waits, and
+        // the home says why and offers a new key in place.
+        this.keyRefused = true;
+        this.keyRefusal = refusal;
+        this.status = 'error';
+        this.statusText = keyRefusalText(refusal);
+        await keep('waiting');
         return true;
       }
       if (e.status === 401) {

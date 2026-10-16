@@ -1,7 +1,7 @@
 // Signing in: today an account token pasted from onlyworlds.com (ow_a_, sent as a Bearer token);
 // when Keel #211 lands, email and password. The account lists its worlds and mints a key per
 // world this phone opens, named for the phone and revocable on the portal.
-import { OwV2Client, detectKeyKind, isDemoKey, type OwKeyKind } from '@onlyworlds/sdk';
+import { OwV2Client, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, forgetSession } from './world';
 import { plural } from './dom';
@@ -215,6 +215,68 @@ export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
   } catch {
     // The read key stays listed on the member's keys page; it opens nothing more than the world did.
   }
+}
+
+/**
+ * A world whose key keel refuses takes a new one in place (Atlas #198's twin, S418): the copy, its
+ * cursor and the changes waiting stay; only the key and its kind change, and the session opens
+ * again on it. Never "open it again", which drops the copy (`takeOver`).
+ *
+ * Made from the account: signed in, for a world on the account's list. A guest gets a read key; a
+ * member with no PIN yet a read key too (keel's 409 pin_required), which still beats a dead one.
+ * A world not on the list is said as gone only when keel said it no longer knows the key.
+ */
+export async function renewWorldKey(rec: db.WorldRecord, cause: 'key_revoked' | 'key_unknown' | 'read_only_key' | null): Promise<{ readOnly: boolean }> {
+  const token = await accountToken();
+  if (!token) throw new Error('Sign in first, or put in a key from the world\'s page on onlyworlds.com.');
+  const listed = (await fetchAccountWorlds(token)).find((w) => w.id === rec.id);
+  if (!listed) {
+    throw new Error(cause === 'key_unknown'
+      ? `${rec.name} is no longer on your OnlyWorlds account: it was deleted there, or you were removed from it. What is on this phone stays.`
+      : `${rec.name} is not on the account this phone is signed in to, so Lantern can't make its key. Put in a key from the world's page on onlyworlds.com.`);
+  }
+  const c = accountClient(token);
+  const mint = (scope: 'write' | 'read') => c.request<{ key: string }>('POST', `/account/worlds/${rec.id}/keys`, { body: { scope, name: `Lantern on ${deviceName()}` } });
+  let key: { key: string };
+  if (listed.member_role === 'guest') key = await mint('read');
+  else {
+    try {
+      key = await mint('write');
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'pin_required' || listed.role === 'owner') throw e;
+      key = await mint('read');
+    }
+  }
+  const kind = detectKeyKind(key.key);
+  await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: kind, role: listed.role, memberRole: listed.member_role });
+  forgetSession(rec.id);
+  return { readOnly: !kindCanWrite(kind) };
+}
+
+/**
+ * Put in a key someone gave you, in place (Atlas #198's twin): read once against keel, and it must
+ * open this world. The copy and its waiting changes stay.
+ */
+export async function putKeyInPlace(rec: db.WorldRecord, apiKey: string, pin?: string): Promise<void> {
+  const key = apiKey.trim();
+  const kind: OwKeyKind = detectKeyKind(key);
+  if (!key) throw new Error('Paste the key first.');
+  if (kind === 'account') throw new Error('That is an account token: use Sign in instead.');
+  if (kind === 'unknown') throw new Error('That does not look like a world key (ow_w_, ow_r_, or ten digits).');
+  if (key === rec.apiKey) throw new Error('That is the key this world has now.');
+  let meta: { id: string; name: string };
+  try {
+    meta = await new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE }).getWorld();
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === 'key_revoked') throw new Error('That key was revoked too. Make a new one on the world\'s page on onlyworlds.com.');
+    if (code === 'invalid_credentials' && (e as { param?: string | null }).param !== 'API-Pin') throw new Error('OnlyWorlds does not know that key. Copy it again from the world\'s page on onlyworlds.com.');
+    throw e;
+  }
+  if (meta.id !== rec.id) throw new Error(`That key is for another world, "${meta.name}". Copy the key from this world's page on onlyworlds.com.`);
+  // Who the old key was (its Character, its role) is not who this key is; the copy itself stays.
+  await db.updateWorldRecord(rec.id, { apiKey: key, keyKind: kind, characterId: undefined, memberRole: undefined, role: undefined });
+  forgetSession(rec.id);
 }
 
 /**

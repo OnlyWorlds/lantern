@@ -33,6 +33,8 @@ class FakeKeel {
   gate: Promise<void> | null = null;
   /** The next write is applied, then its answer is lost, and the network stays down. */
   dropAnswerOnce = false;
+  /** Set: keel refuses this key on every route (revoked, or no longer known). */
+  keyGone: 'key_revoked' | 'invalid_credentials' | null = null;
   /** The next write answers this error instead. */
   nextError: { status: number; code: string } | null = null;
   /** A walk from zero fails (a resync whose walk drops). */
@@ -54,8 +56,8 @@ class FakeKeel {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   }
 
-  err(status: number, code: string, extra: Record<string, unknown> = {}): Response {
-    return this.json(status, { error: { code, message: code, type: 'x' }, ...extra });
+  err(status: number, code: string, extra: Record<string, unknown> = {}, param: string | null = null): Response {
+    return this.json(status, { error: { code, message: code, type: 'x', param }, ...extra });
   }
 
   fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
@@ -71,9 +73,13 @@ class FakeKeel {
       this.uploads++;
       return this.json(200, { url: `https://media.onlyworlds.com/w/${this.uploads}.webp`, key: `w/${this.uploads}.webp`, bytes: 1, type: 'image/webp', etag: 'x' });
     }
+    // keel resolves the key before the PIN (core/auth.py): a revoked key is key_revoked, a key it
+    // no longer knows (a removed member's, a deleted world's) invalid_credentials with no param.
+    if (this.keyGone) return this.err(401, this.keyGone);
+    // A PIN refusal names its header since keel #357 (param API-Pin).
     const sentPin = headers.get('API-Pin');
-    if (sentPin && sentPin !== this.pin) return this.err(401, 'invalid_credentials');
-    if (method !== 'GET' && !sentPin) return this.err(401, 'invalid_credentials');
+    if (sentPin && sentPin !== this.pin) return this.err(401, 'invalid_credentials', {}, 'API-Pin');
+    if (method !== 'GET' && !sentPin) return this.err(401, 'invalid_credentials', {}, 'API-Pin');
 
     if (path === '/media/ticket' && this.refuseTicket) return this.err(this.refuseTicket.status, this.refuseTicket.code);
     if (path === '/media/ticket') return this.json(200, { ticket: 't', upload_url: 'https://edge.test/up', prefix: 'w/', max_bytes: 15e6, exp: 0 });
@@ -876,5 +882,52 @@ describe('delete', () => {
     expect((await db.allElements(id)).map((e) => e.id)).toEqual([a]);
     expect(s.rec.count).toBe(1);
     expect(keel.calls).toEqual([]);
+  });
+});
+
+describe('a key keel no longer takes (Atlas #198 twin, S418)', () => {
+  it('a revoked or unknown key on a send keeps the PIN, keeps the change, and never asks for a PIN', async () => {
+    for (const code of ['key_revoked', 'invalid_credentials'] as const) {
+      keel.put({ id: 'a', type: 'character', name: 'Ada' });
+      const s = await freshWorld('owner');
+      await s.pull();
+      setPin(s.rec, '1234');
+      keel.keyGone = code;
+      await s.edit('a', { name: 'Ada Vell' });
+      await s.flush();
+      expect(s.keyRefused).toBe(true);
+      expect(s.keyRefusal).toBe(code === 'key_revoked' ? 'key_revoked' : 'key_unknown');
+      expect(s.needPin).toBe(false);
+      expect(s.pinKnown()).toBe(true);
+      expect(s.waitingCount()).toBe(1);
+      expect(s.statusText).toMatch(code === 'key_revoked' ? /revoked/ : /no longer knows/);
+      // Sending again asks nothing of keel while the key is dead.
+      const before = keel.calls.length;
+      await s.flush();
+      expect(keel.calls.length).toBe(before);
+      keel.keyGone = null;
+    }
+  });
+
+  it('a wrong PIN is still the PIN: cleared and asked again (keel #357 names API-Pin)', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld('owner');
+    await s.pull();
+    setPin(s.rec, '9999');
+    await s.edit('a', { name: 'Ada Vell' });
+    await s.flush();
+    expect(s.keyRefused).toBe(false);
+    expect(s.needPin).toBe(true);
+    expect(s.pinKnown()).toBe(false);
+  });
+
+  it('a read refused for the key says the cause on the home', async () => {
+    const s = await freshWorld('owner');
+    keel.keyGone = 'invalid_credentials';
+    await s.pull();
+    expect(s.keyRefused).toBe(true);
+    expect(s.keyRefusal).toBe('key_unknown');
+    expect(s.statusText).toMatch(/deleted there, or you were removed from it/);
+    keel.keyGone = null;
   });
 });

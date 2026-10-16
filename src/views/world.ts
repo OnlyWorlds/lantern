@@ -4,7 +4,8 @@ import { h, plural } from '../dom';
 import { icon, typeIcon } from '../icons';
 import { search } from '../search';
 import { API_BASE, type WorldSession } from '../world';
-import { setPin } from '../pin';
+import { pinFor, setPin } from '../pin';
+import { keyRefusalText, newKeyCures } from '../keyrefusal';
 import {
   customEditable,
   customFields,
@@ -33,7 +34,7 @@ import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
 import { inviteSheet } from './invite';
-import { readsForWantOfPin, takeNoPinMark, upgradeMemberKey } from '../account';
+import { putKeyInPlace, readsForWantOfPin, renewWorldKey, takeNoPinMark, upgradeMemberKey } from '../account';
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
 function isUnsortedNote(el: OwElement): boolean {
@@ -86,6 +87,20 @@ function statusBanner(s: WorldSession): HTMLElement | null {
     return h('div', { class: 'banner', role: 'status' }, `Enter your PIN to send ${plural(s.waitingCount(), 'change')}.`, b);
   }
   if (s.status === 'syncing') return h('div', { class: 'banner', role: 'status' }, s.statusText || 'Syncing');
+  // A key keel no longer takes (Atlas #198's twin): the cause, and a new key in place. An account
+  // world can have one made; any world can take one pasted. Never a PIN question for a dead key.
+  if (s.keyRefused && newKeyCures(s.keyRefusal) && !s.isLocal) {
+    const box = h('div', { class: 'banner', role: 'status' }, keyRefusalText(s.keyRefusal));
+    if (s.rec.role) {
+      const make = h('button', { class: 'btn btn-primary', type: 'button' }, 'Make a new key') as HTMLButtonElement;
+      make.addEventListener('click', () => void makeKey(s, make));
+      box.append(make);
+    }
+    const put = h('button', { class: 'btn', type: 'button' }, 'Put in a new key');
+    put.addEventListener('click', () => putKeySheet(s));
+    box.append(put);
+    return box;
+  }
   if (s.status === 'offline' || s.status === 'error') {
     const b = h('button', { class: 'btn', type: 'button' }, 'Try again');
     b.addEventListener('click', () => {
@@ -163,6 +178,59 @@ function headPill(s: WorldSession): HTMLElement | null {
 }
 
 /** A member who joined with no PIN on their account reads; this says why and takes the write key once they set one. */
+async function makeKey(s: WorldSession, btn: HTMLButtonElement): Promise<void> {
+  btn.disabled = true;
+  btn.textContent = 'Making a key';
+  const cause = s.keyRefusal === 'pin' ? null : s.keyRefusal;
+  try {
+    const { readOnly } = await renewWorldKey(s.rec, cause);
+    toast(readOnly ? `${s.rec.name} has a new key. It only reads, so it opens to read.` : `${s.rec.name} has a new key. Changes are sent again.`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  } catch (ex) {
+    toast(errorText(ex));
+    btn.disabled = false;
+    btn.textContent = 'Make a new key';
+  }
+}
+
+/** Paste a key in place (Atlas #198's twin): read once against keel, and it must open this world. */
+export function putKeySheet(s: WorldSession): void {
+  sheet((close) => {
+    const input = h('input', {
+      class: 'input',
+      type: 'password',
+      autocomplete: 'off',
+      autocapitalize: 'off',
+      spellcheck: 'false',
+      placeholder: 'ow_w_… or ow_r_…',
+      'aria-label': 'The new key',
+    }) as HTMLInputElement;
+    const err = h('p', { class: 'error', role: 'alert' });
+    const btn = h('button', { class: 'btn btn-primary', type: 'button' }, 'Use this key') as HTMLButtonElement;
+    btn.addEventListener('click', async () => {
+      err.textContent = '';
+      btn.disabled = true;
+      try {
+        await putKeyInPlace(s.rec, input.value, pinFor(s.rec));
+        close();
+        toast(`${s.rec.name} has a new key. Changes are sent again.`);
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (ex) {
+        err.textContent = errorText(ex);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    return [
+      h('h2', null, 'Put in a new key'),
+      h('p', { class: 'dim', style: 'margin:0' }, `A key from ${s.rec.name}'s page on onlyworlds.com takes the place of the one this phone has. What is on the phone stays, changes waiting to send included.`),
+      input,
+      err,
+      btn,
+    ];
+  }, 'Put in a new key');
+}
+
 export function noPinSheet(s: WorldSession): void {
   // The home's opening line says to tap here; once tapped it would only cover the sheet's buttons.
   document.querySelector('.toast')?.remove();
