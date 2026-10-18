@@ -42,18 +42,18 @@ async function walk(engine, deviceName, tag) {
   const first = await page.locator('.choice').first().innerText();
   check(tag, /Sign in/.test(first), `Sign in is the first choice (${JSON.stringify(first.split('\n')[0])})`);
 
-  // 1b. Sign in against live keel (Keel #211) with a wrong password: the server's own words come back
+  // 1b. Sign in against live keel (Keel #211, through SDK 4.31) with a wrong password: said in Lantern's words
   await page.locator('a.choice.primary').tap();
   await page.waitForSelector('[data-screen="signin"]');
   // The token door stays shut until asked for (S397: a flex class once showed it open).
   check(tag, !(await page.locator('input[aria-label="Account token"]').isVisible()), 'the account token field waits behind "I have an account token"');
-  await page.locator('input[aria-label="Email"]').fill('nobody-lantern-walk@example.com');
+  await page.locator('input[aria-label="Email or username"]').fill('nobody-lantern-walk@example.com');
   await page.locator('input[aria-label="Password"]').fill('not-the-password-1');
   expect400 = true;
   await page.getByRole('button', { name: 'Sign in', exact: true }).tap();
   await page.waitForFunction(() => document.querySelector('.error')?.textContent, null, { timeout: 15000 });
   const signErr = await page.locator('.error').first().innerText();
-  check(tag, /not correct/.test(signErr), `a wrong password is answered by keel: ${JSON.stringify(signErr)}`);
+  check(tag, /did not match an OnlyWorlds account/.test(signErr), `a wrong password is refused, in Lantern's words: ${JSON.stringify(signErr)}`);
   await shot('signin-wrong');
   expect400 = false;
   await page.goto(`${BASE}/#/welcome`);

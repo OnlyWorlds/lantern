@@ -1,7 +1,7 @@
 // Signing in: today an account token pasted from onlyworlds.com (ow_a_, sent as a Bearer token);
 // when Keel #211 lands, email and password. The account lists its worlds and mints a key per
 // world this phone opens, named for the phone and revocable on the portal.
-import { OwV2Client, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
+import { OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, forgetSession } from './world';
 import { plural } from './dom';
@@ -34,48 +34,40 @@ export async function signIn(token: string): Promise<AccountWorld[]> {
   return worlds;
 }
 
-const AUTH_BASE = 'https://www.onlyworlds.com/api/v2/auth/app/v1';
+/** What to tell someone for each refused sign-in. Never keel's raw text. */
+export function signInRefusal(err: unknown): string {
+  if (err instanceof OwSignInError) {
+    switch (err.reason) {
+      case 'invalid_credentials': return 'That email or username and password did not match an OnlyWorlds account.';
+      case 'email_unverified': return 'Confirm your email first: the link is in the mail onlyworlds.com sent you.';
+      case 'rate_limited': return 'Too many tries. Wait a moment and try again.';
+      case 'offline': return 'No connection. Signing in needs signal.';
+      case 'mint_failed': return "This phone's token could not be made. Try again.";
+    }
+  }
+  return 'Signing in did not work. Try again.';
+}
 
 /**
- * Keel #211: sign in with email and password through the headless app client, turn the session
- * into this phone's own account token (POST /account/tokens with X-Session-Token, named for the
- * phone and revocable on the portal), then end the session. Only the token is kept.
+ * Keel #211, through the SDK (4.31's `signInWithPassword`, Boss's flag h11 #6858; Atlas 1.52 signs
+ * in the same way): an email or a username and the password become this phone's own account token,
+ * named for the phone and revocable on the portal; the session ends inside the call, and only the
+ * token is kept.
  */
-export async function signInWithPassword(email: string, password: string): Promise<AccountWorld[]> {
-  let res: Response;
+export async function signInWithPassword(login: string, password: string): Promise<AccountWorld[]> {
+  const id = login.trim();
+  let token: string;
   try {
-    res = await fetch(`${AUTH_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), password }),
+    const signed = await new OwV2Client({ baseUrl: API_BASE }).signInWithPassword({
+      ...(id.includes('@') ? { email: id } : { username: id }),
+      password,
+      tokenName: `Lantern on ${deviceName()}`,
     });
-  } catch {
-    throw new Error('No connection. Signing in needs signal.');
+    token = signed.token;
+  } catch (err) {
+    throw new Error(signInRefusal(err));
   }
-  const data = (await res.json().catch(() => null)) as {
-    meta?: { session_token?: string };
-    errors?: { message?: string }[];
-    data?: { flows?: { id?: string; is_pending?: boolean }[] };
-  } | null;
-  const session = res.ok ? data?.meta?.session_token : undefined;
-  if (!session) {
-    if (data?.data?.flows?.some((f) => f.id === 'verify_email' && f.is_pending)) {
-      throw new Error('Confirm your email first: the link is in the mail onlyworlds.com sent you.');
-    }
-    throw new Error(data?.errors?.[0]?.message ?? 'Signing in did not work. Try again.');
-  }
-  try {
-    const t = await fetch(`${API_BASE}/account/tokens`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Session-Token': session },
-      body: JSON.stringify({ name: `Lantern on ${deviceName()}` }),
-    });
-    const body = (await t.json().catch(() => null)) as { token?: string; error?: { message?: string } } | null;
-    if (!t.ok || !body?.token) throw new Error(body?.error?.message ?? "This phone's token could not be made. Try again.");
-    return await signIn(body.token);
-  } finally {
-    void fetch(`${AUTH_BASE}/auth/session`, { method: 'DELETE', headers: { 'X-Session-Token': session } }).catch(() => undefined);
-  }
+  return signIn(token);
 }
 
 export async function signOut(): Promise<void> {

@@ -97,14 +97,15 @@ export function welcomeView(): HTMLElement {
 }
 
 export function signInView(): HTMLElement {
-  const email = h('input', { class: 'input', type: 'email', autocomplete: 'username', autocapitalize: 'off', 'aria-label': 'Email' });
+  // An email or a username (SDK 4.31): type text, so a username is not refused as a bad email.
+  const email = h('input', { class: 'input', type: 'text', inputmode: 'email', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Email or username' });
   const password = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Password' });
   const err = h('p', { class: 'error', role: 'alert' });
   const btn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Sign in');
   const form = h(
     'form',
     { class: 'stack' },
-    h('label', { class: 'field-label' }, 'Email', email),
+    h('label', { class: 'field-label' }, 'Email or username', email),
     h('label', { class: 'field-label' }, 'Password', password),
     err,
     btn,
@@ -113,7 +114,7 @@ export function signInView(): HTMLElement {
     e.preventDefault();
     err.textContent = '';
     if (!email.value.trim() || !password.value) {
-      err.textContent = 'Your email and password, as on onlyworlds.com.';
+      err.textContent = 'Your email or username and password, as on onlyworlds.com.';
       return;
     }
     btn.disabled = true;
