@@ -94,7 +94,10 @@ export function beforeNowView(s: WorldSession): View {
         h(
           'p',
           { class: 'dim', style: 'margin:0', 'data-now': now === undefined ? '' : String(now) },
-          now === undefined ? 'This world has no now set, so every dated Event is listed. Set it in Atlas.' : `Now is ${dateText(now, unit, cal)}.`,
+          // Set now follows when this phone may move it (the frames' L7, S427: "Set it in Atlas" sat over it).
+          now !== undefined
+            ? `Now is ${dateText(now, unit, cal)}.`
+            : `This world has no now set, so every dated Event is listed.${s.canMoveNow ? '' : ' Set it in Atlas.'}`,
         ),
       );
       if (t.before.length) parts.push(h('div', { class: 'results', 'data-part': 'before' }, ...t.before.map(row)));

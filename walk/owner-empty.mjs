@@ -65,6 +65,13 @@ async function walk(engine, deviceName, tag) {
   await page.screenshot({ path: `${OUT}/owner-empty-${tag}-kept.png` });
   await page.locator('[data-action=kept-pin]').tap();
   check(tag, await page.locator('input[aria-label="PIN"]').waitFor({ timeout: 5000 }).then(() => true, () => false), 'Enter your PIN opens the PIN sheet');
+  // The PIN taken (keel's read with it answers), the line stops saying it waits (the frames' L12, S427).
+  await page.route('**/api/v2/world/', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: worldId, name: 'Empty table' }) }));
+  await page.locator('input[aria-label="PIN"]').fill('1234');
+  await page.locator('.sheet').getByRole('button', { name: 'Send my changes' }).tap();
+  await page.locator('.sheet').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+  const after = await page.locator('[data-part="kept"]').innerText();
+  check(tag, /^Added to Unsorted: The ferryman knows\.\s*Open it$/.test(after.trim()), `once the PIN is in, the line no longer says it waits (${JSON.stringify(after.trim())})`);
 
   check(tag, errors.length === 0, `no errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();

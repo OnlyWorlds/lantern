@@ -53,6 +53,17 @@ const noEvents = Buffer.from(
   ),
 );
 
+const noNowId = '0f0f0f0f-0000-4000-8000-0000000071e2';
+const noNow = Buffer.from(
+  writeWorldFile(
+    [
+      { path: 'world.json', data: enc({ id: noNowId, name: 'Unset walk' }) },
+      { path: 'elements/event/u0.json', data: enc({ id: '071e0000-0000-4000-8000-0000000000e1', name: 'The landing', start_date: 12 }) },
+    ],
+    'unset-walk',
+  ),
+);
+
 async function walk(engine, tag) {
   const browser = await engine.launch();
   const base = engine === webkit ? devices['iPhone 13'] : devices['Pixel 7'];
@@ -70,6 +81,13 @@ async function walk(engine, tag) {
 
   await open(noEvents, 'quiet-walk.zip');
   check(tag, (await page.locator('[data-action=before-now]').count()) === 0, 'a world with no Event offers no list');
+
+  // No now set, on a phone that may set it: Set now, and no "Set it in Atlas" over it (the frames' L7, S427).
+  await open(noNow, 'unset-walk.zip');
+  await page.goto(`${BASE}/#/w/${noNowId}/time`);
+  await page.waitForSelector('[data-screen="time"] [data-now]');
+  const unset = await page.locator('[data-screen="time"] [data-now]').innerText();
+  check(tag, unset.trim() === 'This world has no now set, so every dated Event is listed.' && (await page.locator('[data-action=change-now]').innerText()) === 'Set now', `no now: Set now, and not "Set it in Atlas" (${JSON.stringify(unset.trim())})`);
 
   await open(zip, 'time-walk.zip');
   const entry = page.locator('[data-action=before-now]');

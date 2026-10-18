@@ -111,7 +111,8 @@ function statusBanner(s: WorldSession): HTMLElement | null {
   return null;
 }
 
-export function pinSheet(s: WorldSession): void {
+/** onTaken: the screen that asked says so once the PIN is kept (Catch's line, the frames' L12, S427). */
+export function pinSheet(s: WorldSession, onTaken?: () => void): void {
   sheet((close) => {
     const pin = h('input', {
       class: 'input',
@@ -134,6 +135,7 @@ export function pinSheet(s: WorldSession): void {
         setPin(s.rec, pin.value.trim());
         s.needPin = false;
         close();
+        onTaken?.();
         void s.flush();
       } catch (ex) {
         const m = errorText(ex);

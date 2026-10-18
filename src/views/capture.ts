@@ -189,7 +189,8 @@ export function captureView(s: WorldSession, fromShare = false): View {
       // the note was made, not only on the home (S419's L12).
       if (!s.isLocal && !s.pinKnown()) {
         const enter = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'kept-pin' }, 'Enter your PIN');
-        enter.addEventListener('click', () => void import('./world').then((m) => m.pinSheet(s)));
+        const sent = () => keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. `, open);
+        enter.addEventListener('click', () => void import('./world').then((m) => m.pinSheet(s, sent)));
         keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. It sends once Lantern has your PIN. `, enter, ' ', open);
       } else keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. `, open);
       text.focus();
