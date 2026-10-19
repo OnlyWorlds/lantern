@@ -1348,3 +1348,7 @@ select.input {
   border-left: 3px solid var(--lan-accent);
   font-size: 1.05rem;
 }
+
+/* Files on an element (keel #393): the name, its line, Download under them. */
+.file-name { display: block; overflow-wrap: anywhere; }
+.file-line { display: block; margin: 2px 0 8px; }

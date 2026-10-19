@@ -1,5 +1,6 @@
 // Inside a world: its home (find, the types), a type's list, an element's page.
-import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
+import { OwApiError, OwV2Client, type OwElement, type OwFileRow } from '@onlyworlds/sdk';
+import { fileLine } from '../files';
 import { h, plural } from '../dom';
 import { icon, typeIcon } from '../icons';
 import { search } from '../search';
@@ -809,6 +810,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
           ]
         : [h('div', { class: 'fields' }, ...schemaRows, backNode ?? '')]),
       toggle ?? '',
+      filesSection(s, el),
       editable ? addField : '',
       editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap the name or a value to change it.') : '',
       editable ? deleteButton(s, el) : '',
@@ -917,6 +919,59 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
 }
 
 /** Delete, last on the page and quiet: the sheet asks once (src/views/edit.ts `deleteSheet`). */
+/**
+ * The files OnlyWorlds holds on this element (keel #393), each with Download. Read only on the
+ * phone: adding and removing are Atlas's. Shown only once keel has answered with at least one,
+ * so a page with none, or with no signal, has no section.
+ */
+function filesSection(s: WorldSession, el: OwElement): HTMLElement | '' {
+  const rows = s.files(el.type, el.id);
+  if (!rows || rows.length === 0) return '';
+  return h(
+    'div',
+    { class: 'stack', 'data-section': 'files', style: 'gap:0' },
+    h('p', { class: 'section-label', style: 'margin:8px 0 0' }, 'Files'),
+    h('div', { class: 'fields' }, ...rows.map((r) => fileRow(s, el, r))),
+  );
+}
+
+function fileRow(s: WorldSession, el: OwElement, r: OwFileRow): HTMLElement {
+  const get = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'download-file' }, 'Download');
+  get.addEventListener('click', async () => {
+    if (!navigator.onLine) {
+      toast('Files open with signal.');
+      return;
+    }
+    get.setAttribute('disabled', '');
+    get.textContent = 'Opening…';
+    try {
+      const url = await s.fileLink(el.type, el.id, r.id);
+      // The host sends it as an attachment, so Lantern stays where it is.
+      const a = h('a', { href: url, rel: 'noopener noreferrer', download: r.name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+    } catch (ex) {
+      toast(ex instanceof OwApiError && ex.status === 404 ? 'This file is no longer on OnlyWorlds.' : 'The file could not be fetched. Try again in a moment.');
+    } finally {
+      get.removeAttribute('disabled');
+      get.textContent = 'Download';
+    }
+  });
+  return h(
+    'div',
+    { class: 'frow block', 'data-file-id': r.id },
+    h('span', { class: 'k' }, r.label?.trim() || 'File'),
+    h(
+      'span',
+      { class: 'v' },
+      h('span', { class: 'file-name' }, r.name),
+      h('span', { class: 'muted small file-line' }, fileLine(r), r.added_by?.agent ? ' · an agent' : ''),
+      get,
+    ),
+  );
+}
+
 function deleteButton(s: WorldSession, el: OwElement): HTMLElement {
   const what = isUnsortedNote(el) ? 'note' : typeLabel(el.type).toLowerCase();
   const b = h('button', { class: 'btn btn-quiet btn-delete', type: 'button', 'data-action': 'delete' }, icon('close', 16), `Delete this ${what}`);

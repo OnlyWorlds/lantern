@@ -22,7 +22,7 @@ import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
-import type { CalendarConfig } from '@onlyworlds/sdk';
+import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 
@@ -199,6 +199,50 @@ export class WorldSession {
       );
     }
     return this.rosterRows;
+  }
+
+  private fileSlots = new Map<string, { rows: OwFileRow[] | null; readAt: number; asking: boolean }>();
+
+  /**
+   * The files keel holds on an element (keel #393, the SDK's listFiles on the world's own key),
+   * for its page. Files are never in the phone's copy or /changes: asked when the page shows with
+   * signal, kept for the session, asked again once a minute old; a redraw only when the list moved.
+   * A refusal (an element keel does not hold yet) or no signal stays quiet: no list.
+   */
+  files(type: string, id: string, now: number = Date.now()): OwFileRow[] | null {
+    if (this.isLocal || !this.rec.apiKey) return null;
+    let slot = this.fileSlots.get(id);
+    if (!slot) {
+      slot = { rows: null, readAt: 0, asking: false };
+      this.fileSlots.set(id, slot);
+    }
+    const s = slot;
+    if (!s.asking && navigator.onLine && (s.readAt === 0 || now - s.readAt > 60_000)) {
+      s.asking = true;
+      Promise.resolve()
+        .then(() => this.client(false).listFiles(type, id))
+        .then(
+          (rows) => {
+            if (this.retired) return;
+            const moved = JSON.stringify(rows) !== JSON.stringify(s.rows);
+            s.rows = rows;
+            if (moved) this.emit();
+          },
+          () => {},
+        )
+        .finally(() => {
+          s.readAt = Date.now();
+          s.asking = false;
+        });
+    }
+    return s.rows;
+  }
+
+  /** A link to one file, asked for at the tap and used at once: the link is the credential, never kept. */
+  async fileLink(type: string, id: string, fileId: string): Promise<string> {
+    const d = await this.client(false).fileDownloadLink(type, id, fileId);
+    if (typeof d.url !== 'string' || !/^https:\/\//.test(d.url)) throw new Error('no file address');
+    return d.url;
   }
 
   subscribe(fn: () => void): () => void {
