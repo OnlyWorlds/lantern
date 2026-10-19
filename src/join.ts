@@ -99,9 +99,7 @@ export async function acceptJoin(code: string): Promise<JoinResult> {
       await fetchAccountWorlds(token).catch(() => undefined);
       return { already: true };
     }
-    if (e instanceof OwApiError && e.isPinRequired) {
-      throw new Error('Set a PIN for your account on onlyworlds.com first. The link stays unused, so come back and join after.');
-    }
+    // Accepting needs no PIN for any role since keel #297 (ed73c90): no pin_required branch here.
     if (e instanceof OwApiError && e.isNotFound) {
       await setPendingJoin(undefined);
       throw new Error(DEAD);

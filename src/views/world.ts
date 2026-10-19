@@ -453,7 +453,7 @@ function inviteRow(s: WorldSession): HTMLElement {
     'button',
     { class: 'choice', type: 'button', 'data-action': 'invite' },
     h('b', null, 'Invite someone'),
-    h('span', null, 'Make a link to send, or show its QR code. They need a free account.'),
+    h('span', null, 'Make a link to send, or show its QR code. A player needs no account.'),
   );
   b.addEventListener('click', () => inviteSheet(s.id, s.rec.name || 'your world'));
   return b;

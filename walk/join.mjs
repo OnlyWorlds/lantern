@@ -1,7 +1,7 @@
 // Joining with an invite link (Keel #212), as a phone taps it, both engines. A bad link goes to
 // live keel (the real 404). The rest routes keel's join and account answers to a fake shaped by
 // keel's tests, since a good link is the owner's to make: shared from a chat, the link opens the
-// invite; "Sign in to join" keeps it through the sign-in; no PIN gets its own sentence.
+// invite; "Sign in to join" keeps it through the sign-in; already a member is said plainly.
 // Run: npm run build && (npx vite preview &) && node walk/join.mjs [webkit|chromium]
 import './guard.mjs';
 // WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
@@ -48,7 +48,7 @@ async function walk(engine, deviceName, tag) {
   check(tag, /not an invite link/.test(await page.locator('.error').first().innerText()), 'text without a code is named as such');
 
   // 2. The fake keel from here on
-  let joinAnswer = json(409, { error: { code: 'pin_required', message: 'pin' } });
+  let joinAnswer = json(409, { error: { code: 'already_member', message: 'already' } });
   await page.route('**/api/v2/join/preview', (r) =>
     r.fulfill(json(200, { reader: 'person', world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: 'guest', with_character: false, expires_at: '2026-10-19T00:00:00+00:00' })),
   );
@@ -88,16 +88,7 @@ async function walk(engine, deviceName, tag) {
   const joinBtn = page.getByRole('button', { name: 'Join The Reach' });
   check(tag, (await joinBtn.count()) === 1, 'signed in, the button says Join The Reach');
 
-  // No PIN on the account: its own sentence, nothing opened
-  await joinBtn.tap();
-  await page.waitForFunction(() => [...document.querySelectorAll('.error')].some((e) => e.textContent), null, { timeout: 10000 });
-  const pinErr = (await page.locator('.error').allInnerTexts()).join(' ');
-  check(tag, /Set a PIN/.test(pinErr), `no PIN: ${JSON.stringify(pinErr.trim())}`);
-  check(tag, (await page.evaluate(() => document.querySelector('main').dataset.screen)) === 'join', 'and the phone stays on the invite');
-  await shot('no-pin');
-
-  // Already a member
-  joinAnswer = json(409, { error: { code: 'already_member', message: 'already' } });
+  // Already a member (accepting asks no PIN since keel #297, so there is no PIN step to walk)
   await joinBtn.tap();
   await page.waitForFunction(() => [...document.querySelectorAll('.error')].some((e) => /already/.test(e.textContent)), null, { timeout: 10000 });
   check(tag, true, 'already in the world: said plainly');

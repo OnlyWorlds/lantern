@@ -23,7 +23,34 @@ export function canInvite(rec: Pick<WorldRecord, 'kind' | 'role'>): boolean {
   return rec.kind === 'online' && rec.role === 'owner';
 }
 
-export type InviteRole = 'contributor' | 'guest';
+/**
+ * Who a link is for (the sharing floor's Q1, the Captain's yes, h50 #7610): `player` is keel's
+ * no-account player link (#353), a friend reading as one Character; `guest` is a person's link with
+ * role guest, the same reading signed in to an account of their own; `contributor` a person's link.
+ */
+export type InviteFor = 'contributor' | 'player' | 'guest';
+
+/** A player link's Character: one of the world's, by its id, or a new one named for the player. */
+export const NEW_CHARACTER = 'new';
+
+export const INVITE_CAP = 'This world has as many open invites as it can hold, links not yet used included. Take some back on its page on onlyworlds.com, under Access, then make a new one.';
+
+export const CHARACTER_GONE ='That Character is not on OnlyWorlds yet, or no longer. Let the world sync, or pick another, then make the link.';
+
+/**
+ * The Characters a player link can name: keel holds only what has reached it, so a Character still
+ * waiting to send (an outbox create) is left out rather than refused. Sorted by name.
+ */
+export function playableCharacters(
+  elements: Array<{ id: string; type?: string; name?: unknown }>,
+  waiting: Array<{ op: string; id: string }>,
+): Array<{ id: string; name: string }> {
+  const unsent = new Set(waiting.filter((r) => r.op === 'create').map((r) => r.id));
+  return elements
+    .filter((el) => el.type === 'character' && !unsent.has(el.id))
+    .map((el) => ({ id: el.id, name: typeof el.name === 'string' && el.name.trim() ? el.name.trim() : 'Unnamed' }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** How long a link works, said where it is made (keel's default; the SDK takes 1, 7 or 30). */
 export const INVITE_DAYS = 7;
@@ -46,8 +73,16 @@ export function lastInviterName(): string {
   }
 }
 
-/** A new invite link for a person, made by the signed-in owner. Nothing about it is kept. */
-export async function makeInvite(worldId: string, role: InviteRole, inviterName: string): Promise<MadeInvite> {
+/**
+ * A new invite link, made by the signed-in owner. Nothing about it is kept. `character` is for a
+ * player link only: a Character's id, or `NEW_CHARACTER`.
+ */
+export async function makeInvite(
+  worldId: string,
+  inviteFor: InviteFor,
+  inviterName: string,
+  character: string = NEW_CHARACTER,
+): Promise<MadeInvite> {
   const token = await accountToken();
   if (!token) throw new Error('Sign in first: only the world\'s owner makes an invite link.');
   const name = inviterName.trim();
@@ -58,16 +93,21 @@ export async function makeInvite(worldId: string, role: InviteRole, inviterName:
   }
   const client = new OwV2Client({ apiKey: token, baseUrl: API_BASE });
   try {
-    const made = await client.createWorldLink(worldId, {
-      reader: 'person',
-      role,
-      days: INVITE_DAYS,
-      ...(name ? { inviterName: name } : {}),
-    });
+    const made = await client.createWorldLink(
+      worldId,
+      inviteFor === 'player'
+        ? { reader: 'player', character, days: INVITE_DAYS, ...(name ? { inviterName: name } : {}) }
+        : { reader: 'person', role: inviteFor, days: INVITE_DAYS, ...(name ? { inviterName: name } : {}) },
+    );
     return { link: made.link, line: made.line };
   } catch (e) {
     if (e instanceof OwNetworkError) throw new Error('No connection. Making an invite link needs signal.');
     if (e instanceof OwApiError && e.isNotFound) throw new Error('Only the world\'s owner can make an invite link for it.');
+    // keel refuses a Character it does not hold in this world (agents.py `_clean_link_character`).
+    if (e instanceof OwApiError && e.status === 422 && e.param === 'character') throw new Error(CHARACTER_GONE);
+    // keel's cap on a world's open invites (player links count too) is a 422 naming no field; a
+    // retry never helps (Atlas's INVITE_CAP_LINE, the S414 gate's M1; S433 gate S2).
+    if (e instanceof OwApiError && e.status === 422 && !e.param) throw new Error(INVITE_CAP);
     throw new Error('The link was not made. Try again in a moment.');
   }
 }

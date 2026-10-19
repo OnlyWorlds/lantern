@@ -1,7 +1,8 @@
 // Joining with an invite link (Keel #212), against a fake keel that answers as keel's own tests
 // say: preview needs no credential and spends nothing; /account/join wants the account token,
 // 201 with the membership (world_id, role, roster_character), 404 for every bad code (one
-// message), 409 already_member or pin_required with the code left unused.
+// message), 409 already_member with the code left unused. Accepting asks no PIN for any role
+// (keel #297, ed73c90), so the fake has no pin_required at the accept.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -29,7 +30,6 @@ class FakeKeel {
   ]);
   /** What POST /join last received: its body, and whether it carried a credential. */
   redeemed: { body: unknown; credential: boolean }[] = [];
-  hasPin = true;
   members = new Set<string>();
   calls: string[] = [];
 
@@ -69,7 +69,6 @@ class FakeKeel {
       const c = this.codes.get(body?.code);
       if (!c || c.used || c.reader !== 'person') return this.notFound();
       if (this.members.has(WORLD)) return this.json(409, { error: { code: 'already_member', message: 'already' } });
-      if (!this.hasPin) return this.json(409, { error: { code: 'pin_required', message: 'pin' } });
       c.used = true;
       this.members.add(WORLD);
       return this.json(201, { id: 'grant-1', world_id: WORLD, world_name: 'The Reach', role: c.role, roster_character: c.role === 'guest' ? CHAR : null });
@@ -123,15 +122,6 @@ describe('an invite link', () => {
     // A second, fresh link to a world already joined: said plainly, nothing new kept.
     keel.codes.set('ow_j_second', { used: false, reader: 'person', role: 'guest' });
     await expect(join.acceptJoin('ow_j_second')).resolves.toEqual({ already: true });
-  });
-
-  it('no PIN: its own sentence, the link unused and still waiting', async () => {
-    keel.hasPin = false;
-    await join.setPendingJoin('ow_j_good');
-    await expect(join.acceptJoin('ow_j_good')).rejects.toThrow(/Set a PIN/);
-    expect(keel.codes.get('ow_j_good')!.used).toBe(false);
-    expect(await join.pendingJoin()).toBe('ow_j_good');
-    expect(await db.getWorldRecord(WORLD)).toBeUndefined();
   });
 
   it('a dead link is let go, so the next sign-in does not come back to it; a sign-out lets go too (the third gate)', async () => {
