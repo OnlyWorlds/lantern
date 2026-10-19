@@ -9,6 +9,7 @@ import './guard.mjs';
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { writeWorldFile } from '@onlyworlds/sdk';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
 const OUT = 'walk/shots';
@@ -249,7 +250,7 @@ async function walk(engine, tag) {
   check(tag, await page.locator('.sheet [data-role=contributor]').isDisabled() && await page.locator('.sheet input').isDisabled(), 'while the link is made, the choice and the name are locked');
   release();
   await page.waitForSelector('.sheet [data-role=invite-link]');
-  check(tag, /as a player:$/.test((await page.locator('.sheet p').first().innerText()).trim()), 'the link says the role it was made for');
+  check(tag, /as a player with an account:$/.test((await page.locator(".sheet p").first().innerText()).trim()), "the link says the role it was made for (S433: a guest link is a player with an account)");
   check(tag, (await page.locator('.sheet [data-role=invite-link]').innerText()).trim() === 'https://www.onlyworlds.com/join#ow_j_walk1234', 'Invite someone makes the link on the phone and shows it');
   check(tag, JSON.stringify(sent) === JSON.stringify([{ reader: 'person', role: 'guest', days: 7, inviter_name: 'Ada' }]), `for a person, as a player, signed with the name typed (${JSON.stringify(sent)})`);
   check(tag, await page.locator('.sheet svg.invite-qr').waitFor({ timeout: 5000 }).then(() => true, () => false), 'with its QR code');
@@ -282,6 +283,31 @@ async function walk(engine, tag) {
   );
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
+
+  // S434 (#417's live walk): a friend sends a world file to a phone with nothing on it yet. The
+  // welcome's "I have a world file" opens it; before, the door was only on Your worlds.
+  {
+    const fresh = await browser.newContext({ ...base, viewport: { width: 360, height: 780 }, serviceWorkers: 'block' });
+    const p = await fresh.newPage();
+    await p.goto(`${BASE}/`);
+    await p.waitForSelector('[data-screen="welcome"]');
+    const door = p.getByRole('button', { name: 'I have a world file' });
+    check(tag, (await door.count()) === 1, 'a fresh phone\'s welcome offers I have a world file');
+    if (await door.count()) {
+      const chooser = p.waitForEvent('filechooser', { timeout: 10000 });
+      await door.tap();
+      const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
+      const sent = writeWorldFile([
+        { path: 'world.json', data: enc({ id: '0f0f0f0f-0000-4000-8000-00000000f17e', name: 'Sent by a friend' }) },
+        { path: 'elements/character/elrod--0000f17e.json', data: enc({ id: 'f17e0000-0000-4000-8000-000000000001', name: 'Elrod' }) },
+      ], 'sent-by-a-friend');
+      await (await chooser).setFiles({ name: 'sent-by-a-friend.zip', mimeType: 'application/zip', buffer: Buffer.from(sent) });
+      await p.waitForSelector('[data-screen="home"]', { timeout: 15000 });
+      check(tag, /Sent by a friend/.test(await p.locator('main').innerText()), 'the world file opens as a world on this phone');
+      await p.screenshot({ path: `${OUT}/first-${tag}-${String(++n).padStart(2, '0')}-welcome-world-file.png` });
+    }
+    await fresh.close();
+  }
   await browser.close();
 }
 

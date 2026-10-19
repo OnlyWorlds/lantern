@@ -92,6 +92,8 @@ export function welcomeView(): HTMLElement {
       ),
       h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'I have an invite link'),
       h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'I have a world key'),
+      // A world file sent by a friend, on a phone with nothing on it yet (S434: the door was only on Your worlds).
+      openFileButton('I have a world file', { class: 'btn btn-quiet', style: 'align-self:center' }),
     ),
   );
 }
@@ -388,10 +390,11 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
   return b;
 }
 
-function openFileButton(): HTMLElement {
+/** Open a world file. The welcome's quiet "I have a world file" is the same door for a phone with no world yet. */
+function openFileButton(words = 'Open a world file', attrs: Record<string, string> = { class: 'btn' }): HTMLElement {
   const input = h('input', { type: 'file', accept: '.zip,application/zip', style: 'display:none', 'aria-label': 'A world file' });
-  const label = h('span', null, 'Open a world file');
-  const b = h('button', { class: 'btn', type: 'button' }, label, input);
+  const label = h('span', null, words);
+  const b = h('button', { ...attrs, type: 'button' }, label, input);
   b.addEventListener('click', (e) => {
     if (e.target !== input && !b.disabled) input.click();
   });
@@ -409,7 +412,7 @@ function openFileButton(): HTMLElement {
       toast(errorText(e));
     } finally {
       b.disabled = false;
-      label.textContent = 'Open a world file';
+      label.textContent = words;
     }
   });
   return b;
