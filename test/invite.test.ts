@@ -83,8 +83,8 @@ describe('invite', () => {
   });
 
   it('the world page at Access, and the sign-up page, on the API host', () => {
-    expect(accessUrl('0e1f')).toBe('https://www.onlyworlds.com/account/worlds/0e1f#access');
-    expect(accessUrl('a/b')).toBe('https://www.onlyworlds.com/account/worlds/a%2Fb#access');
+    expect(accessUrl('0e1f')).toBe('https://www.onlyworlds.com/account/worlds/0e1f/access');
+    expect(accessUrl('a/b')).toBe('https://www.onlyworlds.com/account/worlds/a%2Fb/access');
     expect(SIGNUP_URL).toBe('https://www.onlyworlds.com/accounts/signup/');
   });
 

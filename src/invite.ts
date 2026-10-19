@@ -13,9 +13,9 @@ const SITE = new URL(API_BASE).origin;
 
 export const SIGNUP_URL = `${SITE}/accounts/signup/`;
 
-/** A world's page on onlyworlds.com, opened at Access (the page reads the hash). */
+/** A world's page on onlyworlds.com, opened at Access: its own path, kept through the site's sign-in (keel PR 90, Skeld h29 #7711). */
 export function accessUrl(worldId: string): string {
-  return `${SITE}/account/worlds/${encodeURIComponent(worldId)}#access`;
+  return `${SITE}/account/worlds/${encodeURIComponent(worldId)}/access`;
 }
 
 /** Invite someone: an online world the account list says you own (keel makes links for the owner only). */
