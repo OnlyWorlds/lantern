@@ -4,7 +4,7 @@
 
 ## CURRENT STATE
 
-Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; noindex kept) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `8ebe8ed` (S433, the player link, Boss h11 #7668; walked live h11 #7672), public since `4ba97a5` (the Captain's word, h56 #6838).
+Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; noindex kept) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `8e76d7a` (S434, Boss h11 #7802: the invite sheet's "See or take back links" opens Access by keel PR 90's path, walked live), after `254d35c` (S434, Boss h56 #7730, indexable: a fresh phone's welcome offers "I have a world file", walked live) and `8ebe8ed` (S433, the player link, Boss h11 #7668; walked live h11 #7672), public since `4ba97a5` (the Captain's word, h56 #6838).
 
 | Piece | State | Where |
 |---|---|---|
