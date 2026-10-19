@@ -1,6 +1,7 @@
-// Signing in: today an account token pasted from onlyworlds.com (ow_a_, sent as a Bearer token);
-// when Keel #211 lands, email and password. The account lists its worlds and mints a key per
-// world this phone opens, named for the phone and revocable on the portal.
+// Signing in: email (or username) and password through the SDK's signInWithPassword (Keel #211),
+// which gives this phone an account token of its own; a token pasted from onlyworlds.com still
+// works behind "I have an account token" (ow_a_, sent as a Bearer token). The account lists its
+// worlds and mints a key per world this phone opens, named for the phone and revocable on the portal.
 import { OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, forgetSession } from './world';

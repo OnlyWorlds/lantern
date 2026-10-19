@@ -14,8 +14,8 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 | Frame | OnlyWorlds in your pocket first; the table is its one deep mode. No character sheets, no dice | #3393 on D1 |
 | Shape | A world browser: all your worlds, three kinds (online, on this phone only, the demo) | canvas, D2 |
 | Account | **Open**: a world can start on the phone with no account; signing in is how a world travels to Atlas or a second device | canvas note, #3393 |
-| World control | Lantern edits a world's content, its name, description and picture, its "now" and its units. An owner makes invite links on the phone (a contributor or a player, seven days; Send it, Copy, a QR). Keys, members and deleting a world stay on onlyworlds.com | D2, #3393; invite links in the app h56 #5322 (B1) |
-| Players | Members with an account and a Character, invited as guests; they see the world as their Character knows it. Keel #213 (the guest rule learns knowing), which players waited on, is live since 10-12, keel 2e5b907 | #3397, #3409 |
+| World control | Lantern edits a world's content, its name, description and picture, its "now" and its units. An owner makes invite links on the phone (a contributor, a player, or a player with an account, seven days; Send it, Copy, a QR). Lantern makes a key of its own for each world it opens on a phone (named for the phone) and puts a new one in place when keel stops taking one; taking keys back, members and deleting a world stay on onlyworlds.com | D2, #3393; invite links in the app h56 #5322 (B1); the player link #416 (h50 #7610) |
+| Players | A Character the world's owner gives someone: by a player link with no account (keel #353, a read key and no PIN, since S433), or as a guest with an account. Either sees the world as their Character knows it (Keel #213, live since 10-12, keel 2e5b907) | #3397, #3409; #416 |
 | Knowing | Atlas's model: a Narrative is known by its `narrator` and by the members of its `collectives`. `characters` on a Narrative means "about", never "knows". keel learns this (Keel #213) | #3394, #3397 |
 | Unsorted | Material not yet turned into elements (a photographed page, a spoken ramble) is a Narrative with supertype `Unsorted`, the photo as its picture. Skeld writes the convention for every tool; Lantern shows it first | #3409, #3411 |
 | Conflicts | `If-Match` on element PATCH (Keel #210, live). keel never merges; Lantern re-sends by itself when the fields it touched did not move, and asks "keep mine, take theirs" only when the same field moved on both sides | contract |
@@ -38,11 +38,11 @@ Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home scre
 ## How it works
 
 ### Keys and sign-in
-- **Signed in**: today, paste an account token from onlyworlds.com; when Keel #211 lands, sign in with email and password and the phone gets its own token. Lantern lists `GET /api/v2/account/worlds` (owned and shared) and mints a key named for the phone per world it opens (`POST /api/v2/account/worlds/{id}/keys`), revocable on the portal.
+- **Signed in**: an email or username and the password (Keel #211, the SDK's `signInWithPassword`) give the phone its own account token; a token pasted from onlyworlds.com still works behind "I have an account token". Lantern lists `GET /api/v2/account/worlds` (owned and shared) and mints a key named for the phone per world it opens (`POST /api/v2/account/worlds/{id}/keys`), revocable on the portal.
 - **A read key** (the demo, a read-shared world): no PIN, no edit controls, no camera.
 - **The PIN** is the account's: keel keeps one per account and copies it onto every world it owns (Skeld #3674), so Lantern asks once for all your worlds; a world opened with someone else's key keeps its own. Kept on the phone (the Captain #3675), cleared on sign-out, on a wrong try, and with a world removed (`src/pin.ts`). keel checks a sent PIN on reads too (B4). A 401 on a write that names the PIN (param `API-Pin`, keel #357) stops the outbox and asks again; never a retry loop (keel throttles wrong PINs). A 401 that is the key's (`key_revoked`, or `invalid_credentials` with no param) keeps the PIN and the changes, and asks for a new key instead (`src/keyrefusal.ts`, the Decided table).
-- **A player** joins by the human join link (Keel #212) once #213 is live: open it, see the world and the role, accept.
-- Secrets stay on the device (IndexedDB), never in a URL.
+- **A player** joins by a join link (Keel #212): open it, see the world and the role, accept. A player link (keel #353) needs no account: the phone gets the player's read key.
+- Secrets stay on the device, never in a URL: the account token and the world keys in IndexedDB, the PIN (and a kept sort) in localStorage (the security pass's F6: the same exposure on a phone).
 
 ### The store on the phone (IndexedDB, one database per world)
 - `elements`: every element seen, as the API returned it, with its `change_seq`.

@@ -55,7 +55,9 @@ export function sharedNoteValues(text: string, partyId: string): Record<string, 
 
 /** The reveal's values: its own name, line and picture, told to the party, linked to the thing. */
 export function revealValues(thing: OwElement, partyId: string, name: string, line: string): Record<string, unknown> {
-  // Never the thing's own name as a fallback: that is the game master's to give, in the sheet.
+  // Never the thing's own name as a silent fallback: an emptied name is "Something found". The
+  // sheet starts with the thing's name in plain view, so what the party sees is the game master's
+  // to change there before Give it (views/party.ts).
   const values: Record<string, unknown> = { name: name.trim() || 'Something found', collectives: [partyId] };
   if (line.trim()) values.description = line.trim();
   if (typeof thing.image_url === 'string' && /^(https:|data:image\/)/.test(thing.image_url)) values.image_url = thing.image_url;
