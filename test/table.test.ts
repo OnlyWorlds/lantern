@@ -4,7 +4,7 @@
 // order, taken by any live seat); the door takes `character` (off the list or hidden: 422
 // invalid_request param character; taken: 422 character_taken param character), or on an empty
 // list a required `name` (422 param name, and a `character` there is refused); a full link is the
-// one 404; the world's cap of 50 players is 422 invalid_request with no param. A refusal spends nothing.
+// one 404; the world's cap of 50 players is 422 world_full, after the pick. A refusal spends nothing.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -64,7 +64,6 @@ class TableKeel {
     if (path === '/join') {
       this.bodies.push(body);
       if (!p || p.seats.length >= p.max) return this.json(404, { error: { code: 'not_found', message: 'This join code is not valid.' } });
-      if (this.full) return this.bad(null, 'This world has 50 players already.');
       let ch: string;
       let name = typeof body.name === 'string' ? body.name.trim() : '';
       if (p.list.length === 0) {
@@ -78,6 +77,8 @@ class TableKeel {
         ch = body.character;
         name ||= this.names[ch];
       }
+      // After the pick, as `redeem_player` counts the world's live players (PR 110 03bfb59).
+      if (this.full) return this.json(422, { error: { type: 'invalid_request', code: 'world_full', message: 'This world is full: it can have at most 50 players.' } });
       p.seats.push(ch);
       this.played.add(ch);
       return this.json(201, { kind: 'player', key: `ow_r_${'t'.repeat(30)}`, world: { id: WORLD, name: 'BM walk copy', description: '' }, character: { id: ch, name: this.names[ch] }, role: 'guest' });
@@ -137,7 +138,8 @@ describe('a link for the table', () => {
     await expect(join.redeemPlayer('ow_j_table', '', { character: WHITE })).rejects.toThrow(/no places left/);
     keel.passes.get('ow_j_table')!.seats = [];
     keel.full = true;
-    await expect(join.redeemPlayer('ow_j_table', '', { character: WHITE })).rejects.toThrow(/could not seat another player/);
-    await expect(join.redeemPlayer('ow_j_named', 'Briony', {})).rejects.toThrow(/could not seat another player/);
+    await expect(join.redeemPlayer('ow_j_table', '', { character: WHITE })).rejects.toThrow(/as many players as it can seat/);
+    await expect(join.redeemPlayer('ow_j_named', 'Briony', {})).rejects.toThrow(/as many players as it can seat/);
+    expect(keel.passes.get('ow_j_table')!.seats).toHaveLength(0);
   });
 });

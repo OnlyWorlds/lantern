@@ -101,8 +101,8 @@ export async function redeemPlayer(code: string, name?: string, table?: { charac
     if (e instanceof OwApiError && e.status === 422 && e.param === 'name') {
       throw new Error(opts.name ? 'That name is too long: keep it under 80 characters.' : 'Type your name: your Character takes it, and the game master sees it.');
     }
-    // A table's other refusal is the world's cap on players (keel PR 110), with no param of its own.
-    if (e instanceof OwApiError && e.status === 422) throw new Error(table ? 'This world could not seat another player. Ask the game master.' : 'That name is too long: keep it under 80 characters.');
+    // The world's cap on players (keel PR 110, 422 world_full), from a table or a link for one.
+    if (e instanceof OwApiError && e.isWorldFull) throw new Error('This world is full: it has as many players as it can seat. Ask the game master to make room.');
     // No answer: the request may have reached keel and spent the code, so say both.
     if (e instanceof OwNetworkError) throw new Error(LOST);
     throw said(e, 'Joining did not work. Try again.');
