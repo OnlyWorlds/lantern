@@ -42,7 +42,7 @@ async function walk(engine, tag) {
     };
   });
   const page = await ctx.newPage();
-  await page.route(/onlyworlds\.com/, (r) => r.abort());
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, (r) => r.abort());
   await page.goto(`${BASE}/#/worlds`);
   await page.waitForSelector('input[aria-label="A world file"]', { state: 'attached' });
   await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'keys.zip', mimeType: 'application/zip', buffer: zip });

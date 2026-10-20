@@ -50,7 +50,7 @@ async function walk(engine, deviceName, tag) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED/i.test(m.text()) && errors.push('console: ' + m.text()));
-  await page.route(/onlyworlds\.com/, (r) => r.abort());
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, (r) => r.abort());
 
   // One calendar: its words.
   await open(page, world(1, 'One calendar', [CAL]), 'one');

@@ -66,7 +66,7 @@ async function walk(engine, deviceName, tag) {
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push('console: ' + m.text()));
   const keel = { hasPin: false, keys: [{ id: 'k-1', last4: 'RRRR', scope: 'READ' }], deleted: [], writeMints: 0 };
   const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
-  await page.route(/onlyworlds\.com/, async (r) => {
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {
     const req = r.request();
     const path = new URL(req.url()).pathname.replace('/api/v2', '').replace(/\/+$/, '');
     if (path === `/account/worlds/${WID}/keys` && req.method() === 'POST') {

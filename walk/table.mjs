@@ -41,7 +41,7 @@ async function walk(engine, deviceName, tag) {
   const lists = { ow_j_table: [WHITE, LINCOLN, DONIPHAN], ow_j_named: [], ow_j_alltaken: [LINCOLN] };
   let stealNext = false;
   const redeems = [];
-  await page.route(/onlyworlds\.com/, async (r) => {
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {
     const req = r.request();
     const path = new URL(req.url()).pathname.replace('/api/v2', '').replace(/\/+$/, '');
     const h = req.headers();

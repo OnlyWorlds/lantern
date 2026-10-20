@@ -29,7 +29,7 @@ async function walk(engine, tag) {
   // keel cut off (offline mode would cut the local preview off too, with workers blocked); a read
   // the app makes is fine, a write would be a note leaving the phone.
   const sent = [];
-  await page.route(/onlyworlds\.com/, (r) => {
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, (r) => {
     if (r.request().method() !== 'GET') sent.push(`${r.request().method()} ${r.request().url()}`);
     return r.abort();
   });

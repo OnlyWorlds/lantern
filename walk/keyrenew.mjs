@@ -82,7 +82,7 @@ async function walk(engine, deviceName, tag) {
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled|status of 401/i.test(m.text()) && errors.push('console: ' + m.text()));
   const keel = { live: new Set(), mints: 0, pinAsked: 0 };
   const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
-  await page.route(/onlyworlds\.com/, async (r) => {
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {
     const req = r.request();
     const url = new URL(req.url());
     const path = url.pathname.replace('/api/v2', '').replace(/\/+$/, '');

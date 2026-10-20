@@ -23,7 +23,7 @@ async function walk(engine, tag) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   const sent = [];
-  await page.route(/onlyworlds\.com/, (r) => {
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, (r) => {
     sent.push(`${r.request().method()} ${r.request().url()}`);
     return r.abort();
   });

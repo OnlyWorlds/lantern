@@ -73,7 +73,7 @@ async function walk(engine, deviceName, tag) {
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push('console: ' + m.text()));
   const links = [];
   let fileHits = 0;
-  await page.route(/onlyworlds\.com/, async (r) => {
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {
     const req = r.request();
     const url = new URL(req.url());
     if (url.host === 'files.onlyworlds.com') {
