@@ -38,6 +38,7 @@ const zip = Buffer.from(
           x_oath: 'Never to cross the river after dark, whatever the fare, whoever asks.',
           x_blank: '',
           x_gone: null,
+          x_identity_key: '019a1f3c-2b4e-7d10-8c3a-6f2e9b0d4a71',
           atlas_aliases: ['The ferrywoman'],
           physicality: 'Broad hands, a boatman’s back.',
         }),
@@ -71,9 +72,14 @@ async function walk(engine, tag) {
   check(tag, (await page.locator('.section-label', { hasText: 'Your fields' }).count()) === 1, 'the custom fields sit under "Your fields"');
   check(
     tag,
-    JSON.stringify(got.map((r) => r[0])) === JSON.stringify(['x_height_cm', 'x_mood', 'x_oath', 'x_tags']),
-    `the four with a value, by label (${JSON.stringify(got)})`,
+    JSON.stringify(got.map((r) => r[0])) === JSON.stringify(['x_height_cm', 'x_identity_key', 'x_mood', 'x_oath', 'x_tags']),
+    `the five with a value, by label (${JSON.stringify(got)})`,
   );
+
+  // An identity key (Skeld h58 #8890) reads, and its row opens nothing: changing it would merge or split a being.
+  await page.locator('.frow[data-field=x_identity_key]').tap();
+  await page.waitForTimeout(400);
+  check(tag, (await page.locator('.sheet').count()) === 0, 'an identity key reads only: its row opens no sheet');
   check(tag, got.some((r) => r[1] === 'Height cm' && r[2] === '172') && got.some((r) => r[1] === 'Tags' && r[2] === 'harbour, night'), 'named without the prefix; a list reads as one line');
   const text = await page.locator('main').innerText();
   check(tag, !/ferrywoman/i.test(text.replace('A ferrywoman.', '')) && !/aliases|Gone/i.test(text), "Atlas's machinery (atlas_aliases) and a deleted field (null) never show");

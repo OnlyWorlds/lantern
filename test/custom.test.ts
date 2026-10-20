@@ -2,7 +2,7 @@
 // found and kept; Atlas's machinery (atlas_) never shown; a null is a deleted one.
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { customEditable, customFieldKey, customFieldProblem, customFields, fieldLabel, isCustomField } from '../src/schema';
+import { customEditable, customFieldKey, customFieldProblem, customFields, fieldLabel, isCustomField, isProfileField } from '../src/schema';
 import { search } from '../src/search';
 import { openWorldFile, toWorldFile } from '../src/worldfile';
 import * as db from '../src/db';
@@ -78,5 +78,14 @@ describe('custom fields', () => {
     const id = await openWorldFile(bytes);
     const back = (await db.allElements(id))[0] as unknown as Record<string, unknown>;
     expect([back.x_mood, back.x_height_cm, back.x_tags]).toEqual(['grim', 172, ['a', 'b']]);
+  });
+
+  it('an identity key (x_identity_key, Skeld h58 #8890) cannot be named, and is kept apart for read-only', () => {
+    const key = customFieldKey('Identity key');
+    expect(key).toBe('x_identity_key');
+    expect(customFieldProblem({ id: '1', type: 'character' }, key)).toMatch(/identity key/i);
+    expect(customFieldProblem({ id: '1', type: 'character' }, 'x_identity')).toBeNull();
+    expect(isProfileField('x_identity_key')).toBe(true);
+    expect(isProfileField('x_mood')).toBe(false);
   });
 });

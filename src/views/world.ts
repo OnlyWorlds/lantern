@@ -13,6 +13,7 @@ import {
   fieldInfo,
   fieldLabel,
   isEmptyValue,
+  isProfileField,
   typeColor,
   typeFields,
   typeLabel,
@@ -711,8 +712,9 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     const customEmpty: string[] = [];
     for (const field of customFields(el)) {
       const v = el[field];
+      const locked = isProfileField(field);
       if (isEmptyValue(v)) {
-        if (customEditable(v) && !stub) customEmpty.push(field);
+        if (customEditable(v) && !stub && !locked) customEmpty.push(field);
         continue;
       }
       const text = Array.isArray(v)
@@ -729,7 +731,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         h('span', { class: 'k' }, fieldLabel(field), wait(field)),
         h('span', { class: `v${typeof v === 'object' && !Array.isArray(v) ? ' muted' : ''}` }, text),
       );
-      customRows.push(customEditable(v) ? tapRow(field, row) : row);
+      customRows.push(customEditable(v) && !locked ? tapRow(field, row) : row);
     }
     // Before the empty rows are built: a description is an empty field too (the S398 gate).
     if (!desc && editable) empty.unshift('description');

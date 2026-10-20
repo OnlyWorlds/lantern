@@ -100,6 +100,16 @@ export function isCustomField(field: string): boolean {
   return CUSTOM_PREFIXES.some((p) => field.startsWith(p) && field.length > p.length);
 }
 
+// A published extension profile's key (schema-dist profiles/): other tools read it the same way.
+// x_identity_key says two elements are one being (Skeld h58 #8890), so a typed "Identity key" would
+// merge two beings and a removed one would split one (Kael #8886). Shown, never named, changed or
+// removed here, as Atlas does (constants.ts PROFILE_FIELD_PREFIXES).
+const PROFILE_PREFIXES = ['x_identity_'];
+
+export function isProfileField(field: string): boolean {
+  return PROFILE_PREFIXES.some((p) => field.startsWith(p));
+}
+
 /** The element's custom fields, by label; null is a deleted one (Atlas's tombstone), never shown. */
 export function customFields(el: Record<string, unknown>): string[] {
   return Object.keys(el)
@@ -134,6 +144,7 @@ export function customFieldKey(input: string): string {
 export function customFieldProblem(el: { type: string; [k: string]: unknown }, key: string): string | null {
   if (!key) return 'Give the field a name.';
   if (key.startsWith('atlas_')) return 'Names starting with atlas_ are kept for Atlas. Pick another.';
+  if (isProfileField(key)) return 'That name is kept for the identity key other tools read. Pick another.';
   const bare = key.replace(/^(x_|shadow_)/, '');
   if (BASE_FIELDS.includes(bare) || fieldInfo(el.type, bare)) return `${fieldLabel(bare)} is already a field of every ${typeLabel(el.type)}: use that one.`;
   if (el[key] !== undefined && el[key] !== null) return `${fieldLabel(key)} is already on this ${typeLabel(el.type)}.`;

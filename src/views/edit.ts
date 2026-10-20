@@ -3,7 +3,7 @@ import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
-import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, typeColor, typeLabel } from '../schema';
+import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, isProfileField, typeColor, typeLabel } from '../schema';
 import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { photoPicker } from './photo';
@@ -30,7 +30,7 @@ function actions(close: () => void, saveLabel = 'Save'): { row: HTMLElement; ok:
 export function editField(s: WorldSession, el: OwElement, field: string): void {
   // A custom field has no schema: its value says what it is (a number stays a number).
   const custom = isCustomField(field);
-  if (custom && !customEditable(el[field] ?? '')) return;
+  if (custom && (isProfileField(field) || !customEditable(el[field] ?? ''))) return;
   const info =
     field === 'name' || field === 'description' || field === 'supertype' || field === 'subtype' || (custom && typeof el[field] !== 'number')
       ? { type: 'text' as const }
@@ -127,6 +127,7 @@ export function addFieldSheet(s: WorldSession, el: OwElement): void {
   const byLabel = new Map<string, string>();
   for (const f of new Set(s.elements().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))) {
     if (el[f] !== undefined && el[f] !== null) continue;
+    if (isProfileField(f)) continue;
     const k = fieldLabel(f).toLowerCase();
     if (!byLabel.has(k) || f.startsWith('x_')) byLabel.set(k, f);
   }
