@@ -18,7 +18,7 @@ export function makeFromNoteSheet(s: WorldSession, note: OwElement): void {
     let kind = FIRST_KINDS[0];
     let showAll = false;
     const chips = h('div', { class: 'chips', role: 'radiogroup', 'aria-label': 'What is it?' });
-    const ok = h('button', { class: 'btn btn-primary', type: 'submit' });
+    const ok = h('button', { class: 'btn btn-standard', type: 'submit' });
     const err = h('p', { class: 'error', role: 'alert' });
     const render = () => {
       const rest = TYPES.filter((t) => !MAP_TYPES.has(t) && !FIRST_KINDS.includes(t));

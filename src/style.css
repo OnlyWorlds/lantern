@@ -156,11 +156,23 @@ h2 {
   opacity: 0.5;
 }
 
+/* OW Style's ladder (Studio style/RULES.md section 8, the Captain's "looks good", h63 #8314):
+   Entry .btn-primary, the fill, a screen's one main act (Sign in, Catch's Add to Unsorted, Start
+   the world, Join); Standard .btn-standard, the wash and edge, a sheet's or a banner's commit;
+   Quiet the plain .btn (a neutral edge) and .btn-quiet (bare text). A phone keeps its 48 high
+   for a finger, where the ladder's desktop shape is 36. */
 .btn-primary {
   background: var(--lan-accent);
   border-color: var(--lan-accent);
   color: var(--lan-bg);
-  font-weight: 700;
+  font-weight: 600;
+}
+
+.btn-standard {
+  background: color-mix(in srgb, var(--lan-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--lan-accent) 60%, transparent);
+  color: var(--lan-accent);
+  font-weight: 500;
 }
 
 /* A main button held above the keyboard while its text box is typed in (`pinWhileTyping`, src/ui.ts). */
@@ -357,10 +369,12 @@ h2 {
   gap: 6px;
 }
 
+/* The ladder: a destructive action is Standard in the danger colour, never the fill. */
 .btn-delete-confirm {
-  background: #ff8a7a;
-  border-color: #ff8a7a;
-  color: #1a0d0b;
+  background: color-mix(in srgb, #ff8a7a 14%, transparent);
+  border-color: color-mix(in srgb, #ff8a7a 60%, transparent);
+  color: #ff8a7a;
+  font-weight: 500;
 }
 
 /* ---------- world list ---------- */

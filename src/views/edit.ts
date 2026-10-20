@@ -23,7 +23,7 @@ async function save(s: WorldSession, el: OwElement, values: Record<string, unkno
 function actions(close: () => void, saveLabel = 'Save'): { row: HTMLElement; ok: HTMLButtonElement } {
   const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');
   cancel.addEventListener('click', close);
-  const ok = h('button', { class: 'btn btn-primary', type: 'submit' }, saveLabel);
+  const ok = h('button', { class: 'btn btn-standard', type: 'submit' }, saveLabel);
   return { row: h('div', { class: 'row-gap' }, cancel, ok), ok };
 }
 
@@ -281,7 +281,7 @@ export function deleteSheet(s: WorldSession, el: OwElement): void {
     const err = h('p', { class: 'error', role: 'alert' });
     const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');
     cancel.addEventListener('click', close);
-    const ok = h('button', { class: 'btn btn-primary btn-delete-confirm', type: 'button', 'data-action': 'confirm-delete' }, 'Delete');
+    const ok = h('button', { class: 'btn btn-delete-confirm', type: 'button', 'data-action': 'confirm-delete' }, 'Delete');
     ok.addEventListener('click', async () => {
       ok.disabled = true;
       try {

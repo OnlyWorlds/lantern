@@ -43,7 +43,7 @@ export function giveToParty(s: WorldSession, thing: OwElement, draft?: Draft): v
     const err = h('p', { class: 'error', role: 'alert' });
     const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');
     cancel.addEventListener('click', close);
-    const ok = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Give it');
+    const ok = h('button', { class: 'btn btn-standard', type: 'submit' }, 'Give it');
     const form = h(
       'form',
       { class: 'stack' },

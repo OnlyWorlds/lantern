@@ -65,7 +65,7 @@ export const askPin = (s: WorldSession): boolean => s.needPin && !s.pinKnown() &
 
 function statusBanner(s: WorldSession): HTMLElement | null {
   if (behindReload) {
-    const b = h('button', { class: 'btn btn-primary', type: 'button' }, reloading ? 'Reloading' : 'Reload') as HTMLButtonElement;
+    const b = h('button', { class: 'btn btn-standard', type: 'button' }, reloading ? 'Reloading' : 'Reload') as HTMLButtonElement;
     const text = h('span', null, reloading ? 'Loading the new version.' : 'A new version of Lantern is ready. Changes wait until you reload.');
     const mark = (): void => {
       b.disabled = true;
@@ -83,7 +83,7 @@ function statusBanner(s: WorldSession): HTMLElement | null {
     return h('div', { class: 'banner', role: 'status' }, text, b);
   }
   if (askPin(s)) {
-    const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN');
+    const b = h('button', { class: 'btn btn-standard', type: 'button' }, 'Enter your PIN');
     b.addEventListener('click', () => pinSheet(s));
     return h('div', { class: 'banner', role: 'status' }, `Enter your PIN to send ${plural(s.waitingCount(), 'change')}.`, b);
   }
@@ -93,7 +93,7 @@ function statusBanner(s: WorldSession): HTMLElement | null {
   if (s.keyRefused && newKeyCures(s.keyRefusal) && !s.isLocal) {
     const box = h('div', { class: 'banner', role: 'status' }, keyRefusalText(s.keyRefusal));
     if (s.rec.role) {
-      const make = h('button', { class: 'btn btn-primary', type: 'button' }, 'Make a new key') as HTMLButtonElement;
+      const make = h('button', { class: 'btn btn-standard', type: 'button' }, 'Make a new key') as HTMLButtonElement;
       make.addEventListener('click', () => void makeKey(s, make));
       box.append(make);
     }
@@ -124,7 +124,7 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
       'aria-label': 'PIN',
     });
     const err = h('p', { class: 'error', role: 'alert' });
-    const btn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Send my changes');
+    const btn = h('button', { class: 'btn btn-standard', type: 'submit' }, 'Send my changes');
     const form = h('form', { class: 'stack' }, pin, err, btn);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -209,7 +209,7 @@ export function putKeySheet(s: WorldSession): void {
       'aria-label': 'The new key',
     }) as HTMLInputElement;
     const err = h('p', { class: 'error', role: 'alert' });
-    const btn = h('button', { class: 'btn btn-primary', type: 'button' }, 'Use this key') as HTMLButtonElement;
+    const btn = h('button', { class: 'btn btn-standard', type: 'button' }, 'Use this key') as HTMLButtonElement;
     btn.addEventListener('click', async () => {
       err.textContent = '';
       btn.disabled = true;
@@ -239,7 +239,7 @@ export function noPinSheet(s: WorldSession): void {
   document.querySelector('.toast')?.remove();
   sheet((close) => {
     const err = h('p', { class: 'error', role: 'alert' });
-    const btn = h('button', { class: 'btn btn-primary', type: 'button' }, 'I set my PIN: try again');
+    const btn = h('button', { class: 'btn btn-standard', type: 'button' }, 'I set my PIN: try again');
     btn.addEventListener('click', async () => {
       err.textContent = '';
       btn.disabled = true;

@@ -38,7 +38,7 @@ function changeNowSheet(s: WorldSession): void {
       h('p', { class: 'dim', style: 'margin:0' }, s.rec.timeUnit ? `In ${s.rec.timeUnit.toLowerCase()}s, as a whole number.` : 'A whole number.'),
       input,
       err,
-      h('div', { class: 'row-gap' }, cancel, h('button', { class: 'btn btn-primary', type: 'submit' }, 'Move now')),
+      h('div', { class: 'row-gap' }, cancel, h('button', { class: 'btn btn-standard', type: 'submit' }, 'Move now')),
     );
     form.addEventListener('submit', (e) => {
       e.preventDefault();

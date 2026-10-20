@@ -84,7 +84,7 @@ export function inviteSheet(worldId: string, worldName: string): void {
     const err = h('p', { class: 'error', role: 'alert' });
     const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');
     cancel.addEventListener('click', close);
-    const make = h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'make-invite' }, 'Make the link');
+    const make = h('button', { class: 'btn btn-standard', type: 'button', 'data-action': 'make-invite' }, 'Make the link');
     const body = h(
       'div',
       { class: 'stack' },
@@ -125,7 +125,7 @@ export function inviteSheet(worldId: string, worldName: string): void {
         });
         const buttons: HTMLElement[] = [];
         if (typeof navigator.share === 'function') {
-          const share = h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'share-invite' }, 'Send it');
+          const share = h('button', { class: 'btn btn-standard', type: 'button', 'data-action': 'share-invite' }, 'Send it');
           share.addEventListener('click', () => {
             navigator.share({ title: `An invite to ${worldName}`, text: made.line }).catch(() => undefined);
           });

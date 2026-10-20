@@ -45,7 +45,7 @@ function stepsSheet(): void {
       : ['Open the browser menu, or the install mark at the end of the address bar.', 'Choose Install, or Add to Home screen.'];
   sheet(
     (close) => {
-      const ok = h('button', { class: 'btn btn-primary', type: 'button' }, 'Got it');
+      const ok = h('button', { class: 'btn btn-standard', type: 'button' }, 'Got it');
       ok.addEventListener('click', close);
       return [
         h('h2', null, 'Add Lantern to your home screen'),

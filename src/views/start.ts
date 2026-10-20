@@ -339,7 +339,7 @@ function saveCopyButton(rec: db.WorldRecord): HTMLElement {
 }
 
 function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
-  const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Put it online');
+  const b = h('button', { class: 'btn btn-standard', type: 'button' }, 'Put it online');
   b.addEventListener('click', () => {
     if (!signedIn) {
       toast('Sign in first, then put it online.');
@@ -350,7 +350,7 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
       const pin = h('input', { class: 'input', type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: '4', 'aria-label': 'PIN' });
       const step = h('p', { class: 'muted small', role: 'status', style: 'margin:0' });
       const err = h('p', { class: 'error', role: 'alert' });
-      const go1 = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Put it online');
+      const go1 = h('button', { class: 'btn btn-standard', type: 'submit' }, 'Put it online');
       const form = h('form', { class: 'stack' }, h('label', { class: 'field-label' }, 'Your PIN', pin), step, err, go1);
       form.addEventListener('submit', async (e) => {
         e.preventDefault();

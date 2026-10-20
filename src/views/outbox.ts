@@ -52,7 +52,7 @@ function conflictCard(s: WorldSession, row: OutboxRow): HTMLElement {
       return h('div', { class: 'stack' }, h('b', null, fieldLabel(f)), yours, theirs);
     });
     const quiet = Object.keys(row.values).filter((f) => !moved.includes(f));
-    const send = h('button', { class: 'btn btn-primary', type: 'button' }, 'Use these');
+    const send = h('button', { class: 'btn btn-standard', type: 'button' }, 'Use these');
     send.addEventListener('click', () => void s.resolve(row, [...mine]));
     card.replaceChildren(
       // Named as it was before either change, so the title is neither side's new name.
@@ -68,7 +68,7 @@ function conflictCard(s: WorldSession, row: OutboxRow): HTMLElement {
 }
 
 function goneCard(s: WorldSession, row: OutboxRow): HTMLElement {
-  const keep = h('button', { class: 'btn btn-primary', type: 'button' }, 'Keep it as a new element');
+  const keep = h('button', { class: 'btn btn-standard', type: 'button' }, 'Keep it as a new element');
   keep.addEventListener('click', () => void s.keepAsNew(row));
   const drop = h('button', { class: 'btn', type: 'button' }, 'Drop my edit');
   drop.addEventListener('click', () => void s.drop(row));
@@ -105,7 +105,7 @@ export function outboxView(s: WorldSession): View {
     const gone = rows.filter((r) => r.state === 'gone');
     const refused = rows.filter((r) => r.state === 'refused');
     const waiting = rows.filter((r) => r.state === 'waiting' || r.state === 'sending');
-    const pinBtn = askPin(s) ? h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN') : null;
+    const pinBtn = askPin(s) ? h('button', { class: 'btn btn-standard', type: 'button' }, 'Enter your PIN') : null;
     pinBtn?.addEventListener('click', () => pinSheet(s));
     // Changes send by themselves the moment there is signal and a PIN; Send now is for the doubt
     // (the Captain's walk: "can we force send?").
