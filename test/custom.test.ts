@@ -23,6 +23,7 @@ describe('custom fields', () => {
     expect(fieldLabel('birth_date')).toBe('Birth date');
     expect(fieldLabel('image_url')).toBe('Image URL');           // the SDK's house rule (4.34)
     expect(fieldLabel('x_Eye_Colour')).toBe('Eye colour');
+    expect(fieldLabel('x_max_HP')).toBe('Max HP');               // a word in capitals kept (4.36)
   });
 
   it("a typed name is stored as Atlas stores it, and refused where Atlas refuses it", () => {

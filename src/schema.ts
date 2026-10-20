@@ -146,13 +146,12 @@ export function customEditable(v: unknown): boolean {
 }
 
 /**
- * "birth_date" to "Birth date", "image_url" to "Image URL", "x_eye_colour" to "Eye colour": the SDK's
- * one copy of the house rule (4.34, the Captain's sentence case), after Lantern's own two steps: the
- * custom prefix goes, and the stat block stays as written (STR, DEX).
+ * "birth_date" to "Birth date", "image_url" to "Image URL", "x_eye_colour" to "Eye colour", "x_STR" to
+ * "STR": the SDK's one copy of the house rule (4.34; a word in capitals kept as written since 4.36,
+ * Kael h63 #8201), after Lantern's own step: the custom prefix goes.
  */
 export function fieldLabel(field: string): string {
   const bare = CUSTOM_PREFIXES.reduce((f, p) => (isCustomField(f) && f.startsWith(p) ? f.slice(p.length) : f), field);
-  if (bare === bare.toUpperCase()) return bare;
   return houseFieldLabel(bare.replace(/^_+|_+$/g, '')) || bare;
 }
 
