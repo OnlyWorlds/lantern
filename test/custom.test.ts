@@ -21,6 +21,8 @@ describe('custom fields', () => {
     expect(fieldLabel('shadow_true_name')).toBe('True name');
     expect(fieldLabel('x_STR')).toBe('STR');
     expect(fieldLabel('birth_date')).toBe('Birth date');
+    expect(fieldLabel('image_url')).toBe('Image URL');           // the SDK's house rule (4.34)
+    expect(fieldLabel('x_Eye_Colour')).toBe('Eye colour');
   });
 
   it("a typed name is stored as Atlas stores it, and refused where Atlas refuses it", () => {

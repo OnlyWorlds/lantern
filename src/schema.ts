@@ -6,6 +6,7 @@ import {
   ELEMENT_TYPES,
   FIELD_SCHEMA,
   elementColor,
+  fieldLabel as houseFieldLabel,
   getElementLabel,
   type ElementType,
   type FieldInfo,
@@ -144,12 +145,15 @@ export function customEditable(v: unknown): boolean {
   return typeof v === 'string' || typeof v === 'number';
 }
 
-/** "birth_date" to "Birth date", "x_eye_colour" to "Eye colour"; the stat block stays as written (STR, DEX). */
+/**
+ * "birth_date" to "Birth date", "image_url" to "Image URL", "x_eye_colour" to "Eye colour": the SDK's
+ * one copy of the house rule (4.34, the Captain's sentence case), after Lantern's own two steps: the
+ * custom prefix goes, and the stat block stays as written (STR, DEX).
+ */
 export function fieldLabel(field: string): string {
   const bare = CUSTOM_PREFIXES.reduce((f, p) => (isCustomField(f) && f.startsWith(p) ? f.slice(p.length) : f), field);
   if (bare === bare.toUpperCase()) return bare;
-  const s = bare.replace(/_/g, ' ').trim() || bare;
-  return s[0].toUpperCase() + s.slice(1);
+  return houseFieldLabel(bare.replace(/^_+|_+$/g, '')) || bare;
 }
 
 export function isEmptyValue(v: unknown): boolean {

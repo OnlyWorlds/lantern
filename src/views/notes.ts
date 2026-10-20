@@ -114,7 +114,7 @@ function shareNote(s: WorldSession, n: Note, refresh: () => void): void {
   if (!s.rec.characterId || !circles.length) {
     sheet(
       (close) => {
-        const ok = h('button', { class: 'btn btn-primary', type: 'button' }, 'OK');
+        const ok = h('button', { class: 'btn btn-primary', type: 'button' }, 'Got it');
         ok.addEventListener('click', close);
         return [
           h('h2', null, 'Share with the party'),

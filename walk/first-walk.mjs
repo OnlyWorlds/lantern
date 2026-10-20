@@ -267,7 +267,7 @@ async function walk(engine, tag) {
   await page.locator('.sheet button[type=submit]').tap();
   const mark = page.locator('.wait-pin');
   await mark.waitFor({ timeout: 10000 });
-  check(tag, (await mark.innerText()) === 'needs your PIN', 'the waiting change says it needs the PIN');
+  check(tag, (await mark.innerText()) === 'Needs your PIN', 'the waiting change says it needs the PIN');
   await shot('needs-pin');
   await mark.tap();
   await page.waitForSelector('.sheet h2');
@@ -278,7 +278,7 @@ async function walk(engine, tag) {
   await page.waitForSelector('[data-screen="outbox"]');
   check(
     tag,
-    (await page.getByRole('button', { name: 'Enter your PIN to send' }).count()) === 1 && (await page.locator('[data-action=send-now]').count()) === 0,
+    (await page.getByRole('button', { name: 'Enter your PIN', exact: true }).count()) === 1 && (await page.locator('[data-action=send-now]').count()) === 0,
     'Waiting to send asks for the PIN, and offers no Send now that could not send',
   );
 

@@ -194,7 +194,7 @@ const stages = {
   async 'owner-pin'() {
     const { ctx, page } = await phone('owner');
     await page.goto(`${SITE}/#/w/${state.worldId}`);
-    const enter = page.locator('.banner').getByRole('button', { name: 'Enter PIN' });
+    const enter = page.locator('.banner').getByRole('button', { name: 'Enter your PIN' });
     await enter.waitFor({ timeout: 20000 });
     await extra(page, 'pin-1-banner');
     await enter.tap();

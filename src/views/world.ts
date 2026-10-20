@@ -83,7 +83,7 @@ function statusBanner(s: WorldSession): HTMLElement | null {
     return h('div', { class: 'banner', role: 'status' }, text, b);
   }
   if (askPin(s)) {
-    const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter PIN');
+    const b = h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN');
     b.addEventListener('click', () => pinSheet(s));
     return h('div', { class: 'banner', role: 'status' }, `Enter your PIN to send ${plural(s.waitingCount(), 'change')}.`, b);
   }
@@ -591,7 +591,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       // Waiting on the PIN: the mark says so and asks for it (the Captain's walk: a picture sat
       // "waiting to send" with nothing saying why).
       if (row.state === 'waiting' && askPin(s)) {
-        const b = h('button', { class: 'wait wait-pin', type: 'button' }, 'needs your PIN');
+        const b = h('button', { class: 'wait wait-pin', type: 'button' }, 'Needs your PIN');
         b.addEventListener('click', (e) => {
           e.stopPropagation();
           pinSheet(s);

@@ -105,7 +105,7 @@ export function outboxView(s: WorldSession): View {
     const gone = rows.filter((r) => r.state === 'gone');
     const refused = rows.filter((r) => r.state === 'refused');
     const waiting = rows.filter((r) => r.state === 'waiting' || r.state === 'sending');
-    const pinBtn = askPin(s) ? h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN to send') : null;
+    const pinBtn = askPin(s) ? h('button', { class: 'btn btn-primary', type: 'button' }, 'Enter your PIN') : null;
     pinBtn?.addEventListener('click', () => pinSheet(s));
     // Changes send by themselves the moment there is signal and a PIN; Send now is for the doubt
     // (the Captain's walk: "can we force send?").

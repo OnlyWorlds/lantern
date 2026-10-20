@@ -113,7 +113,7 @@ async function walk(engine, deviceName, tag) {
   const banner = page.locator('.banner', { hasText: 'no longer knows this world\'s key' });
   await banner.waitFor({ timeout: 15000 });
   check(tag, /deleted there, or you were removed from it/.test(await banner.innerText()), 'the home names the cause keel gave');
-  check(tag, (await page.getByRole('button', { name: 'Enter PIN' }).count()) === 0, 'no PIN is asked for a dead key');
+  check(tag, (await page.getByRole('button', { name: /^Enter (your )?PIN/ }).count()) === 0, 'no PIN is asked for a dead key');
   check(tag, (await banner.getByRole('button', { name: 'Make a new key' }).count()) === 1 && (await banner.getByRole('button', { name: 'Put in a new key' }).count()) === 1, 'both ways to a new key are offered');
   await page.screenshot({ path: `${OUT}/keyrenew-${tag}-01-home.png` });
 
