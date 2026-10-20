@@ -1,7 +1,7 @@
 // Join a world with an invite link: paste it (or share it to Lantern), see the invite, join.
 import { h } from '../dom';
 import { accountToken } from '../account';
-import { acceptJoin, isPlayerLink, joinCode, pendingJoin, previewJoin, redeemPlayer, roleWords, setPendingJoin, type JoinPreview } from '../join';
+import { acceptJoin, isPlayerLink, isTable, joinCode, pendingJoin, PickRefused, previewJoin, redeemPlayer, roleWords, setPendingJoin, tablePicks, type JoinPreview, type TablePick } from '../join';
 import { errorText, go, topbar } from '../ui';
 
 function whenText(iso: string): string {
@@ -28,7 +28,7 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
   const card = h('div', { class: 'stack' });
   const form = h('form', { class: 'stack' }, input, err, look);
 
-  const showInvite = (code: string, p: JoinPreview) => {
+  const showInvite = (code: string, p: JoinPreview, said = '') => {
     // The invite is on screen: joining is the action now, looking again the quiet one.
     look.classList.remove('btn-primary');
     const who = p.invited_by || p.owner_character || 'Someone';
@@ -38,7 +38,7 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
       return;
     }
     if (isPlayerLink(p)) {
-      showPlayer(code, p, who, until);
+      showPlayer(code, p, who, until, said);
       return;
     }
     const join = h('button', { class: 'btn btn-primary', type: 'button' }, token ? `Join ${p.world.name}` : 'Sign in to join');
@@ -80,39 +80,101 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
 
   // A player link (Keel #353): no account and no PIN, a name if they like, then the world opens
   // to read as the Character the game master gave them.
-  const showPlayer = (code: string, p: JoinPreview, who: string, until: string) => {
+  // A table (keel #422 PR 2, Seethe's frame 5): one link for several players, each picking who they
+  // are from the owner's list; a table with no list asks each player's name for a fresh Character.
+  const showPlayer = (code: string, p: JoinPreview, who: string, until: string, said = '') => {
+    const table = isTable(p);
+    const askName = table && !!p.name_required;
     const name = h('input', {
       class: 'input',
       type: 'text',
       maxlength: '80',
       autocomplete: 'nickname',
       'aria-label': 'Your name',
-      placeholder: 'Your name (optional)',
+      placeholder: askName ? 'Your name' : 'Your name (optional)',
     }) as HTMLInputElement;
-    const open = h('button', { class: 'btn btn-primary', type: 'button' }, `Open ${p.world.name}`) as HTMLButtonElement;
+    const open = h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'open-player' }, `Open ${p.world.name}`) as HTMLButtonElement;
     const openErr = h('p', { class: 'error', role: 'alert' });
+    // A refused pick's sentence sits above the list it sends the player back to.
+    const pickErr = h('p', { class: 'error', role: 'alert', 'data-role': 'pick-refused', style: 'margin:0' }, said);
+    const picks = table && !askName ? tablePicks(p) : [];
+    const free = picks.filter((c) => !c.taken);
+    let picked: TablePick | null = null;
+    const choose = (c: TablePick) => {
+      picked = c;
+      for (const b of list.querySelectorAll<HTMLButtonElement>('[data-pick]')) b.setAttribute('aria-pressed', String(b.dataset.pick === c.id));
+      open.textContent = `Open ${p.world.name} as ${c.name}`;
+      open.disabled = false;
+    };
+    const list = h('div', { class: 'stack', role: 'group', 'aria-label': 'Who are you at this table?' });
+    for (const c of picks) {
+      const b = h(
+        'button',
+        { class: 'choice pick', type: 'button', 'data-pick': c.id, 'aria-pressed': 'false', ...(c.taken ? { disabled: '' } : {}) },
+        h('b', null, c.name),
+        c.taken ? h('span', null, 'taken') : '',
+      ) as HTMLButtonElement;
+      if (!c.taken) b.addEventListener('click', () => choose(c));
+      list.append(b);
+    }
+    if (table && !askName) {
+      open.disabled = true;
+      open.textContent = 'Pick who you are';
+    }
     open.addEventListener('click', async () => {
       openErr.textContent = '';
+      if (askName && !name.value.trim()) {
+        openErr.textContent = 'Type your name: your Character takes it, and the game master sees it.';
+        name.focus();
+        return;
+      }
       open.disabled = true;
       try {
-        const r = await redeemPlayer(code, name.value);
+        const r = await redeemPlayer(code, name.value, table ? { character: picked?.id } : undefined);
         go(`#/w/${r.worldId}`, true);
       } catch (e) {
+        if (e instanceof PickRefused) {
+          // Taken a moment ago, or off the list now: look again, so the list on screen is keel's.
+          const text = e.message;
+          try {
+            showInvite(code, await previewJoin(code), text);
+          } catch (ex) {
+            openErr.textContent = errorText(ex);
+          }
+          return;
+        }
         openErr.textContent = errorText(e);
         open.disabled = false;
       }
     });
+    const left = p.uses_left ?? 0;
+    const times = table
+      ? `The link works ${p.max_uses} times${until ? `, until ${until}` : ''}. ${left === 1 ? 'One place is left.' : `${left} places are left.`}`
+      : until
+        ? `The link works once, until ${until}.`
+        : '';
+    const body: (Node | string)[] = [];
+    if (table && !askName && free.length === 0) {
+      body.push(h('p', { class: 'banner' }, 'Every Character on this link is taken. Ask the game master.'));
+    } else {
+      if (table && !askName) {
+        body.push(h('h2', { class: 'field-label', style: 'margin:0' }, 'Who are you at this table?'), ...(said ? [pickErr] : []), list, h('p', { class: 'muted small', style: 'margin:0' }, 'Only these names: the game master chose them.'));
+      }
+      body.push(
+        h('label', { class: 'field-label' }, askName ? 'Your name: your Character takes it, and the game master sees it' : 'Your name, as the game master sees it', name),
+        open,
+      );
+    }
     card.replaceChildren(
       h(
         'div',
         { class: 'invite' },
         h('p', { style: 'margin:0' }, `${who} invites you to play in `, h('b', null, p.world.name), '.'),
         p.world.description ? h('p', { class: 'dim small', style: 'margin:0' }, p.world.description) : '',
-        h('p', { class: 'dim small', style: 'margin:0' }, 'You read the world as your Character, with no account. Notes you keep stay on this phone.'),
-        until ? h('p', { class: 'muted small', style: 'margin:0' }, `The link works once, until ${until}.`) : '',
+        h('p', { class: 'dim small', style: 'margin:0' }, askName ? 'You get a Character of your own and read the world as it, with no account. Notes you keep stay on this phone.' : 'You read the world as your Character, with no account. Notes you keep stay on this phone.'),
+        times ? h('p', { class: 'muted small', style: 'margin:0' }, times) : '',
       ),
-      h('label', { class: 'field-label' }, 'Your name, as the game master sees it', name),
-      open,
+      ...body,
       openErr,
     );
   };

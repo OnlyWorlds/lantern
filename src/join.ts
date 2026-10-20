@@ -57,23 +57,52 @@ export function isPlayerLink(p: JoinPreview): boolean {
   return (p.reader as string) === 'player';
 }
 
+/**
+ * A table (keel #422 PR 2): a player link that seats several players, each picking a Character
+ * from the owner's list. Its preview carries `max_uses`; a link for one has none of the four keys.
+ */
+export function isTable(p: JoinPreview): boolean {
+  return typeof p.max_uses === 'number';
+}
+
+export type TablePick = { id: string; name: string; taken: boolean };
+
+/** The owner's list in the owner's order, taken ones last (keel's note on the preview). */
+export function tablePicks(p: JoinPreview): TablePick[] {
+  const all = (p.characters ?? []).map((c) => ({ id: c.id, name: c.name || 'A Character', taken: !!c.taken }));
+  return [...all.filter((c) => !c.taken), ...all.filter((c) => c.taken)];
+}
+
+/** A pick keel refused (taken since the preview, or no longer on the list): look again and pick anew. */
+export class PickRefused extends Error {}
+
 const LOST = 'The answer did not reach this phone. Try once more; if the link says it was used, ask for a new one: each link works once.';
 
 /**
  * Redeem a player link with no account (Keel #353): POST /join answers 201 with a read key shown
  * once (`kind: player`). The code is spent by keel's answer, so the key is kept before anything
- * else runs. SDK 4.30's keyless client sends no credential (Kael, h29 #6169).
+ * else runs. SDK 4.30's keyless client sends no credential (Kael, h29 #6169). On a table the
+ * player's pick goes as `character` (keel #422 PR 2); a refusal spends nothing.
  */
-export async function redeemPlayer(code: string, name?: string): Promise<{ worldId: string }> {
+export async function redeemPlayer(code: string, name?: string, table?: { character?: string }): Promise<{ worldId: string }> {
   let a;
+  const opts: { name?: string; character?: string } = {};
+  if (name?.trim()) opts.name = name.trim();
+  if (table?.character) opts.character = table.character;
   try {
-    a = await new OwV2Client({ baseUrl: API_BASE }).redeemJoin(code, name?.trim() ? { name: name.trim() } : {});
+    a = await new OwV2Client({ baseUrl: API_BASE }).redeemJoin(code, opts);
   } catch (e) {
     if (e instanceof OwApiError && e.isNotFound) {
       if ((await pendingJoin()) === code) await setPendingJoin(undefined);
-      throw new Error(DEAD);
+      throw new Error(table ? 'This link has no places left, or it was taken back. Ask the game master for a new one.' : DEAD);
     }
-    if (e instanceof OwApiError && e.status === 422) throw new Error('That name is too long: keep it under 80 characters.');
+    if (e instanceof OwApiError && e.isCharacterTaken) throw new PickRefused('Someone took that Character a moment ago. Pick another.');
+    if (e instanceof OwApiError && e.isCharacterInvalid) throw new PickRefused('That Character can no longer be picked. Pick another.');
+    if (e instanceof OwApiError && e.status === 422 && e.param === 'name') {
+      throw new Error(opts.name ? 'That name is too long: keep it under 80 characters.' : 'Type your name: your Character takes it, and the game master sees it.');
+    }
+    // A table's other refusal is the world's cap on players (keel PR 110), with no param of its own.
+    if (e instanceof OwApiError && e.status === 422) throw new Error(table ? 'This world could not seat another player. Ask the game master.' : 'That name is too long: keep it under 80 characters.');
     // No answer: the request may have reached keel and spent the code, so say both.
     if (e instanceof OwNetworkError) throw new Error(LOST);
     throw said(e, 'Joining did not work. Try again.');
