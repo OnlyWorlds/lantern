@@ -31,6 +31,7 @@ import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { agentLine } from '../agentmark';
+import { knownOfLine } from '../knownof';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
@@ -582,7 +583,10 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       return;
     }
     const pending = s.pending(id);
-    const editable = s.canWrite;
+    // keel's "known of" stub (src/knownof.ts): its other fields are unknown, not empty, so no rows
+    // show and nothing on the page changes it.
+    const stub = s.isStub(id);
+    const editable = s.canWrite && !stub;
     // An element not yet made on keel is said once, at its name; per-field marks are for edits (S397).
     const create = pending.get('*');
     const wait = (f: string) => {
@@ -682,7 +686,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     for (const { field, info } of typeFields(el.type)) {
       const v = el[field];
       if (isEmptyValue(v)) {
-        empty.push(field);
+        // A stub's unset field is unknown, not empty: never offered behind the toggle.
+        if (!stub) empty.push(field);
         continue;
       }
       // A single link takes the multi link's layout: label, its marks and the pencil on one line, the chip under it (the Captain's walk, #3660).
@@ -707,7 +712,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     for (const field of customFields(el)) {
       const v = el[field];
       if (isEmptyValue(v)) {
-        if (customEditable(v)) customEmpty.push(field);
+        if (customEditable(v) && !stub) customEmpty.push(field);
         continue;
       }
       const text = Array.isArray(v)
@@ -800,6 +805,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       actionRow(s, el, wait('image_url')),
       picture(el),
       descNode ?? '',
+      stub ? h('p', { class: 'muted', 'data-part': 'known-of' }, knownOfLine(elName(el))) : '',
       ...(customRows.length
         ? [
             schemaRows.length ? h('div', { class: 'fields' }, ...schemaRows) : '',
@@ -864,6 +870,8 @@ export function mapHref(worldId: string, p: Place): string {
  */
 function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | null): HTMLElement | '' {
   const places = placesOf(s, el);
+  // A stub is never changed from here; keeping it for tonight is this phone's own list.
+  const canWrite = s.canWrite && !s.isStub(el.id);
   const label = (p: Place) =>
     el.type === 'map' ? 'Open the map' : places.length > 1 ? `On ${elName(s.get(p.map))}` : 'Show on map';
   const acts: (HTMLElement | null)[] = places.map((p) => h('a', { class: 'btn btn-pill', href: mapHref(s.id, p) }, icon('map', 16), label(p)));
@@ -880,7 +888,7 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     s.touch();
   });
   // An Unsorted note made into an element by hand (src/views/makeit.ts): no AI, works in any world you can write.
-  if (s.canWrite && isUnsortedNote(el)) {
+  if (canWrite && isUnsortedNote(el)) {
     const b = h('button', { class: 'btn btn-pill', type: 'button', 'data-action': 'make-from-note' }, icon('spark', 16), 'Make it an element');
     b.addEventListener('click', () => makeFromNoteSheet(s, el));
     acts.unshift(b);
@@ -902,14 +910,14 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     });
     acts.push(b);
   }
-  if (s.canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
+  if (canWrite && !s.isLocal && s.rec.memberRole !== 'guest' && canGive(el.type)) {
     const b = h('button', { class: 'btn btn-pill', type: 'button' }, icon('reveal', 16), 'Give it to the party');
     b.addEventListener('click', () => giveToParty(s, el));
     acts.push(b);
   }
   // A picture any time after the element is made (the Captain's walk). A map's picture is its
   // map, set where the map is drawn (Atlas), not here.
-  if (s.canWrite && !MAP_TYPES.has(el.type)) {
+  if (canWrite && !MAP_TYPES.has(el.type)) {
     const has = typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url);
     const b = h('button', { class: 'btn btn-pill', type: 'button', 'data-action': 'picture' }, icon('image', 16), has ? 'Change the picture' : 'Add a picture');
     b.addEventListener('click', () => pictureSheet(s, el, has));

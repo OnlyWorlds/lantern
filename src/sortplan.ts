@@ -2,7 +2,7 @@
 // person ticked turned into writes. The rows' shape is Simmer's contract (h37 #3571,
 // Fold/magelet/work/2026-10-12-lantern-row-shape-reply.md); the route is Skeld's (h37 #3591,
 // POST /account/sort). Nothing here writes: the screen hands the plan to the outbox.
-import { lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
+import { isKnownOf, lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
 import { BASE_FIELDS, fieldInfo, isType } from './schema';
 
 /** One element the notes may be about, as the route takes it. */
@@ -173,7 +173,8 @@ export function buildSlice(
     for (const line of lines.length ? lines : [noteText(n)]) {
       for (const hit of lookupWorld(index, line, { limit: 12 })) {
         const el = hit.element;
-        if (noteIds.has(el.id) || NOT_IN_SLICE.has(el.type)) continue;
+        // A stub (keel's known of) is never written, so no row may be planned onto it (the S444 gate, G3).
+        if (noteIds.has(el.id) || NOT_IN_SLICE.has(el.type) || isKnownOf(el)) continue;
         if (el.type === 'narrative' && (el.supertype === 'Unsorted' || el.supertype === SORTED)) continue;
         // An element with no name, or one past keel's limit, cannot be named in a row: left out.
         const len = [...sliceName(el)].length;

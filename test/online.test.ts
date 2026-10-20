@@ -19,6 +19,8 @@ const { putOnline, PinNeeded } = await import('../src/online');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
 
+let madeWorlds = 0;
+
 class FakeAccountKeel {
   accountPin: string | null = null;
   worlds = new Map<string, { name: string; key: string; els: Map<string, El> }>();
@@ -60,7 +62,8 @@ class FakeAccountKeel {
       if (this.accountPin && body.pin) return this.err(422, 'invalid', 'pin');
       if (!this.accountPin && !body.pin) return this.err(422, 'required', 'pin');
       if (body.pin) this.accountPin = body.pin;
-      const id = `0w${this.worlds.size}000000-0000-4000-8000-000000000000`;
+      // Unique across the file's tests: the phone's store outlives each test's fake.
+      const id = `0w${++madeWorlds}000000-0000-4000-8000-000000000000`;
       const key = `ow_w_${'k'.repeat(30)}${this.worlds.size}`;
       this.worlds.set(id, { name: body.name, key, els: new Map() });
       return this.json(201, { id, name: body.name, role: 'owner', key });
@@ -85,8 +88,11 @@ class FakeAccountKeel {
         if (this.idem.get(k) !== init.body) return this.err(409, 'idempotency_error');
         return this.json(200, { errors: false, items: body.items.map(() => ({ status: 201 })) });
       }
-      const slots = body.items.map((it: { element: { id: string } }) =>
-        this.otherWorldIds.has(it.element.id) ? { status: 409, error: { code: 'id_conflict', message: 'id' } } : { status: 201, id: it.element.id },
+      // keel refuses a stub's flag as an unknown field (422, param known_of; probed live S443).
+      const slots = body.items.map((it: { element: { id: string; known_of?: unknown } }) =>
+        'known_of' in it.element
+          ? { status: 422, error: { code: 'invalid_request', message: 'Unknown field: known_of' } }
+          : this.otherWorldIds.has(it.element.id) ? { status: 409, error: { code: 'id_conflict', message: 'id' } } : { status: 201, id: it.element.id },
       );
       const errors = slots.some((x: { status: number }) => x.status >= 400);
       if (!(errors && body.atomic)) {
@@ -153,6 +159,17 @@ describe('put it online', () => {
     expect(keel.worlds.size).toBe(1);
     expect(keel.uploads).toBe(1);
     expect(keel.worlds.get(id)!.els.size).toBe(2);
+  });
+
+  it("a world holding a stub (a player's view, from a world file) does not go online: nothing made, nothing sent, the copy stays (the S444 gate, G1)", async () => {
+    keel.accountPin = '4321';
+    const stub = { id: 'e1000000-0000-7000-8000-000000000003', type: 'character', name: 'Ana', description: 'Sells mules.', known_of: true };
+    const kid = { id: 'e1000000-0000-7000-8000-000000000004', type: 'character', name: 'The Kid', friends: [stub.id] };
+    const local = await localWorld([kid, stub]);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/player's view of a world online \(1 known of in it\)/);
+    expect(keel.worlds.size).toBe(0);
+    expect(keel.bulks).toBe(0);
+    expect((await db.allElements(local)).length).toBe(2);
   });
 
   it('ids that live in another world: nothing is sent and the phone copy stays', async () => {

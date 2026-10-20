@@ -22,6 +22,7 @@ import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
+import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -110,7 +111,8 @@ export class WorldSession {
 
   /** A row leaves the outbox with the server's answer, which lands only if it is the newer copy. */
   private async settle(row: OutboxRow, answer: OwElement): Promise<void> {
-    const el = { ...answer, type: answer.type || row.type };
+    // Every copy keel hands back is the wire too: a stub is kept as a stub here as on the walk (the S444 gate, G2).
+    const el = fromWire({ ...answer, type: answer.type || row.type });
     const take = this.isNewer(el);
     await db.settleOutboxRow(this.id, row.seq!, take ? el : null);
     this.outbox = this.outbox.filter((r) => r !== row);
@@ -210,7 +212,8 @@ export class WorldSession {
    * A refusal (an element keel does not hold yet) or no signal stays quiet: no list.
    */
   files(type: string, id: string, now: number = Date.now()): OwFileRow[] | null {
-    if (this.isLocal || !this.rec.apiKey) return null;
+    // A stub's files are keel's 404: not asked.
+    if (this.isLocal || !this.rec.apiKey || this.isStub(id)) return null;
     let slot = this.fileSlots.get(id);
     if (!slot) {
       slot = { rows: null, readAt: 0, asking: false };
@@ -369,6 +372,11 @@ export class WorldSession {
 
   get(id: string): OwElement | undefined {
     return this.view.get(id);
+  }
+
+  /** keel's "known of" stub (src/knownof.ts): shown, never changed, deleted or sent from here. */
+  isStub(id: string): boolean {
+    return isKnownOf(this.truth.get(id)) || isKnownOf(this.view.get(id));
   }
 
   elements(): OwElement[] {
@@ -621,7 +629,10 @@ export class WorldSession {
           break;
         }
         const ch = r.value;
-        if (ch.op === 'upsert') puts.push({ ...ch.element, type: ch.type, id: ch.id });
+        // A stub (keel's known of) is kept as a stub, trimmed here where the wire becomes the copy.
+        // Its stamp does not move with its shape, so a cursor walk never brings the change: keel
+        // says it with a view reset, whose walk from zero replaces the copy (below).
+        if (ch.op === 'upsert') puts.push(fromWire({ ...ch.element, type: ch.type, id: ch.id }));
         else dels.push(ch.id);
         seen++;
         changed = true;
@@ -688,6 +699,8 @@ export class WorldSession {
    */
   async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement, photo?: Blob): Promise<void> {
     if (!this.canWrite) throw new Error('This world is read-only here.');
+    // A stub's empties are not its values (a world file can bring one into a world you can write).
+    if (this.isStub(id)) throw new Error(KNOWN_OF_REFUSAL);
     if (this.isLocal) {
       const cur = this.truth.get(id) ?? ({ id, type: values.type as string, name: '' } as OwElement);
       const next = { ...cur, ...values, updated_at: new Date().toISOString() } as OwElement;
@@ -789,6 +802,7 @@ export class WorldSession {
     if (!this.canWrite) throw new Error('This world is read-only here.');
     const el = this.view.get(id);
     if (!el) return;
+    if (this.isStub(id)) throw new Error(KNOWN_OF_REFUSAL);
     if (this.isLocal) {
       const gone = new Set([id]);
       const now = new Date().toISOString();
@@ -912,6 +926,14 @@ export class WorldSession {
       row.tried = true;
       await db.putOutboxRow(this.id, row);
     }
+    // A change queued while the element was whole, which keel has since narrowed to a stub (a view
+    // reset): never sent onto it (the S444 gate, G5). A create's own element is never a stub.
+    if (row.op !== 'create' && this.isStub(row.id)) {
+      row.state = 'refused';
+      row.error = KNOWN_OF_REFUSAL;
+      await db.putOutboxRow(this.id, row);
+      return false;
+    }
     row.state = 'sending';
     this.emit();
     try {
@@ -978,7 +1000,7 @@ export class WorldSession {
       await db.putOutboxRow(this.id, row);
     };
     if (e instanceof OwPreconditionFailedError) {
-      const current = e.current as OwElement | null;
+      const current = e.current ? fromWire({ ...(e.current as OwElement), type: (e.current as OwElement).type || row.type }) : null;
       if (!current) {
         await keep('gone', 'Deleted elsewhere');
         return false;
@@ -1012,7 +1034,7 @@ export class WorldSession {
         // The create reached the server before (its answer was lost). Edits merged into the row
         // since then are not on the server: send them as a patch on the server's copy.
         try {
-          const server = { ...(await c.get(row.type, row.id)), type: row.type } as OwElement;
+          const server = fromWire({ ...(await c.get(row.type, row.id)), type: row.type } as OwElement);
           const differs = Object.keys(row.values).filter((f) => !sameValue(row.values[f], server[f]));
           if (!differs.length) {
             await this.settle(row, server);
@@ -1082,6 +1104,12 @@ export class WorldSession {
         return false;
       }
       await keep('refused', e.isNotAuthor ? 'You can change only what you made in this world' : e.message);
+      return false;
+    }
+    // The SDK refuses a body carrying a stub's flag before sending (4.40): a refusal, never "no
+    // network", or the row would wait for signal forever.
+    if (e instanceof TypeError && /known_of/.test(e.message)) {
+      await keep('refused', KNOWN_OF_REFUSAL);
       return false;
     }
     // No network (or a fetch that never answered): wait for the browser to say online.

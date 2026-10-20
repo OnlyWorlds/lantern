@@ -6,6 +6,7 @@ import { readWorldFile, SPATIAL_TYPES, writeWorldFile, type OwElement, type OwWo
 import * as db from './db';
 import { isType } from './schema';
 import { clockFrom } from './time';
+import { fromWire } from './knownof';
 
 const SPATIAL = new Set<string>(SPATIAL_TYPES);
 /** Where a type's files live in a world folder. */
@@ -107,7 +108,8 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
       // A world folder's files carry no type: the folder names it.
       const home = folderOf(m[2]) === m[1];
       if (byId.get(body.id)?.home && !home) continue;
-      byId.set(body.id, { el: { ...body, type: m[2] } as OwElement, home });
+      // A stub from a file is trimmed as one from keel is (another tool may keep more on it; the S444 gate, G4).
+      byId.set(body.id, { el: fromWire({ ...body, type: m[2] } as OwElement), home });
     } catch {
       /* a file that is not JSON is skipped, as Atlas skips it */
     }

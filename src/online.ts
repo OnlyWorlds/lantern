@@ -9,6 +9,7 @@ import { API_BASE, openWorld, forgetSession } from './world';
 import { setPin } from './pin';
 import { uuid7 } from './uuid7';
 import { moveDraft } from './draft';
+import { isKnownOf } from './knownof';
 
 export const BULK_MAX = 1000;
 const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by'];
@@ -38,7 +39,14 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   if (!token) throw new Error('Sign in first.');
   let rec = await db.getWorldRecord(localId);
   if (!rec || rec.kind !== 'local') throw new Error('This world is not a world on this phone.');
+  // A stub (keel's known of) is never sent (the folder spec §4.4 rule 3), and the whole elements
+  // beside it link to it, so a world holding one (a player's view, saved as a file) does not go
+  // online at all: nothing is made, nothing sent, the phone copy stays (the S444 gate, G1).
   const elements = await db.allElements(localId);
+  const stubs = elements.filter((el) => isKnownOf(el)).length;
+  if (stubs) {
+    throw new Error(`This world is a player's view of a world online (${stubs} known of in it), so it cannot go online itself.`);
+  }
   if (elements.length > BULK_MAX) {
     throw new Error(`This world has ${elements.length} elements; Lantern sends up to ${BULK_MAX} at once. Save a copy and open it in Atlas.`);
   }

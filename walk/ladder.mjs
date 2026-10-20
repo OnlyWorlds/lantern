@@ -70,6 +70,11 @@ async function walk(engine, deviceName, tag, theme) {
   }
   await page.waitForTimeout(600);
   const del = page.locator('button', { hasText: /^Delete this/ });
+  // A frame of the state before the delete, kept when the step fails (S444: a red here, 3 in 9).
+  await del.first().waitFor({ timeout: 15000 }).catch(async () => {
+    await page.screenshot({ path: `${OUT}/ladder-${tag.replace(' ', '-')}-no-delete.png`, fullPage: true });
+    console.log(`[${tag}] at the delete step: ${page.url().replace(/^.*#/, '#')}`);
+  });
   await del.first().scrollIntoViewIfNeeded();
   await del.first().tap();
   const confirm = page.locator('[data-action="confirm-delete"]');
