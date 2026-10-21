@@ -87,5 +87,9 @@ describe('custom fields', () => {
     expect(customFieldProblem({ id: '1', type: 'character' }, 'x_identity')).toBeNull();
     expect(isProfileField('x_identity_key')).toBe(true);
     expect(isProfileField('x_mood')).toBe(false);
+    // A work packet's keys (dist.36's packet profile, h66 #9663) are kept the same way.
+    expect(customFieldProblem({ id: '1', type: 'relation' }, customFieldKey('Packet elements'))).toMatch(/work packet/i);
+    expect(isProfileField('x_packet_source')).toBe(true);
+    expect(isProfileField('x_packets')).toBe(false);
   });
 });
