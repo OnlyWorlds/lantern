@@ -91,5 +91,8 @@ describe('custom fields', () => {
     expect(customFieldProblem({ id: '1', type: 'relation' }, customFieldKey('Packet elements'))).toMatch(/work packet/i);
     expect(isProfileField('x_packet_source')).toBe(true);
     expect(isProfileField('x_packets')).toBe(false);
+    // And a review mark's (dist.37's review profile, h58 #9726).
+    expect(customFieldProblem({ id: '1', type: 'character' }, customFieldKey('Review checked'))).toMatch(/review mark/i);
+    expect(isProfileField('x_review_proposed')).toBe(true);
   });
 });
