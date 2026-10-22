@@ -4,7 +4,7 @@
 
 ## CURRENT STATE
 
-Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; public and indexable since 2026-10-18, 4ba97a5, h56 #6860) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `8ec7e46` (S446, Boss h56 #8980: SDK 4.42.2, read live h56 #8986). Earlier live builds: `docs/PROGRESS-history.md`, Folded 2026-10-21.
+Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; public and indexable since 2026-10-18, 4ba97a5, h56 #6860) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `ab959fd` (S451, Boss h56 #9937, production 28d1fccc: SDK 4.51.0, the world file on Folder Format §4.7, flown with Atlas 1.71.0 and read live hand to hand with it, `tools/atlas/Notes/ui-snapshots/2026-10-22-s451/files-live.log`; the previous production 6fae1e88 refuses the new files). Before it `a4be6d8` (S450, x_review_), `4af1b90`, `8ec7e46`. Earlier live builds: `docs/PROGRESS-history.md`, Folded 2026-10-21.
 
 | Piece | State | Where |
 |---|---|---|
