@@ -168,6 +168,11 @@ async function walk(engine, tag) {
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
   const said = await page.locator('.sheet .error').innerText();
   check(tag, /already a field of every Character/.test(said), `a name the type already has is refused (${JSON.stringify(said)})`);
+  // A shared profile's name is kept: the review mark (dist.37, a4be6d8) the newest of the three.
+  await page.locator('.sheet input[aria-label="Field name"]').fill('Review checked');
+  await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
+  const kept = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
+  check(tag, /review mark/.test(kept), `a review mark's name is refused (${JSON.stringify(kept)})`);
   await page.locator('.sheet input[aria-label="Field name"]').fill('Eye colour');
   await page.locator('.sheet textarea[aria-label="Value"]').fill('grey');
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
