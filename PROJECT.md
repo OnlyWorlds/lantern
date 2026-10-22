@@ -1,10 +1,10 @@
 # Lantern: the project page
 
-**Drafted**: 2026-10-21 16:10 (Temper, S448) · shape: Atlas's charter (`Forge/tools/atlas/PROJECT.md`) · for the Captain to sign
+**Drafted**: 2026-10-21 16:10 (Temper, S448) · shape: Atlas's charter (`Forge/tools/atlas/PROJECT.md`) · signed by the Captain 2026-10-22 (h56 B2, #10087)
 
 ---
 
-## Charter (draft, unsigned)
+## Charter (signed)
 
 *Signed by the Captain; changed only by him.*
 
