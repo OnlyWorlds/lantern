@@ -13,7 +13,9 @@ Object.assign(globalThis, {
 
 const { isRoomElement, roomShown, setRoomShown, ROOM_SUPERTYPES } = await import('../src/room');
 
-const el = (type: string, supertype?: unknown): OwElement => ({ id: 'x', type, supertype }) as unknown as OwElement;
+const MARK = '0199c3a1-7b2e-7c3d-8e4f-5a6b7c8d9e0f';
+const el = (type: string, supertype?: unknown, mark: unknown = MARK): OwElement =>
+  ({ id: 'x', type, supertype, x_room_of: mark }) as unknown as OwElement;
 
 describe('the room', () => {
   it("is the sheet's type and supertype pairs, in any case, trimmed", () => {
@@ -21,6 +23,14 @@ describe('the room', () => {
     expect(isRoomElement(el('narrative', 'Message'))).toBe(true);
     expect(isRoomElement(el('relation', ' Work item '))).toBe(true);
     expect(isRoomElement(el('event', 'SITTING'))).toBe(true);
+  });
+
+  it("is the pair AND the parlor's mark: a lore world's own letter stays lore (dist.45)", () => {
+    expect(isRoomElement(el('narrative', 'Message'))).toBe(true);
+    expect(isRoomElement({ id: 'x', type: 'narrative', supertype: 'Message' } as unknown as OwElement)).toBe(false);
+    expect(isRoomElement(el('narrative', 'Message', ''))).toBe(false);
+    expect(isRoomElement(el('event', 'Sitting', null))).toBe(false);
+    expect(isRoomElement(el('location', 'Harbour'))).toBe(false);
   });
 
   it('is a pair, never a supertype alone', () => {
@@ -47,11 +57,11 @@ describe('the room', () => {
   });
 });
 
-// schema-dist's room profile (v0.33.0-dist.44, profiles/room.fixture.json, copied whole): the
+// schema-dist's room profile (v0.33.0-dist.45, profiles/room.fixture.json, copied whole): the
 // conformance cases every reader of the room answers, until the SDK's export replaces this copy.
 import fixture from './fixtures/room.fixture.json';
 
-describe("the room profile's cases (dist.44)", () => {
+describe("the room profile's cases (dist.45)", () => {
   it('holds the profile pairs, no more, no less', () => {
     const want = fixture.pairs.map((p) => `${p.type}/${p.supertype.toLowerCase()}`).sort();
     expect(ROOM_SUPERTYPES.map(([t, w]) => `${t}/${w}`).sort()).toEqual(want);

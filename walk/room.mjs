@@ -33,11 +33,13 @@ const zip = Buffer.from(
       file('character', { id: id(2), name: 'Bo', description: 'Her bosun.' }),
       file('narrative', { id: id(3), name: 'The drowning', supertype: 'Story', characters: [ada] }),
       file('law', { id: id(4), name: 'House rules', supertype: 'Charter', description: 'Be kind in the room.' }),
-      // The parlor's room, inside the same world (the sheet §1).
-      file('narrative', { id: id(5), name: 'Shall we rename Bo?', supertype: 'Message' }),
-      file('relation', { id: id(6), name: "Fix Ada's age", supertype: 'Work item', characters: [ada] }),
-      file('relation', { id: id(7), name: 'Vote of Bo', supertype: 'Vote' }),
-      file('event', { id: id(8), name: 'Sitting one', supertype: 'Sitting', start_date: 5 }),
+      // A lore letter: a Message with no parlor's mark is the world's own and stays in view (dist.45).
+      file('narrative', { id: id(9), name: 'A letter from Bo', supertype: 'Message', description: 'Written at sea.' }),
+      // The parlor's room, inside the same world (the sheet §1), each with the parlor's mark.
+      file('narrative', { id: id(5), name: 'Shall we rename Bo?', supertype: 'Message', x_room_of: wid }),
+      file('relation', { id: id(6), name: "Fix Ada's age", supertype: 'Work item', characters: [ada], x_room_of: wid }),
+      file('relation', { id: id(7), name: 'Vote of Bo', supertype: 'Vote', x_room_of: wid }),
+      file('event', { id: id(8), name: 'Sitting one', supertype: 'Sitting', start_date: 5, x_room_of: wid }),
     ],
     'room-walk',
   ),
@@ -80,11 +82,13 @@ async function walk(engine, tag) {
 
   // Hidden, as it opens.
   let t = await tiles();
-  check(tag, t.Characters === '2' && t.Narratives === '1' && t.Laws === '1' && !t.Relations && !t.Events, `the tiles read the lore: ${JSON.stringify(t)}`);
+  check(tag, t.Characters === '2' && t.Narratives === '2' && t.Laws === '1' && !t.Relations && !t.Events, `the tiles read the lore: ${JSON.stringify(t)}`);
   check(tag, (await card.count()) === 1 && (await card.innerText()).includes("The parlor's room · 4"), `the home says the room holds 4 (${(await card.count()) ? await card.innerText() : 'no card'})`);
   check(tag, (await beforeNow.count()) === 0, 'Before now is not offered for the sitting alone');
   let hits = await search('rename');
   check(tag, hits.length === 0, `search leaves the message out (${JSON.stringify(hits)})`);
+  hits = await search('letter');
+  check(tag, hits.some((x) => x.includes('A letter from Bo')), `a lore letter (a Message with no mark) is found (${JSON.stringify(hits)})`);
   hits = await search('Ada');
   check(tag, hits.some((x) => x.includes('Ada')) && !hits.some((x) => x.includes('age')), `search for Ada finds her, not the work item (${JSON.stringify(hits)})`);
   check(tag, !(await adaPage()).includes("Fix Ada's age"), "Ada's page does not list the work item about her");
@@ -94,7 +98,7 @@ async function walk(engine, tag) {
   await card.tap();
   await page.waitForTimeout(400);
   t = await tiles();
-  check(tag, t.Narratives === '2' && t.Relations === '2' && t.Events === '1', `shown, the tiles count the room: ${JSON.stringify(t)}`);
+  check(tag, t.Narratives === '3' && t.Relations === '2' && t.Events === '1', `shown, the tiles count the room: ${JSON.stringify(t)}`);
   check(tag, (await card.getAttribute('aria-pressed')) === 'true' && (await card.innerText()).includes('Tap to keep them out'), 'the card says the room is shown');
   check(tag, (await beforeNow.count()) === 1, 'Before now is offered for the sitting');
   hits = await search('rename');
@@ -109,7 +113,7 @@ async function walk(engine, tag) {
   await card.tap();
   await page.waitForTimeout(400);
   t = await tiles();
-  check(tag, !t.Relations && t.Narratives === '1', `a second tap hides it again: ${JSON.stringify(t)}`);
+  check(tag, !t.Relations && t.Narratives === '2', `a second tap hides it again: ${JSON.stringify(t)}`);
 
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ')})`);
   await browser.close();

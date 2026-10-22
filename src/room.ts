@@ -5,9 +5,11 @@
 // one choice on the world's home shows them again. Atlas's twin: `core/parlor-room.ts` (1.70.0), the
 // same pairs; both copies give way to the SDK's export of schema-dist's room profile (dist.44) once it ships.
 //
-// A pair, never a supertype alone: a Location called Board is a place. The charter (a Law, supertype
-// Charter) stays in: it is the world's own rule, not a line said in the room. A supertype matches in any
-// case, trimmed. Per phone and per world, like Tonight; it never travels and never changes the world.
+// The pair AND the mark (dist.45): a room element carries `x_room_of`, the id of the world or the sitting
+// its room belongs to, written by the parlor on everything it makes. Without the mark a Narrative with
+// supertype Message is lore (a novel's letters, the Manifest's Wire) and stays in view. A pair, never a
+// supertype alone: a Location called Board is a place. The charter (a Law, supertype Charter) stays in:
+// it is the world's own rule, not a line said in the room. Type and supertype match in any case, trimmed. Per phone and per world, like Tonight; it never travels and never changes the world.
 import type { OwElement } from '@onlyworlds/sdk';
 
 export const ROOM_SUPERTYPES: ReadonlyArray<readonly [string, string]> = [
@@ -23,8 +25,10 @@ export const ROOM_SUPERTYPES: ReadonlyArray<readonly [string, string]> = [
 
 export function isRoomElement(el: OwElement): boolean {
   const sup = el.supertype;
+  const mark = (el as Record<string, unknown>).x_room_of;
   if (typeof sup !== 'string' || typeof el.type !== 'string') return false;
-  // Both sides trimmed and case-blind, as schema-dist's room profile rules (dist.44).
+  if (typeof mark !== 'string' || !mark.trim()) return false;
+  // Both sides trimmed and case-blind, as schema-dist's room profile rules (dist.45).
   const s = sup.trim().toLowerCase();
   const t = el.type.trim().toLowerCase();
   return ROOM_SUPERTYPES.some(([type, word]) => t === type && s === word);
