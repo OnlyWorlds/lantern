@@ -46,3 +46,19 @@ describe('the room', () => {
     expect(roomShown('w1')).toBe(false);
   });
 });
+
+// schema-dist's room profile (v0.33.0-dist.44, profiles/room.fixture.json, copied whole): the
+// conformance cases every reader of the room answers, until the SDK's export replaces this copy.
+import fixture from './fixtures/room.fixture.json';
+
+describe("the room profile's cases (dist.44)", () => {
+  it('holds the profile pairs, no more, no less', () => {
+    const want = fixture.pairs.map((p) => `${p.type}/${p.supertype.toLowerCase()}`).sort();
+    expect(ROOM_SUPERTYPES.map(([t, w]) => `${t}/${w}`).sort()).toEqual(want);
+  });
+  for (const c of fixture.cases) {
+    it(`${c.name}: ${c.in_room ? 'in the room' : 'lore'}`, () => {
+      expect(isRoomElement(c.element as unknown as OwElement)).toBe(c.in_room);
+    });
+  }
+});

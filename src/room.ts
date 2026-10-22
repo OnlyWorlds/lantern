@@ -3,7 +3,7 @@
 // the world itself, each a type with its own supertype. A worldbuilder's lists read the world without
 // them (the Captain, the sheet's note 2026-10-22: someone's lore must not read as polluted by meta), and
 // one choice on the world's home shows them again. Atlas's twin: `core/parlor-room.ts` (1.70.0), the
-// same pairs.
+// same pairs; both copies give way to the SDK's export of schema-dist's room profile (dist.44) once it ships.
 //
 // A pair, never a supertype alone: a Location called Board is a place. The charter (a Law, supertype
 // Charter) stays in: it is the world's own rule, not a line said in the room. A supertype matches in any
@@ -23,9 +23,11 @@ export const ROOM_SUPERTYPES: ReadonlyArray<readonly [string, string]> = [
 
 export function isRoomElement(el: OwElement): boolean {
   const sup = el.supertype;
-  if (typeof sup !== 'string') return false;
+  if (typeof sup !== 'string' || typeof el.type !== 'string') return false;
+  // Both sides trimmed and case-blind, as schema-dist's room profile rules (dist.44).
   const s = sup.trim().toLowerCase();
-  return ROOM_SUPERTYPES.some(([type, word]) => el.type === type && s === word);
+  const t = el.type.trim().toLowerCase();
+  return ROOM_SUPERTYPES.some(([type, word]) => t === type && s === word);
 }
 
 const key = (worldId: string) => `lantern-room-shown-${worldId}`;

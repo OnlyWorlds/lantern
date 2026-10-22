@@ -864,7 +864,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
  */
 function playerHome(s: WorldSession): (Node | string)[] {
   // Pins and markers are map furniture, mostly unnamed: not what a player reads.
-  const els = s.elements().filter((e) => e.type !== 'pin' && e.type !== 'marker');
+  // The lore (src/room.ts): a parlor's room stays out of a player's list as out of the builder's.
+  const els = s.lore().filter((e) => e.type !== 'pin' && e.type !== 'marker');
   const stamp = (e: { updated_at?: string; created_at?: string }) => e.updated_at ?? e.created_at ?? '';
   const newest = [...els].sort((a, b) => stamp(b).localeCompare(stamp(a))).slice(0, 3);
   const all = [...els].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));

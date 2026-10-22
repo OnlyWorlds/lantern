@@ -1,0 +1,37 @@
+{
+  "profile": "room",
+  "profile_page": "profiles/room.md",
+  "notes": [
+    "pairs: the eight type-and-supertype pairs a reader matches, each trimmed and compared without regard to case.",
+    "cases: element gives type and supertype as a body might carry them; in_room is what isRoomElement must answer."
+  ],
+  "pairs": [
+    {"type": "narrative", "supertype": "Message"},
+    {"type": "narrative", "supertype": "Board"},
+    {"type": "relation", "supertype": "Work item"},
+    {"type": "construct", "supertype": "Spec"},
+    {"type": "relation", "supertype": "Heart"},
+    {"type": "relation", "supertype": "Vote"},
+    {"type": "event", "supertype": "Sitting"},
+    {"type": "character", "supertype": "Member"}
+  ],
+  "cases": [
+    {"name": "message", "element": {"type": "narrative", "supertype": "Message"}, "in_room": true},
+    {"name": "board", "element": {"type": "narrative", "supertype": "Board"}, "in_room": true},
+    {"name": "work-item", "element": {"type": "relation", "supertype": "Work item"}, "in_room": true},
+    {"name": "spec", "element": {"type": "construct", "supertype": "Spec"}, "in_room": true},
+    {"name": "heart", "element": {"type": "relation", "supertype": "Heart"}, "in_room": true},
+    {"name": "vote", "element": {"type": "relation", "supertype": "Vote"}, "in_room": true},
+    {"name": "sitting", "element": {"type": "event", "supertype": "Sitting"}, "in_room": true},
+    {"name": "member", "element": {"type": "character", "supertype": "Member"}, "in_room": true},
+    {"name": "case-blind", "element": {"type": "Narrative", "supertype": "message"}, "in_room": true},
+    {"name": "trimmed", "element": {"type": "relation", "supertype": " Work item "}, "in_room": true},
+    {"name": "charter-stays-lore", "element": {"type": "law", "supertype": "Charter"}, "in_room": false},
+    {"name": "wrong-type-same-word", "element": {"type": "character", "supertype": "Message"}, "in_room": false},
+    {"name": "resembles-not-whole-word", "element": {"type": "narrative", "supertype": "Messages"}, "in_room": false},
+    {"name": "prefix-not-whole-word", "element": {"type": "relation", "supertype": "Work"}, "in_room": false},
+    {"name": "no-supertype", "element": {"type": "narrative", "supertype": null}, "in_room": false},
+    {"name": "empty-supertype", "element": {"type": "event", "supertype": ""}, "in_room": false},
+    {"name": "lore-narrative", "element": {"type": "narrative", "supertype": "Legend"}, "in_room": false}
+  ]
+}
