@@ -94,5 +94,9 @@ describe('custom fields', () => {
     // And a review mark's (dist.37's review profile, h58 #9726).
     expect(customFieldProblem({ id: '1', type: 'character' }, customFieldKey('Review checked'))).toMatch(/review mark/i);
     expect(isProfileField('x_review_proposed')).toBe(true);
+    // And a work world's checks (dist.47's checks profile, Kael h20 #10532).
+    expect(customFieldProblem({ id: '1', type: 'law' }, customFieldKey('Checks rules'))).toMatch(/checks/i);
+    expect(isProfileField('x_checks_rules')).toBe(true);
+    expect(isProfileField('x_checks')).toBe(false);
   });
 });

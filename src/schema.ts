@@ -107,8 +107,9 @@ export function isCustomField(field: string): boolean {
 // x_packet_ (schema-dist profiles/packet.md, dist.36; Skeld h66 #9663) is a work packet's list of
 // elements and where it came from; x_review_ (profiles/review.md, dist.37; Skeld h58 #9726) a new
 // element's proposed mark and its last check; x_room_ (profiles/room.md, dist.45) the parlor's mark on
-// what its room makes: the same rule, as Atlas reserves them.
-const PROFILE_PREFIXES = ['x_identity_', 'x_packet_', 'x_review_', 'x_room_'];
+// what its room makes; x_checks_ (profiles/checks.md, dist.47) a work world's rules on its Charter:
+// the same rule, as Atlas reserves them.
+const PROFILE_PREFIXES = ['x_identity_', 'x_packet_', 'x_review_', 'x_room_', 'x_checks_'];
 
 export function isProfileField(field: string): boolean {
   return PROFILE_PREFIXES.some((p) => field.startsWith(p));
@@ -148,7 +149,7 @@ export function customFieldKey(input: string): string {
 export function customFieldProblem(el: { type: string; [k: string]: unknown }, key: string): string | null {
   if (!key) return 'Give the field a name.';
   if (key.startsWith('atlas_')) return 'Names starting with atlas_ are kept for Atlas. Pick another.';
-  if (isProfileField(key)) return "That name is kept for a field other tools read (an identity key, a work packet, a review mark or the parlor's mark). Pick another.";
+  if (isProfileField(key)) return "That name is kept for a field other tools read (an identity key, a work packet, a review mark, the parlor's mark or a world's checks). Pick another.";
   const bare = key.replace(/^(x_|shadow_)/, '');
   if (BASE_FIELDS.includes(bare) || fieldInfo(el.type, bare)) return `${fieldLabel(bare)} is already a field of every ${typeLabel(el.type)}: use that one.`;
   if (el[key] !== undefined && el[key] !== null) return `${fieldLabel(key)} is already on this ${typeLabel(el.type)}.`;
