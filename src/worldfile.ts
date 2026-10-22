@@ -57,6 +57,7 @@ export function toWorldFile(rec: db.WorldRecord, elements: OwElement[]): { bytes
   // The folder spec's names for the clock (Atlas reads both spellings of now).
   if (rec.timeNow !== undefined) world.time_current = rec.timeNow;
   if (rec.timeUnit) world.time_basic_unit = rec.timeUnit;
+  if (rec.names !== undefined) world.x_names = rec.names;
   const files: OwWorldFileEntry[] = [{ path: 'world.json', data: enc.encode(JSON.stringify(world, null, 2) + '\n') }];
   const used = new Map<string, Set<string>>();
   for (const el of [...elements].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -121,6 +122,7 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
     description: typeof read.world.description === 'string' ? read.world.description : undefined,
     timeNow: clockFrom(read.world as Record<string, unknown>).now,
     timeUnit: clockFrom(read.world as Record<string, unknown>).unit,
+    names: (read.world as Record<string, unknown>).x_names,
     kind: 'local',
     count: elements.length,
     addedAt: new Date().toISOString(),

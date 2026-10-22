@@ -1,8 +1,9 @@
 // Before now: a world's Events in the order they happened, the world's now between what has
 // happened and what has not (src/time.ts holds the rules). Read only: dates change on an Event's page.
+import { typeCount } from '../schema';
 import { worldCalendars, type WorldCalendar } from '@onlyworlds/sdk';
 import { chosenCalendar } from '../calendarpick';
-import { h, plural } from '../dom';
+import { h } from '../dom';
 import { dateText, ongoing, spanText, timeline } from '../time';
 import { elRow, errorText, sheet, tabbar, toast, topbar } from '../ui';
 import type { WorldSession } from '../world';
@@ -109,7 +110,7 @@ export function beforeNowView(s: WorldSession): View {
       }
       if (t.undated.length) {
         parts.push(
-          h('p', { class: 'section-label' }, `No date · ${plural(t.undated.length, 'Event')}`),
+          h('p', { class: 'section-label' }, `No date · ${typeCount(t.undated.length, 'event', { start: true })}`),
           h('div', { class: 'results', 'data-part': 'undated' }, ...t.undated.map((e) => elRow(s.id, e))),
         );
       }

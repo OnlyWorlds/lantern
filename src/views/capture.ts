@@ -10,7 +10,7 @@ import type { View } from './world';
 import { consumeShared } from '../share';
 import { readDraft, writeDraft } from '../draft';
 import { MAP_TYPES } from '../maps';
-import { TYPES, typeColor, typeLabel } from '../schema';
+import { TYPES, typeColor, typeLabel, typeName } from '../schema';
 import { photoPicker } from './photo';
 import { elementFromNote, titleFrom } from '../note';
 
@@ -128,7 +128,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       kind === UNSORTED
         ? 'The first line names the note. Sort it into elements later.'
         : 'The first line is its name, the rest its description.';
-    saveBtn.textContent = kind === UNSORTED ? 'Add to Unsorted' : `Make the ${typeLabel(kind).toLowerCase()}`;
+    saveBtn.textContent = kind === UNSORTED ? 'Add to Unsorted' : `Make the ${typeName(kind)}`;
   };
   renderKinds();
 
@@ -165,7 +165,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       }
       const id = await s.create(type, values, photo ?? undefined);
       writeDraft(s.id, '');
-      const where = kind === UNSORTED ? 'Added to Unsorted.' : `Made the ${typeLabel(kind).toLowerCase()}.`;
+      const where = kind === UNSORTED ? 'Added to Unsorted.' : `Made the ${typeName(kind)}.`;
       // A note's own line under the button says where it went, so its toast would only cover the
       // button; the offline sentence still matters for either.
       if (!s.isLocal && !navigator.onLine) toast('Kept on this phone. It sends when you have signal.');

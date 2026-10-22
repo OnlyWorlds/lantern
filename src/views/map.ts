@@ -7,7 +7,7 @@ import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { CLUSTER_ABOVE, mapPicture, maxZoomFor, pinsToLabel, placeLabels, zoneAt, zoneColor, zonePoints, zoneShape, type Place } from '../maps';
-import { typeColor, typeLabel } from '../schema';
+import { typeColor, typeName } from '../schema';
 import { elName, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { notFound, type View } from './world';
@@ -177,7 +177,7 @@ export function mapView(s: WorldSession, place: Place): View {
     const t = pinType(s, pin);
     card.replaceChildren(
       typeChip(t),
-      h('span', { class: 'label' }, h('b', null, pinName(s, pin)), ' ', h('span', { class: 'muted' }, `· ${typeLabel(t).toLowerCase()}`)),
+      h('span', { class: 'label' }, h('b', null, pinName(s, pin)), ' ', h('span', { class: 'muted' }, `· ${typeName(t)}`)),
       h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/e/${target.id}` }, 'Open'),
     );
     card.hidden = false;

@@ -10,7 +10,9 @@ import {
   getElementLabel,
   type ElementType,
   type FieldInfo,
+  typeWord,
 } from '@onlyworlds/sdk';
+import { plural } from './dom';
 
 export const TYPES: ElementType[] = ELEMENT_TYPES;
 export const BASE_FIELDS = ['name', 'description', 'supertype', 'subtype', 'image_url'];
@@ -72,14 +74,59 @@ export function typeFields(type: string): FieldRow[] {
   return rows;
 }
 
-/** "Characters" */
-export function typePlural(type: string): string {
-  return isType(type) ? getElementLabel(type) : type;
+// A world's own words for the types (the names profile, schema-dist dist.48 `profiles/names.md`):
+// the open world's record carries keel's `x_names` (`names`), and the SDK's typeWord reads it.
+// A world's word is printed as written, never re-cased; the standard's words keep Lantern's casing
+// (capitalised as a label, lower case mid-sentence). Words only: routes and the wire keep the slug.
+let openWorldWords: () => { names?: unknown } | null | undefined = () => null;
+
+/** main.ts hands over how to find the open world's record, once. */
+export function setTypeWordsSource(fn: () => { names?: unknown } | null | undefined): void {
+  openWorldWords = fn;
 }
 
-/** "Character" */
-export function typeLabel(type: string): string {
-  return type ? type[0].toUpperCase() + type.slice(1) : '';
+export interface TypeNameOptions {
+  /** A plural: a list's heading, a count. */
+  many?: boolean;
+  /** Capitalised, as a label or a line's start (the standard's word only). */
+  start?: boolean;
+  /** The element's supertype, for a finer word inside one type. */
+  supertype?: unknown;
+  /** A world's `x_names` value to use instead of the open world's (tests, a world file). */
+  names?: unknown;
+}
+
+/** The open world's word for a type, or the standard's: "Character", "characters", "Employee". */
+export function typeName(type: string, opts: TypeNameOptions = {}): string {
+  const names = 'names' in opts ? opts.names : openWorldWords()?.names;
+  const many = opts.many === true;
+  const own = names === undefined || names === null
+    ? null
+    : typeWord({ x_names: names }, type, { supertype: typeof opts.supertype === 'string' ? opts.supertype : null, many });
+  if (own !== null) return own;
+  const label = many ? (isType(type) ? getElementLabel(type) : type) : (type ? type[0].toUpperCase() + type.slice(1) : '');
+  return opts.start ? label : label.toLowerCase();
+}
+
+/** "Characters" */
+export function typePlural(type: string): string {
+  return typeName(type, { many: true, start: true });
+}
+
+/** "Character" (a supertype's finer word when the world has one) */
+export function typeLabel(type: string, supertype?: unknown): string {
+  return typeName(type, { start: true, supertype });
+}
+
+/** "a character", "an event", "an Employee": the article from the word printed. */
+export function aTypeName(type: string, opts: Omit<TypeNameOptions, 'many' | 'start'> = {}): string {
+  const word = typeName(type, opts);
+  return `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+}
+
+/** A count: "2 characters", "1 Employee" (the plural from the word, never a bare "s"). */
+export function typeCount(n: number, type: string, opts: Omit<TypeNameOptions, 'many'> = {}): string {
+  return plural(n, typeName(type, opts), typeName(type, { ...opts, many: true }));
 }
 
 /** "Ch": the two letters on a type chip, beside the type's name in words. */

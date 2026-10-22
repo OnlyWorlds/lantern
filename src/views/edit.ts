@@ -3,7 +3,7 @@ import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
-import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, isProfileField, typeColor, typeLabel } from '../schema';
+import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, isProfileField, typeColor, typeName, aTypeName } from '../schema';
 import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { photoPicker } from './photo';
@@ -169,8 +169,8 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
     const input = h('input', {
       class: 'input',
       type: 'search',
-      placeholder: `Find a ${typeLabel(target).toLowerCase()}`,
-      'aria-label': `Find a ${typeLabel(target).toLowerCase()}`,
+      placeholder: `Find ${aTypeName(target)}`,
+      'aria-label': `Find ${aTypeName(target)}`,
       autocomplete: 'off',
     });
     const results = h('div', { class: 'picker-results' });
@@ -214,7 +214,7 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
           return b;
         }),
       );
-      if (!els.length) results.appendChild(h('p', { class: 'muted small' }, q ? 'Nothing by that name.' : `No ${typeLabel(target).toLowerCase()} to link yet.`));
+      if (!els.length) results.appendChild(h('p', { class: 'muted small' }, q ? 'Nothing by that name.' : `No ${typeName(target)} to link yet.`));
     };
     input.addEventListener('input', renderResults);
     renderCurrent();
@@ -325,6 +325,6 @@ export function newElementSheet(s: WorldSession, type: string): void {
         err.textContent = errorText(ex);
       }
     });
-    return [h('h2', null, `A new ${typeLabel(type).toLowerCase()}`), form];
-  }, `A new ${typeLabel(type).toLowerCase()}`);
+    return [h('h2', null, `A new ${typeName(type)}`), form];
+  }, `A new ${typeName(type)}`);
 }

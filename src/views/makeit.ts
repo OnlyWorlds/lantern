@@ -8,7 +8,7 @@ import { icon, typeIcon } from '../icons';
 import { MAP_TYPES } from '../maps';
 import { valuesFromNote } from '../note';
 import { SORTED } from '../sortplan';
-import { TYPES, typeColor, typeLabel } from '../schema';
+import { TYPES, typeColor, typeLabel, typeName } from '../schema';
 import { errorText, go, sheet } from '../ui';
 import type { WorldSession } from '../world';
 import { FIRST_KINDS } from './capture';
@@ -42,7 +42,7 @@ export function makeFromNoteSheet(s: WorldSession, note: OwElement): void {
         render();
       });
       chips.replaceChildren(...offered.map(chip), more ?? '');
-      ok.textContent = `Make the ${typeLabel(kind).toLowerCase()}`;
+      ok.textContent = `Make the ${typeName(kind)}`;
     };
     render();
     const cancel = h('button', { class: 'btn', type: 'button' }, 'Cancel');

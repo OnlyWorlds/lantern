@@ -1,7 +1,8 @@
 // Give it to the party: the sheet a game master fills at the table, and the one question it asks
 // the first time (which Collective is the party; the Captain's board, h37 B28, lean A: kept per world).
+import { typeLabel, typePlural, typeCount } from '../schema';
 import type { OwElement } from '@onlyworlds/sdk';
-import { h, plural } from '../dom';
+import { h } from '../dom';
 import { partyChoices, partySize, revealValues } from '../party';
 import { noteGiven } from '../given';
 import { elName, errorText, go, sheet, toast } from '../ui';
@@ -60,7 +61,7 @@ export function giveToParty(s: WorldSession, thing: OwElement, draft?: Draft): v
       h(
         'div',
         { class: 'give-row' },
-        h('span', { class: 'dim', style: 'flex:1;min-width:0' }, 'To ', h('b', null, elName(party)), ` · ${plural(size, 'Character')}`),
+        h('span', { class: 'dim', style: 'flex:1;min-width:0' }, 'To ', h('b', null, elName(party)), ` · ${typeCount(size, 'character', { start: true })}`),
         change,
       ),
       size
@@ -68,7 +69,7 @@ export function giveToParty(s: WorldSession, thing: OwElement, draft?: Draft): v
         : h(
             'p',
             { class: 'note', role: 'note' },
-            h('span', null, `No Character is in ${elName(party)} yet, so no player sees this. Add your players' Characters to it: `, h('a', { href: `#/w/${s.id}/e/${party.id}` }, `open ${elName(party)}`), '.'),
+            h('span', null, `No ${typeLabel('character')} is in ${elName(party)} yet, so no player sees this. Add your players' ${typePlural('character')} to it: `, h('a', { href: `#/w/${s.id}/e/${party.id}` }, `open ${elName(party)}`), '.'),
           ),
       h('p', { class: 'muted small', style: 'margin:0' }, `${elName(thing)} stays as hidden as it was: they get this, not its page.`),
       err,
@@ -126,7 +127,7 @@ function chooseParty(s: WorldSession, then: () => void, changing = false): void 
         'button',
         { class: 'choice', type: 'button', 'aria-pressed': c.id === s.rec.partyId ? 'true' : null },
         h('b', null, elName(c)),
-        h('span', null, [c.id === s.rec.partyId ? 'The party now' : c.supertype, plural(partySize(c), 'Character')].filter(Boolean).join(' · ')),
+        h('span', null, [c.id === s.rec.partyId ? 'The party now' : c.supertype, typeCount(partySize(c), 'character', { start: true })].filter(Boolean).join(' · ')),
       );
       b.addEventListener('click', () => void pick(async () => c.id));
       list.appendChild(b);
@@ -136,7 +137,7 @@ function chooseParty(s: WorldSession, then: () => void, changing = false): void 
     list.appendChild(fresh);
     return [
       h('h2', null, changing ? 'Change the party' : 'Which Collective is the party?'),
-      h('p', { class: 'dim', style: 'margin:0' }, 'Every player whose Character is in it sees what you give. Lantern keeps your choice for this world.'),
+      h('p', { class: 'dim', style: 'margin:0' }, `Every player whose ${typeLabel('character')} is in it sees what you give. Lantern keeps your choice for this world.`),
       list,
       err,
     ];

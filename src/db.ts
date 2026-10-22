@@ -12,6 +12,8 @@ export interface WorldRecord {
   /** The world's now and its unit (keel's time_range_current, time_basic_unit): src/time.ts. */
   timeNow?: number;
   timeUnit?: string;
+  /** The world's own words for the types (keel's `x_names`, the names profile), verbatim: src/schema.ts typeName. */
+  names?: unknown;
   kind: WorldKind;
   /** The world key (ow_w_, ow_r_ or a legacy 10-digit key). Absent for a world on this phone only. */
   apiKey?: string;

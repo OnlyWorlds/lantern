@@ -575,6 +575,8 @@ export class WorldSession {
             const k = clockFrom(meta as unknown as Record<string, unknown>);
             return { timeNow: k.now, timeUnit: k.unit };
           })(),
+          // The world's own words: keel's are the truth for a world it holds (served from Keel #571).
+          names: (meta as unknown as Record<string, unknown>).x_names,
         });
         if (rec) this.rec = rec;
       }

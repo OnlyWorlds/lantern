@@ -24,7 +24,7 @@ import { shareView } from './views/share';
 import { consumeShared, peekShared, takeShared } from './share';
 import { joinCode } from './join';
 import { joinView } from './views/join';
-import { isType } from './schema';
+import { isType, setTypeWordsSource } from './schema';
 import { elName, errorText, toast } from './ui';
 
 applyTheme(currentTheme());
@@ -33,6 +33,8 @@ const app = document.getElementById('app')!;
 let cleanup: (() => void) | null = null;
 const pulledThisLaunch = new Set<string>();
 let activeSession: WorldSession | null = null;
+// Every type word asks the open world's record for its own words (src/schema.ts typeName).
+setTypeWordsSource(() => activeSession?.rec);
 
 function mount(view: View | HTMLElement, s?: WorldSession): void {
   cleanup?.();

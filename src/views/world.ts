@@ -15,8 +15,10 @@ import {
   isEmptyValue,
   isProfileField,
   typeColor,
+  typeCount,
   typeFields,
   typeLabel,
+  typeName,
   typePlural,
   TYPES,
 } from '../schema';
@@ -497,7 +499,7 @@ function myNotesLink(s: WorldSession): HTMLElement[] {
 }
 
 export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): View {
-  const what = onlyUnsorted ? 'your notes' : typePlural(type).toLowerCase();
+  const what = onlyUnsorted ? 'your notes' : typeName(type, { many: true });
   const input = h('input', {
     type: 'search',
     placeholder: `Search ${what}`,
@@ -513,7 +515,7 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
     if (onlyUnsorted) els = els.filter((e) => e.supertype === 'Unsorted');
     const q = input.value.trim();
     const shown = q ? search(els, q, 500).map((x) => x.el) : els;
-    count.textContent = q ? `${shown.length} of ${els.length}` : plural(els.length, onlyUnsorted ? 'note' : typeLabel(type).toLowerCase());
+    count.textContent = q ? `${shown.length} of ${els.length}` : (onlyUnsorted ? plural(els.length, 'note') : typeCount(els.length, type));
     list.replaceChildren(...shown.slice(0, 400).map((e) => elRow(s.id, e)));
     if (shown.length > 400) list.appendChild(h('p', { class: 'muted small' }, `Showing 400 of ${shown.length}. Search to narrow it.`));
   };
@@ -680,7 +682,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
 
     // A caught note is a Narrative underneath (Skeld's convention), but it reads as what it is to the
     // one who caught it (Quillon, h37 #4275: "Narrative · Unsorted" beside a card that said "not elements").
-    const kind = isUnsortedNote(el) ? 'Unsorted note' : [typeLabel(el.type), el.supertype, el.subtype].filter(Boolean).join(' · ');
+    const kind = isUnsortedNote(el) ? 'Unsorted note' : [typeLabel(el.type, el.supertype), el.supertype, el.subtype].filter(Boolean).join(' · ');
     // A caught line can be a sentence long: the title steps down so it does not fill the screen.
     const len = [...elName(el)].length;
     const nameH = h('h1', { style: len > 44 ? 'font-size:1.2rem' : len > 26 ? 'font-size:1.4rem' : null }, elName(el), wait('name'));
@@ -873,7 +875,7 @@ function playerHome(s: WorldSession): (Node | string)[] {
   const me = s.rec.characterId ? s.get(s.rec.characterId) : undefined;
   const intro = me
     ? h('p', { class: 'dim', style: 'margin:0' }, 'You play ', h('a', { href: `#/w/${s.id}/e/${me.id}` }, elName(me)), `. You see what ${elName(me)} knows.`)
-    : h('p', { class: 'dim', style: 'margin:0' }, 'You are a player here. You see what your Character knows.');
+    : h('p', { class: 'dim', style: 'margin:0' }, `You are a player here. You see what your ${typeLabel('character')} knows.`);
   return [
     intro,
     els.length
@@ -1013,7 +1015,7 @@ function fileRow(s: WorldSession, el: OwElement, r: OwFileRow): HTMLElement {
 }
 
 function deleteButton(s: WorldSession, el: OwElement): HTMLElement {
-  const what = isUnsortedNote(el) ? 'note' : typeLabel(el.type).toLowerCase();
+  const what = isUnsortedNote(el) ? 'note' : typeName(el.type, { supertype: el.supertype });
   const b = h('button', { class: 'btn btn-quiet btn-delete', type: 'button', 'data-action': 'delete' }, icon('close', 16), `Delete this ${what}`);
   b.addEventListener('click', () => deleteSheet(s, el));
   return b;

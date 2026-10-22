@@ -1,5 +1,6 @@
 // A player's own notes (src/notes.ts): written at the table, kept on this phone, and one at a time
 // shared with the party (the Captain h37 #4420, B; keel #241).
+import { typeLabel, typeCount } from '../schema';
 import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { mintPlayerKey } from '../account';
 import { h, plural } from '../dom';
@@ -122,8 +123,8 @@ function shareNote(s: WorldSession, n: Note, refresh: () => void): void {
             'p',
             { class: 'dim', style: 'margin:0' },
             !s.rec.characterId
-              ? 'A shared note is told by your Character, and you have none in this world yet. Ask your game master to give you one.'
-              : `${me ? elName(me) : 'Your Character'} is in no group yet, so there is nobody to share with. Ask your game master to add ${me ? elName(me) : 'your Character'} to the party.`,
+              ? `A shared note is told by your ${typeLabel('character')}, and you have none in this world yet. Ask your game master to give you one.`
+              : `${me ? elName(me) : `Your ${typeLabel('character')}`} is in no group yet, so there is nobody to share with. Ask your game master to add ${me ? elName(me) : `your ${typeLabel('character')}`} to the party.`,
           ),
           ok,
         ];
@@ -145,7 +146,7 @@ function chooseCircle(s: WorldSession, circles: OwElement[], then: (c: OwElement
         'button',
         { class: 'choice', type: 'button', 'aria-pressed': c.id === s.rec.partyId ? 'true' : null },
         h('b', null, elName(c)),
-        h('span', null, [c.supertype, plural(Array.isArray(c.characters) ? c.characters.length : 0, 'Character')].filter(Boolean).join(' · ')),
+        h('span', null, [c.supertype, typeCount(Array.isArray(c.characters) ? c.characters.length : 0, 'character', { start: true })].filter(Boolean).join(' · ')),
       );
       b.addEventListener('click', async () => {
         await s.rememberParty(c.id).catch(() => undefined);
@@ -156,7 +157,7 @@ function chooseCircle(s: WorldSession, circles: OwElement[], then: (c: OwElement
     }
     return [
       h('h2', null, 'Share with which group?'),
-      h('p', { class: 'dim', style: 'margin:0' }, 'Your Character is in each of these. Everyone whose Character is in the one you pick sees the note. Lantern keeps your choice for this world.'),
+      h('p', { class: 'dim', style: 'margin:0' }, `Your ${typeLabel('character')} is in each of these. Everyone whose ${typeLabel('character')} is in the one you pick sees the note. Lantern keeps your choice for this world.`),
       list,
     ];
   }, 'Share with which group?');
@@ -187,7 +188,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
       h(
         'p',
         { class: 'muted small', style: 'margin:0' },
-        `${me ? elName(me) : 'Your Character'} tells it. Everyone whose Character is in ${elName(party)} sees it, and so does your game master. It stays in My notes too.`,
+        `${me ? elName(me) : `Your ${typeLabel('character')}`} tells it. Everyone whose ${typeLabel('character')} is in ${elName(party)} sees it, and so does your game master. It stays in My notes too.`,
       ),
       pin
         ? h(

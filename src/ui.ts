@@ -2,7 +2,7 @@
 import type { OwElement } from '@onlyworlds/sdk';
 import { h } from './dom';
 import { icon } from './icons';
-import { typeAbbr, typeColor, typeLabel } from './schema';
+import { typeAbbr, typeColor, typeName } from './schema';
 import { isKnownOf } from './knownof';
 
 /** replace: the screen we leave (a form just submitted) drops out of Back's history. */
@@ -24,7 +24,7 @@ export function elRow(worldId: string, el: OwElement, extra?: string): HTMLEleme
   // A caught note reads as one in every list, as on its own page (Quillon, h37 #4275).
   const note = el.type === 'narrative' && el.supertype === 'Unsorted';
   // keel's stub says so before the tap: a player knows of it, not its details.
-  const hint = [...(note ? ['unsorted note'] : [typeLabel(el.type).toLowerCase(), el.supertype]), isKnownOf(el) ? 'known of' : '', extra].filter(Boolean).join(' · ');
+  const hint = [...(note ? ['unsorted note'] : [typeName(el.type, { supertype: el.supertype }), el.supertype]), isKnownOf(el) ? 'known of' : '', extra].filter(Boolean).join(' · ');
   return h(
     'a',
     { class: 'el-row', href: `#/w/${worldId}/e/${el.id}` },

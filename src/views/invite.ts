@@ -4,6 +4,7 @@
 // "A player" is keel's no-account player link (#416, the Captain's yes on the sharing floor, h50
 // #7610), reading as a Character the owner picks or a new one; an account guest is one choice down.
 // Atlas's half: `tools/atlas/src/ui/invite-modal.ts`. The choices and words match.
+import { typeLabel } from '../schema';
 import * as db from '../db';
 import { h } from '../dom';
 import { errorText, sheet, toast } from '../ui';
@@ -69,7 +70,7 @@ export function inviteSheet(worldId: string, worldName: string): void {
     );
     // Who a player reads as: a new Character they name, or one of the world's that keel holds.
     const playsAs = h('select', { class: 'input', 'aria-label': 'They play as', name: 'plays-as' }) as HTMLSelectElement;
-    playsAs.appendChild(h('option', { value: NEW_CHARACTER }, 'A new Character for them'));
+    playsAs.appendChild(h('option', { value: NEW_CHARACTER }, `A new ${typeLabel('character')} for them`));
     void Promise.all([db.allElements(worldId), db.outboxRows(worldId)]).then(([els, rows]) => {
       for (const c of playableCharacters(els, rows)) playsAs.appendChild(h('option', { value: c.id }, c.name));
     }).catch(() => undefined);

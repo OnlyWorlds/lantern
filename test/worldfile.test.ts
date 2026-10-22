@@ -19,6 +19,15 @@ describe('world files', () => {
     expect(read.name).toBe('Bus stop ideas');
   });
 
+  it("a world's own words (x_names) leave in its file and come back verbatim", async () => {
+    const names = { version: 1, types: { character: { one: 'Employee', many: 'Employees' } }, later: [1] };
+    const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000aa', name: 'Work', kind: 'local', addedAt: '', names }, []);
+    const world = JSON.parse(new TextDecoder().decode(readWorldFile(bytes).files.find((f) => f.path === 'world.json')!.data));
+    expect(world.x_names).toEqual(names);
+    const id = await openWorldFile(bytes);
+    expect((await db.getWorldRecord(id))?.names).toEqual(names);
+  });
+
   it('a saved world opens again whole, the type taken from the folder', async () => {
     const els = [
       { id: 'a1111111-0000-4000-8000-000000000001', type: 'character', name: 'Ada', friends: ['a1111111-0000-4000-8000-000000000002'] },
