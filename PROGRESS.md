@@ -1,10 +1,10 @@
 # Lantern: progress
 
-**2026-10-12 00:40, updated 2026-10-21** · Temper, S394 (the first overnight build) to S446 (the identity key read live, SDK 4.42.2, walks that run on production); which session did what: `docs/PROGRESS-history.md`, Folded 2026-10-21 (S448)
+**2026-10-12 00:40, updated 2026-10-22** · Temper, S394 (the first overnight build) to S446 (the identity key read live, SDK 4.42.2, walks that run on production); which session did what: `docs/PROGRESS-history.md`, Folded 2026-10-21 (S448)
 
 ## CURRENT STATE
 
-Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; public and indexable since 2026-10-18, 4ba97a5, h56 #6860) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `ab959fd` (S451, Boss h56 #9937, production 28d1fccc: SDK 4.51.0, the world file on Folder Format §4.7, flown with Atlas 1.71.0 and read live hand to hand with it, `tools/atlas/Notes/ui-snapshots/2026-10-22-s451/files-live.log`; the previous production 6fae1e88 refuses the new files). Before it `a4be6d8` (S450, x_review_), `4af1b90`, `8ec7e46`. Earlier live builds: `docs/PROGRESS-history.md`, Folded 2026-10-21.
+Built, tested and walked: the spine of DESIGN.md's tonight list. Live at https://lantern.onlyworlds.com since 2026-10-14 (the Captain's yes h37 #4203, Boss #4210; public and indexable since 2026-10-18, 4ba97a5, h56 #6860) and on the preview https://preview.lantern-6nd.pages.dev; Boss flies each announced sha to both. Live build `6fba726` (S453: a lore world reads without the parlor's room, the room being the pair AND the mark `x_room_of` (schema-dist dist.45, its 23 cases a test); a player's home too; the zone's `shape` read first; `walk/room.mjs` exit 0 live in Chromium and WebKit, the previous production 624652e0 red; `93ca2d8` before it hid by the pair alone). Before it, `ab959fd` (S451, Boss h56 #9937, production 28d1fccc: SDK 4.51.0, the world file on Folder Format §4.7, flown with Atlas 1.71.0 and read live hand to hand with it, `tools/atlas/Notes/ui-snapshots/2026-10-22-s451/files-live.log`; the previous production 6fae1e88 refuses the new files). Before it `a4be6d8` (S450, x_review_), `4af1b90`, `8ec7e46`. Earlier live builds: `docs/PROGRESS-history.md`, Folded 2026-10-21.
 
 | Piece | State | Where |
 |---|---|---|
