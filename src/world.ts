@@ -27,6 +27,8 @@ import { isRoomElement, roomShown, setRoomShown } from './room';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
+/** Lantern's name on every write (keel #520's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
+export const LANTERN_CLIENT_NAME = 'lantern';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -534,7 +536,7 @@ export class WorldSession {
     const key = this.rec.apiKey;
     const readsNeedPin = !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
     const pin = withPin || readsNeedPin ? pinFor(this.rec) : undefined;
-    return new OwV2Client({ apiKey: this.rec.apiKey, apiPin: pin, baseUrl: API_BASE });
+    return new OwV2Client({ apiKey: this.rec.apiKey, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
   }
 
   // ---------- pulling ----------

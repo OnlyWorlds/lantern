@@ -8,7 +8,7 @@ import { circlesOf, sharedNoteValues } from '../party';
 import { pinFor, setPin } from '../pin';
 import { uuid7 } from '../uuid7';
 import { elName, errorText, sheet, tabbar, toast, topbar } from '../ui';
-import { API_BASE, type WorldSession } from '../world';
+import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinSheet, type View } from './world';
 
 /** Worlds with a share in flight on this phone. */
@@ -230,7 +230,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
         if (pin) {
           // keel checks a PIN sent on a read too: one read proves it before anything is written.
           try {
-            await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: typed, baseUrl: API_BASE }).getWorld();
+            await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: typed, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).getWorld();
           } catch (ex) {
             throw (ex as { status?: number }).status === 401 ? new Error("That PIN is not your account's.") : ex;
           }

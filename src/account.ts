@@ -4,7 +4,7 @@
 // worlds and mints a key per world this phone opens, named for the phone and revocable on the portal.
 import { OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
-import { API_BASE, forgetSession } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME, forgetSession } from './world';
 import { plural } from './dom';
 import { forgetAccountPin, setPin } from './pin';
 import { clearNotes } from './notes';
@@ -22,7 +22,7 @@ export async function accountToken(): Promise<string | undefined> {
 }
 
 function accountClient(token: string): OwV2Client {
-  return new OwV2Client({ apiKey: token, baseUrl: API_BASE });
+  return new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
 }
 
 export async function signIn(token: string): Promise<AccountWorld[]> {
@@ -59,7 +59,7 @@ export async function signInWithPassword(login: string, password: string): Promi
   const id = login.trim();
   let token: string;
   try {
-    const signed = await new OwV2Client({ baseUrl: API_BASE }).signInWithPassword({
+    const signed = await new OwV2Client({ baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).signInWithPassword({
       ...(id.includes('@') ? { email: id } : { username: id }),
       password,
       tokenName: `Lantern on ${deviceName()}`,
@@ -259,7 +259,7 @@ export async function putKeyInPlace(rec: db.WorldRecord, apiKey: string, pin?: s
   if (key === rec.apiKey) throw new Error('That is the key this world has now.');
   let meta: { id: string; name: string };
   try {
-    meta = await new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE }).getWorld();
+    meta = await new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).getWorld();
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (code === 'key_revoked') throw new Error('That key was revoked too. Make a new one on the world\'s page on onlyworlds.com.');
@@ -298,7 +298,7 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
     throw e;
   }
   // Another player of the same world is a guest too: the new key must be this Character's seat.
-  const me = await new OwV2Client({ apiKey: key, baseUrl: API_BASE }).me();
+  const me = await new OwV2Client({ apiKey: key, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
   if (me.role !== 'guest' || me.character !== characterId) throw other;
   return key;
 }
@@ -309,7 +309,7 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
   const kind: OwKeyKind = detectKeyKind(key);
   if (kind === 'account') throw new Error('That is an account token: use Sign in instead.');
   if (kind === 'unknown') throw new Error('That does not look like a world key (ow_w_, ow_r_, or ten digits).');
-  const c = new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE });
+  const c = new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
   const meta = await c.getWorld();
   const existing = await db.getWorldRecord(meta.id);
   const sameKey = existing?.apiKey === key;

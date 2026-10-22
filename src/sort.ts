@@ -4,7 +4,7 @@
 // SDK's `sort()` (4.18, Kael h37 #3664); its rows are checked again on arrival (`sanitizeRows`).
 import { OwApiError, OwNetworkError, OwV2Client } from '@onlyworlds/sdk';
 import { accountToken } from './account';
-import { API_BASE } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import type { SliceItem, SortRow } from './sortplan';
 
 /** A note as the route takes it (h37 #3594): its words, or its words and its picture on keel's media host. */
@@ -31,7 +31,7 @@ export async function sortNotes(worldId: string, notes: SortNote[], slice: Slice
   const token = await accountToken();
   if (!token) throw new SortRefused('Sign in to sort with OnlyWorlds.');
   try {
-    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE }).sort({ worldId, notes, slice });
+    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).sort({ worldId, notes, slice });
     return {
       rows: Array.isArray(r?.rows) ? (r.rows as SortRow[]) : [],
       not_proposed: Array.isArray(r?.not_proposed) ? r.not_proposed : [],

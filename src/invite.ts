@@ -5,7 +5,7 @@
  * kept; seeing and taking back links stays on the website's Access pane.
  */
 import { OwApiError, OwNetworkError, OwV2Client } from '@onlyworlds/sdk';
-import { API_BASE } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import { accountToken } from './account';
 import type { WorldRecord } from './db';
 
@@ -91,7 +91,7 @@ export async function makeInvite(
   } catch {
     /* a name not remembered is asked again next time */
   }
-  const client = new OwV2Client({ apiKey: token, baseUrl: API_BASE });
+  const client = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
   try {
     const made = await client.createWorldLink(
       worldId,

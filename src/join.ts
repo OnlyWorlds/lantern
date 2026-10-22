@@ -6,7 +6,7 @@
 import { OwApiError, OwNetworkError, OwV2Client, type OwJoinPreview } from '@onlyworlds/sdk';
 import * as db from './db';
 import { accountToken, adoptPlayerSeat, fetchAccountWorlds, openAccountWorld, type AccountWorld } from './account';
-import { API_BASE } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 
 export type JoinPreview = OwJoinPreview;
 
@@ -39,7 +39,7 @@ export async function pendingJoin(): Promise<string | undefined> {
 
 export async function previewJoin(code: string): Promise<JoinPreview> {
   // previewJoin sends no credential: SDK 4.30's keyless client, as a friend with only a link has.
-  const c = new OwV2Client({ baseUrl: API_BASE });
+  const c = new OwV2Client({ baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
   try {
     return await c.previewJoin(code);
   } catch (e) {
@@ -90,7 +90,7 @@ export async function redeemPlayer(code: string, name?: string, table?: { charac
   if (name?.trim()) opts.name = name.trim();
   if (table?.character) opts.character = table.character;
   try {
-    a = await new OwV2Client({ baseUrl: API_BASE }).redeemJoin(code, opts);
+    a = await new OwV2Client({ baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).redeemJoin(code, opts);
   } catch (e) {
     if (e instanceof OwApiError && e.isNotFound) {
       if ((await pendingJoin()) === code) await setPendingJoin(undefined);
@@ -121,7 +121,7 @@ export async function acceptJoin(code: string): Promise<JoinResult> {
   if (!token) throw new Error('Sign in first.');
   let m;
   try {
-    m = await new OwV2Client({ apiKey: token, baseUrl: API_BASE }).acceptJoin(code);
+    m = await new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).acceptJoin(code);
   } catch (e) {
     if (e instanceof OwApiError && e.isAlreadyMember) {
       await setPendingJoin(undefined);

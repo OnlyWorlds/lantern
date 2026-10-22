@@ -5,7 +5,7 @@
 import { OwApiError, OwV2Client } from '@onlyworlds/sdk';
 import * as db from './db';
 import { accountToken } from './account';
-import { API_BASE, openWorld, forgetSession } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession } from './world';
 import { setPin } from './pin';
 import { uuid7 } from './uuid7';
 import { moveDraft } from './draft';
@@ -55,7 +55,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   let pending = rec.pendingOnline;
   if (!pending) {
     onStep('Making the world on your account');
-    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE });
+    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
     let made: { id: string; key: string };
     try {
       made = await acct.request('POST', '/account/worlds', { body: { name: rec.name } });
@@ -68,7 +68,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     pending = { serverId: made.id, key: made.key, bulkKey: uuid7() };
     rec = (await db.updateWorldRecord(localId, { pendingOnline: pending })) ?? rec;
   }
-  const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE });
+  const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
 
   // 2. Pictures the phone holds (data URLs) go to the edge first; the new address is kept on the
   //    phone before the bulk, so a retry sends the same body under the same key.

@@ -5,7 +5,7 @@
 // The wire and the context are the SDK's (4.13: ask, buildAskContext, typed refusals).
 import { OwApiError, OwNetworkError, OwV2Client } from '@onlyworlds/sdk';
 import { accountToken } from './account';
-import { API_BASE } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 
 export interface Answer {
   answer: string;
@@ -20,7 +20,7 @@ export async function askInASentence(worldId: string, question: string, context:
   const token = await accountToken();
   if (!token) throw new AskRefused('Sign in to have it answered in a sentence.');
   try {
-    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE }).ask({
+    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).ask({
       worldId,
       question: [...question].slice(0, 500).join(''),
       context,

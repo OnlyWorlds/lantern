@@ -4,7 +4,7 @@ import { fileLine } from '../files';
 import { h, plural } from '../dom';
 import { icon, typeIcon } from '../icons';
 import { search } from '../search';
-import { API_BASE, type WorldSession } from '../world';
+import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinFor, setPin } from '../pin';
 import { keyRefusalText, newKeyCures } from '../keyrefusal';
 import {
@@ -162,7 +162,7 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
       btn.disabled = true;
       try {
         // keel checks a PIN sent on a read too: one read proves it before anything is written.
-        await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE }).getWorld();
+        await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).getWorld();
         setPin(s.rec, pin.value.trim());
         s.needPin = false;
         close();
