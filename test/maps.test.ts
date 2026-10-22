@@ -85,6 +85,14 @@ describe('zones', () => {
     expect(zoneShape(undefined)).toBe('polygon');
   });
 
+  it("shape: the standard's own field (schema 00.33.00) comes first, and only its two words state one", () => {
+    expect(zoneShape(el({ id: 'a', type: 'zone', shape: 'line', atlas_shape: 'polygon' }))).toBe('line');
+    expect(zoneShape(el({ id: 'b', type: 'zone', shape: 'polygon', supertype: 'Line' }))).toBe('polygon');
+    expect(zoneShape(el({ id: 'c', type: 'zone', shape: 'line', supertype: 'River' }))).toBe('line');
+    expect(zoneShape(el({ id: 'd', type: 'zone', shape: 'Line', supertype: 'River' }))).toBe('polygon');
+    expect(zoneShape(el({ id: 'e', type: 'zone', shape: '', atlas_shape: 'line' }))).toBe('line');
+  });
+
   it('colour: a hex atlas_color, else the default; anything else is refused', () => {
     expect(zoneColor(el({ id: 'a', type: 'zone', atlas_color: '#3b82f6' }))).toBe('#3b82f6');
     expect(zoneColor(el({ id: 'b', type: 'zone', atlas_color: 'red; stroke:url(x)' }))).toBe('#22d3ee');

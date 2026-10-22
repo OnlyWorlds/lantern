@@ -125,7 +125,7 @@ export function addFieldSheet(s: WorldSession, el: OwElement): void {
   // A suggestion is the key it names (shadow_ included): picked, it is that field, never a new x_ one
   // (the S402 gate, G3). Two keys with one label offer the x_ one.
   const byLabel = new Map<string, string>();
-  for (const f of new Set(s.elements().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))) {
+  for (const f of new Set(s.lore().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))) {
     if (el[f] !== undefined && el[f] !== null) continue;
     if (isProfileField(f)) continue;
     const k = fieldLabel(f).toLowerCase();

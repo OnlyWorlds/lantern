@@ -84,7 +84,7 @@ export function beforeNowView(s: WorldSession): View {
     const now = s.rec.timeNow;
     const unit = s.rec.timeUnit;
     const cal = s.calendar();
-    const t = timeline(s.elements(), now);
+    const t = timeline(s.lore(), now);
     const row = (e: Parameters<typeof elRow>[1]) => elRow(s.id, e, [spanText(e, unit, cal),ongoing(e, now) ? 'still going' : ''].filter(Boolean).join(' · '));
     const parts: (HTMLElement | string)[] = [];
     if (!t.before.length && !t.after.length && !t.undated.length) {

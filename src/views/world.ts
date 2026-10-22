@@ -22,6 +22,7 @@ import {
 } from '../schema';
 import { elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
 import { clearTonight, tonight, toggleTonight } from '../tonight';
+import { roomShown } from '../room';
 import { noteOpened, recent } from '../recent';
 import { givenTonight } from '../given';
 import { notes } from '../notes';
@@ -38,6 +39,33 @@ import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
 import { inviteSheet } from './invite';
 import { putKeyInPlace, readsForWantOfPin, renewWorldKey, takeNoPinMark, upgradeMemberKey } from '../account';
+
+/**
+ * The parlor's room (src/room.ts): out of the lists unless this phone shows it. Offered only where the
+ * world holds some; one tap shows or hides it, and the lists redraw.
+ */
+function roomChoice(s: WorldSession, redraw: () => void): HTMLElement | '' {
+  const n = s.roomCount();
+  if (!n) return '';
+  const shown = roomShown(s.id);
+  const b = h(
+    'button',
+    { class: 'choice', type: 'button', 'data-action': 'room-shown', 'aria-pressed': shown ? 'true' : 'false' },
+    h('b', null, `The parlor's room · ${n.toLocaleString('en')}`),
+    h(
+      'span',
+      null,
+      shown
+        ? 'Its messages, votes and work items are in the lists and search. Tap to keep them out.'
+        : 'Its messages, votes and work items stay out of the lists and search. Tap to show them.',
+    ),
+  );
+  b.addEventListener('click', () => {
+    if (!s.showRoom(!shown)) toast('This phone could not keep that choice.');
+    redraw();
+  });
+  return b;
+}
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
 function isUnsortedNote(el: OwElement): boolean {
@@ -289,7 +317,7 @@ export function homeView(s: WorldSession): View {
   const renderBody = () => {
     const q = input.value;
     if (q.trim()) {
-      const hits = search(s.view.values(), q);
+      const hits = search(s.lore(), q);
       body.replaceChildren(
         hits.length
           ? h('div', { class: 'results' }, ...hits.map((x) => elRow(s.id, x.el, x.where === 'description' ? 'in its description' : x.where === 'custom' ? 'in your fields' : undefined)))
@@ -394,7 +422,7 @@ export function homeView(s: WorldSession): View {
         : '',
       // Before now (src/views/time.ts): only once the world has an Event with a date to put in order
       // (the Captain, h37 #4359: with none it opened onto nothing).
-      hasDatedEvent(s.elements())
+      hasDatedEvent(s.lore())
         ? h(
             'a',
             { class: 'choice', href: `#/w/${s.id}/time`, 'data-action': 'before-now' },
@@ -405,6 +433,7 @@ export function homeView(s: WorldSession): View {
       h('p', { class: 'section-label' }, 'In this world'),
       h('div', { class: 'type-grid' }, ...tiles),
       more ?? '',
+      roomChoice(s, renderBody),
       // Invite someone: the owner makes the link here (keel C1, SDK 4.24; S407 sent them to the website).
       canInvite(s.rec) ? inviteRow(s) : '',
     );

@@ -55,9 +55,14 @@ export function placesOf(s: Lookup, el: OwElement): Place[] {
   return out;
 }
 
-/** Atlas's rule (DESIGN_ZONES `getZoneShape`): atlas_shape, then a "line" supertype in any casing; else a polygon. */
+/**
+ * Atlas's rule (DESIGN_ZONES `getZoneShape`, Atlas 1.75): the standard's `shape` (schema 00.33.00:
+ * exactly polygon or line; anything else is not stated), then atlas_shape, then a "line" supertype
+ * in any casing; else a polygon.
+ */
 export function zoneShape(zone: OwElement | undefined): 'line' | 'polygon' {
   if (!zone) return 'polygon';
+  if (zone.shape === 'line' || zone.shape === 'polygon') return zone.shape;
   if (zone.atlas_shape === 'line' || zone.atlas_shape === 'polygon') return zone.atlas_shape;
   return typeof zone.supertype === 'string' && zone.supertype.trim().toLowerCase() === 'line' ? 'line' : 'polygon';
 }

@@ -23,6 +23,7 @@ import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
+import { isRoomElement, roomShown, setRoomShown } from './room';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -364,9 +365,9 @@ export class WorldSession {
     this.lookupCache = null;
   }
 
-  /** Kael's lookup index (SDK buildWorldIndex) over what the screen shows, built on first ask. */
+  /** Kael's lookup index (SDK buildWorldIndex) over what the lists show (the room left out unless shown), built on first ask. */
   lookupIndex(): OwWorldIndex<OwElement> {
-    this.lookupCache ??= buildWorldIndex(this.view.values());
+    this.lookupCache ??= buildWorldIndex(this.lore());
     return this.lookupCache;
   }
 
@@ -383,15 +384,40 @@ export class WorldSession {
     return [...this.view.values()];
   }
 
+  /**
+   * The world as its lists read it: without the parlor's room (src/room.ts) unless this phone chose
+   * to show it. `elements()` stays whole for links, maps, the party and a page opened by its id.
+   */
+  lore(): OwElement[] {
+    const all = this.elements();
+    return roomShown(this.id) ? all : all.filter((e) => !isRoomElement(e));
+  }
+
+  /** How many of the room's elements the world holds, shown or not. */
+  roomCount(): number {
+    let n = 0;
+    for (const e of this.view.values()) if (isRoomElement(e)) n++;
+    return n;
+  }
+
+  /** Shows or hides the room in the lists; the lookup and the backlinks are rebuilt. */
+  showRoom(on: boolean): boolean {
+    const kept = setRoomShown(this.id, on);
+    this.backlinkCache = null;
+    this.lookupCache = null;
+    this.emit();
+    return kept;
+  }
+
   ofType(type: string): OwElement[] {
-    return this.elements()
+    return this.lore()
       .filter((e) => e.type === type)
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
   }
 
   counts(): Map<string, number> {
     const m = new Map<string, number>();
-    for (const e of this.view.values()) m.set(e.type, (m.get(e.type) ?? 0) + 1);
+    for (const e of this.lore()) m.set(e.type, (m.get(e.type) ?? 0) + 1);
     return m;
   }
 
@@ -424,7 +450,7 @@ export class WorldSession {
   backlinks(id: string): string[] {
     if (!this.backlinkCache) {
       const m = new Map<string, string[]>();
-      for (const el of this.view.values()) {
+      for (const el of this.lore()) {
         for (const [k, v] of Object.entries(el)) {
           if (k === 'id' || k === 'created_by') continue;
           const ids = Array.isArray(v) ? v : typeof v === 'string' && v.length === 36 && v[8] === '-' ? [v] : [];
