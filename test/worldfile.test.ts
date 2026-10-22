@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
-import { openWorldFile, slugify, toWorldFile } from '../src/worldfile';
+import { lanternProducer, openWorldFile, slugify, toWorldFile } from '../src/worldfile';
 import * as db from '../src/db';
 
 
@@ -17,6 +17,23 @@ describe('world files', () => {
     const read = readWorldFile(bytes);
     expect(read.files.map((f) => f.path)).toEqual(['elements/narrative/the-ferryman-s-debt--ferry001.json', 'world.json']);
     expect(read.name).toBe('Bus stop ideas');
+  });
+
+  it("the producer line: Lantern's for a world born here, a file's own kept, none claimed for a file that had none", async () => {
+    const base = { kind: 'local' as const, addedAt: '' };
+    const lineOf = (bytes: Uint8Array) =>
+      JSON.parse(new TextDecoder().decode(readWorldFile(bytes).files.find((f) => f.path === 'world.json')!.data)).producer;
+    const born = toWorldFile({ ...base, id: 'w0000000-0000-4000-8000-0000000000b1', name: 'Born', producer: lanternProducer() }, []);
+    expect(lineOf(born.bytes)).toMatchObject({ tool: 'lantern', input: 'bare' });
+    const atlas = { tool: 'atlas', version: '1.81.0', input: 'bare', extra: 1 };
+    const fromAtlas = writeWorldFile([{ path: 'world.json', data: new TextEncoder().encode(JSON.stringify({ id: 'w0000000-0000-4000-8000-0000000000b2', name: 'From Atlas', producer: atlas })) }], 'From Atlas');
+    const id = await openWorldFile(fromAtlas);
+    const rec = (await db.getWorldRecord(id))!;
+    expect(lineOf(toWorldFile(rec, []).bytes)).toEqual(atlas);
+    const bare = writeWorldFile([{ path: 'world.json', data: new TextEncoder().encode(JSON.stringify({ id: 'w0000000-0000-4000-8000-0000000000b3', name: 'No line' })) }], 'No line');
+    const id2 = await openWorldFile(bare);
+    expect(lineOf(toWorldFile((await db.getWorldRecord(id2))!, []).bytes)).toBeUndefined();
+    expect(lineOf(toWorldFile({ ...base, id: 'w0000000-0000-4000-8000-0000000000b4', name: 'Old record' }, []).bytes)).toBeUndefined();
   });
 
   it("a world's own words (x_names) leave in its file and come back verbatim", async () => {

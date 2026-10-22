@@ -20,7 +20,7 @@ import { setPin } from '../pin';
 import { pendingJoin } from '../join';
 import { SIGNUP_URL } from '../invite';
 import { uuid7 } from '../uuid7';
-import { openWorldFile, saveFile, toWorldFile } from '../worldfile';
+import { lanternProducer, openWorldFile, saveFile, toWorldFile } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
 import { errorText, go, sheet, toast, topbar } from '../ui';
 import { installButton, onHomeScreen } from '../install';
@@ -248,7 +248,7 @@ export function newWorldView(): HTMLElement {
       err.textContent = 'Give it a name.';
       return;
     }
-    const rec: db.WorldRecord = { id: uuid7(), name: n, kind: 'local', addedAt: new Date().toISOString(), count: 0 };
+    const rec: db.WorldRecord = { id: uuid7(), name: n, kind: 'local', addedAt: new Date().toISOString(), count: 0, producer: lanternProducer() };
     await db.putWorldRecord(rec);
     void db.persistStorage();
     go(`#/w/${rec.id}`, true);
