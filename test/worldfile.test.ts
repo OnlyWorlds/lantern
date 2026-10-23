@@ -2,6 +2,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
 import { lanternProducer, openWorldFile, slugify, toWorldFile } from '../src/worldfile';
@@ -64,7 +65,7 @@ describe('world files', () => {
   });
 
   it('opens a real Atlas world folder', async () => {
-    const dir = 'C:/Users/Titus/Desktop/TESTOWFOLDER/onlyworlds-atlas/moppetopia-sample-55a9b4d5';
+    const dir = join(homedir(), 'Desktop/TESTOWFOLDER/onlyworlds-atlas/moppetopia-sample-55a9b4d5');
     let files: { path: string; data: Uint8Array }[];
     try {
       const walk = (d: string, rel = ''): { path: string; data: Uint8Array }[] =>
@@ -85,7 +86,7 @@ describe('world files', () => {
   });
 
   it("opens an Atlas world's maps, pins, zones and markers (spatial/, Atlas's map_id spelling)", async () => {
-    const dir = 'C:/Users/Titus/Desktop/TESTOWFOLDER/onlyworlds-atlas/tuvsh-ul-019f6295';
+    const dir = join(homedir(), 'Desktop/TESTOWFOLDER/onlyworlds-atlas/tuvsh-ul-019f6295');
     let files: { path: string; data: Uint8Array }[];
     try {
       const walk = (d: string, rel = ''): { path: string; data: Uint8Array }[] =>

@@ -6,6 +6,7 @@ import './guard.mjs';
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
 
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
@@ -270,7 +271,7 @@ async function walk(engine, deviceName, tag) {
     const saved = await download.path().then((p) => readWorldFile(new Uint8Array(readFileSync(p))));
     check(tag, saved.name === 'Bus stop ideas' && saved.files.length === 3, `Save a copy gives a world file (world, the note, Oskar) (${download.suggestedFilename()}, ${saved.files.length} files)`);
   } else check(tag, true, 'Save a copy went to the share sheet (no download to read)');
-  const sample = 'C:/Users/Titus/Desktop/TESTOWFOLDER/onlyworlds-atlas/moppetopia-sample-55a9b4d5';
+  const sample = `${homedir()}/Desktop/TESTOWFOLDER/onlyworlds-atlas/moppetopia-sample-55a9b4d5`;
   const filesOf = (d, rel = '') =>
     readdirSync(d, { withFileTypes: true }).flatMap((e) =>
       e.isDirectory() ? filesOf(`${d}/${e.name}`, `${rel}${e.name}/`) : [{ path: `${rel}${e.name}`, data: new Uint8Array(readFileSync(`${d}/${e.name}`)) }],

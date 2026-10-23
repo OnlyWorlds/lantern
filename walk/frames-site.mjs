@@ -6,10 +6,11 @@
 // Stages: probe (the Access pane's members, printed), remove <frame id> (removes crew-walk-a).
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const BASE = 'https://www.onlyworlds.com';
-const OUT = 'C:/Users/Titus/Carrier/Media/journey-walks/2026-10-18-lantern-shots';
+const OUT = process.env.LANTERN_SHOTS ?? path.join(os.homedir(), 'Carrier/Media/journey-walks/2026-10-18-lantern-shots');
 const STATE_DIR = process.env.FRAMES_STATE;
 const state = JSON.parse(fs.readFileSync(path.join(STATE_DIR, 'state.json'), 'utf8'));
 const lines = fs.readFileSync(process.env.CREW_FILE, 'utf8').split(/\r?\n/);

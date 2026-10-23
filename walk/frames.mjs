@@ -11,10 +11,11 @@
 // Credentials are read from CREW_FILE and never printed.
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const SITE = process.env.LANTERN_URL ?? 'https://lantern.onlyworlds.com';
-const OUT = 'C:/Users/Titus/Carrier/Media/journey-walks/2026-10-18-lantern-shots';
+const OUT = process.env.LANTERN_SHOTS ?? path.join(os.homedir(), 'Carrier/Media/journey-walks/2026-10-18-lantern-shots');
 const EXTRA = path.join(OUT, 'extra');
 const STATE_DIR = process.env.FRAMES_STATE;
 if (!STATE_DIR) throw new Error('FRAMES_STATE is the scratch dir for the two phones');

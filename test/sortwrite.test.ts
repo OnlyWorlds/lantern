@@ -105,12 +105,12 @@ describe('the write run', () => {
     await s.pull();
     const p = planWrites([{ key: '0', row: addToA('A brewer.') }], (id) => s.get(id), new Set([A]), ctxOf(s));
     // The plan is fixed; a co-builder rewrites Ada; the phone syncs; then Finish writing.
-    keel.put({ ...keel.els.get(A)!, description: 'Ada, rewritten by Oisin.' });
+    keel.put({ ...keel.els.get(A)!, description: 'Ada, rewritten by a co-builder.' });
     await s.pull();
     await runWrites(s, { plan: p.writes, notes: [N] }, () => {});
     await s.flush();
     await settle();
-    expect(keel.els.get(A)!.description).toBe('Ada, rewritten by Oisin.');
+    expect(keel.els.get(A)!.description).toBe('Ada, rewritten by a co-builder.');
     expect(s.outbox.filter((r) => r.state === 'needs-you').length).toBe(1);
   });
 
