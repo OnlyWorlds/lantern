@@ -37,6 +37,7 @@ import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { agentLine } from '../agentmark';
 import { proposedWord } from '../review';
+import { hiddenLine } from '../hidden';
 import { knownOfLine } from '../knownof';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
@@ -705,8 +706,11 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       : null;
     // Proposed, not yet reviewed (src/review.ts, Keel #565's reader rule): a word, since a keeper has to see it.
     const proposed = proposedWord(el);
+    // Hidden (src/hidden.ts, folder spec §4.8): shown to its holder with the word, and who else can see it.
+    const hidden = hiddenLine(el, !s.isLocal);
     const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind),
       proposed ? h('span', { class: 'proposed-mark', 'data-role': 'proposed-mark' }, proposed === 'proposed' ? 'Proposed, not yet reviewed: not part of the world until a keeper accepts it on OnlyWorlds.' : 'Proposed and not yet reviewed; the proposal has lapsed.') : null,
+      hidden ? h('span', { class: 'muted', 'data-role': 'hidden-mark' }, hidden) : null,
       agent ? h('span', { class: 'muted agent-mark', 'data-role': 'agent-mark' }, agent) : null);
     if (editable) {
       headText.style.cursor = 'pointer';

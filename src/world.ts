@@ -25,6 +25,7 @@ import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
 import { isRoomElement, roomShown, setRoomShown } from './room';
 import { isProposed } from './review';
+import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -139,6 +140,7 @@ export class WorldSession {
   private backlinkCache: Map<string, string[]> | null = null;
   private calendarCache: CalendarConfig | null | undefined = undefined;
   private lookupCache: OwWorldIndex<OwElement> | null = null;
+  private handOnCache: OwWorldIndex<OwElement> | null = null;
   private pulling: Promise<void> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
   private queuedFlush: Promise<void> | null = null;
@@ -366,12 +368,23 @@ export class WorldSession {
     this.backlinkCache = null;
     this.calendarCache = undefined;
     this.lookupCache = null;
+    this.handOnCache = null;
   }
 
   /** Kael's lookup index (SDK buildWorldIndex) over what the lists show (the room left out unless shown), built on first ask. */
   lookupIndex(): OwWorldIndex<OwElement> {
     this.lookupCache ??= buildWorldIndex(this.lore());
     return this.lookupCache;
+  }
+
+  /**
+   * The index what is handed to keel's AI is written from: without hidden or proposed elements, so a
+   * kept element's links to one say only that a linked element is not present, never its name
+   * (folder spec §4.8; Keel #565; Atlas 1.86.0's published page leaves the same names out).
+   */
+  handOnIndex(): OwWorldIndex<OwElement> {
+    this.handOnCache ??= buildWorldIndex(handOnElements(this.lore(), (id) => this.view.get(id)));
+    return this.handOnCache;
   }
 
   get(id: string): OwElement | undefined {
@@ -408,6 +421,7 @@ export class WorldSession {
     const kept = setRoomShown(this.id, on);
     this.backlinkCache = null;
     this.lookupCache = null;
+    this.handOnCache = null;
     this.emit();
     return kept;
   }
@@ -1123,6 +1137,12 @@ export class WorldSession {
         await keep('refused', 'You have no Character in this world to tell it. Ask your game master for one.');
         return false;
       }
+      if (e.status === 403 && e.code === 'hidden_not_allowed') {
+        // keel takes a hidden create only from the owner or a co-builder (keel #587): this row is
+        // refused, the key keeps working, and sending again changes nothing.
+        await keep('refused', HIDDEN_REFUSAL);
+        return false;
+      }
       if (e.status === 403 && !e.isNotAuthor) {
         await keep('waiting');
         this.status = 'error';
@@ -1212,7 +1232,8 @@ export class WorldSession {
     await this.drop(row);
     this.truth.delete(row.id);
     await db.applyElements(this.id, [], [row.id]);
-    await this.create(row.type, values);
+    // A hidden element's maker keeps it hidden as a new element (the S462 gate's F4): the mark as keel takes it.
+    await this.create(row.type, withHiddenForCreate(values));
   }
 
   async retryRefused(row: OutboxRow): Promise<void> {

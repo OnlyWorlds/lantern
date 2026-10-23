@@ -29,6 +29,8 @@ class FakeAccountKeel {
   seq = 0;
   bulks = 0;
   failBulkOnce = false;
+  cannotHide = false;
+  sentBodies: Record<string, unknown>[] = [];
   uploads = 0;
   uploaded: { type: string; bytes: Uint8Array }[] = [];
 
@@ -83,16 +85,21 @@ class FakeAccountKeel {
         throw new TypeError('Failed to fetch');
       }
       this.bulks++;
+      for (const it of body.items) this.sentBodies.push(it.element);
       const k = headers.get('Idempotency-Key')!;
       if (this.idem.has(k)) {
         if (this.idem.get(k) !== init.body) return this.err(409, 'idempotency_error');
         return this.json(200, { errors: false, items: body.items.map(() => ({ status: 201 })) });
       }
       // keel refuses a stub's flag as an unknown field (422, param known_of; probed live S443).
-      const slots = body.items.map((it: { element: { id: string; known_of?: unknown } }) =>
+      // keel #587 (probed live, Atlas S461 probe-48.log): `hidden: true` from a key that cannot hide is
+      // a slot's 403 hidden_not_allowed; the slot never echoes the mark.
+      const slots = body.items.map((it: { element: { id: string; known_of?: unknown; hidden?: unknown } }) =>
         'known_of' in it.element
           ? { status: 422, error: { code: 'invalid_request', message: 'Unknown field: known_of' } }
-          : this.otherWorldIds.has(it.element.id) ? { status: 409, error: { code: 'id_conflict', message: 'id' } } : { status: 201, id: it.element.id },
+          : this.cannotHide && it.element.hidden === true
+            ? { status: 403, error: { code: 'hidden_not_allowed', message: 'Only the owner and co-builders can create an element hidden.' } }
+            : this.otherWorldIds.has(it.element.id) ? { status: 409, error: { code: 'id_conflict', message: 'id' } } : { status: 201, id: it.element.id },
       );
       const errors = slots.some((x: { status: number }) => x.status >= 400);
       if (!(errors && body.atomic)) {
@@ -184,6 +191,33 @@ describe('put it online', () => {
     expect(keel.worlds.size).toBe(0);
     expect(keel.bulks).toBe(0);
     expect((await db.allElements(local)).length).toBe(2);
+  });
+
+  it('a hidden element goes up hidden, as the boolean keel takes; a false or null mark is never sent (folder spec §4.8)', async () => {
+    keel.accountPin = '4321';
+    const ids = ['e1000000-0000-7000-8000-000000000011', 'e1000000-0000-7000-8000-000000000012', 'e1000000-0000-7000-8000-000000000013', 'e1000000-0000-7000-8000-000000000014'];
+    const local = await localWorld([
+      { id: ids[0], type: 'character', name: 'Wren', hidden: true },
+      { id: ids[1], type: 'character', name: 'Moss', hidden: 'true' },
+      { id: ids[2], type: 'character', name: 'Fern', hidden: false },
+      { id: ids[3], type: 'character', name: 'Reed', hidden: null },
+    ]);
+    const id = await putOnline(local, '4321');
+    const sent = new Map(keel.sentBodies.map((b) => [b.id, b]));
+    expect(sent.get(ids[0])?.hidden).toBe(true);
+    expect(sent.get(ids[1])?.hidden).toBe(true);
+    expect(sent.get(ids[2])).not.toHaveProperty('hidden');
+    expect(sent.get(ids[3])).not.toHaveProperty('hidden');
+    expect(keel.worlds.get(id)!.els.size).toBe(4);
+  });
+
+  it("a key keel will not take a hidden element from: said, nothing sent, the phone copy stays", async () => {
+    keel.accountPin = '4321';
+    keel.cannotHide = true;
+    const local = await localWorld([...ELS, { id: 'e1000000-0000-7000-8000-000000000015', type: 'character', name: 'Wren', hidden: true }]);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/would not take a hidden element/);
+    expect([...keel.worlds.values()][0].els.size).toBe(0);
+    expect((await db.allElements(local)).length).toBe(3);
   });
 
   it('ids that live in another world: nothing is sent and the phone copy stays', async () => {

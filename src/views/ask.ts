@@ -3,7 +3,7 @@
 // "your world does not say" is the answer. For an account world, with signal, the same elements
 // can be put into a sentence by keel's proxy (#159), on a tap: the sources stay on screen.
 import { buildAskContext, lookupWorld, type OwElement, type OwLookupHit } from '@onlyworlds/sdk';
-import { handsOnAsProposed } from '../review';
+import { handOnHold, heldBackLine } from '../hidden';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { fieldLabel } from '../schema';
@@ -80,16 +80,25 @@ export function askView(s: WorldSession): View {
   const sentence = (q: string, hits: OwLookupHit<OwElement>[], askNow: boolean): HTMLElement | '' => {
     if (!signedIn || !accountWorld) return '';
     // Ask hands the world to keel's AI, so a proposed element stays on the phone (src/review.ts, Keel
-    // #565's reader rule): shown in the list with its word, never sent as fact, and said how many.
-    const handed = hits.filter((x) => !handsOnAsProposed(x.element));
-    const leftOut = hits.length - handed.length;
-    const leftLine = leftOut ? ` ${leftOut === 1 ? 'One proposed element, not yet reviewed, is' : `${leftOut} proposed elements, not yet reviewed, are`} not sent.` : '';
+    // #565's reader rule), and so does a hidden one (src/hidden.ts, folder spec §4.8): shown in the
+    // list with its word, never sent, and said how many.
+    // A pin or marker placing one stays back with it (handOnHold, the S462 gate's F1).
+    const why = hits.map((x) => handOnHold(x.element, (id) => s.get(id)));
+    const hiddenOut = why.filter((w) => w === 'hidden').length;
+    const proposedOut = why.filter((w) => w === 'proposed').length;
+    const handed = hits.filter((_, i) => !why[i]);
+    const held = heldBackLine(hiddenOut, proposedOut);
+    const leftLine = held ? ` ${held}` : '';
     if (!handed.length) {
-      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'proposed' },
-        'Only proposed elements match, and a proposed element is not sent to be put into words until a keeper accepts it.');
+      const why = !proposedOut
+        ? 'Only hidden elements match, and a hidden element is not sent to be put into words.'
+        : !hiddenOut
+          ? 'Only proposed elements match, and a proposed element is not sent to be put into words until a keeper accepts it.'
+          : 'Only hidden and proposed elements match, and neither is sent to be put into words.';
+      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': hiddenOut ? 'hidden' : 'proposed' }, why);
     }
     // The elements on screen, in their order (the SDK's buildAskContext, keel's limits).
-    const { context } = buildAskContext(handed, s.lookupIndex());
+    const { context } = buildAskContext(handed, s.handOnIndex());
     // One box per world, question and the very text sent: a redraw while it asks, or after, shows
     // the same box (never a second spend); elements that changed make a new one.
     const key = `${s.id}|${q}|${context.join('|')}`;

@@ -5,6 +5,7 @@
 import { isKnownOf, lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
 import { BASE_FIELDS, fieldInfo, isType } from './schema';
 import { handsOnAsProposed } from './review';
+import { isHidden } from './hidden';
 
 /** One element the notes may be about, as the route takes it. */
 export interface SliceItem {
@@ -165,6 +166,7 @@ export function buildSlice(
   notes: OwElement[],
   index: OwWorldIndex<OwElement>,
   get: (id: string) => OwElement | undefined,
+  heldBack?: { hidden: Set<string>; proposed: Set<string> },
 ): SliceItem[] {
   const noteIds = new Set(notes.map((n) => n.id));
   const best = new Map<string, number>();
@@ -176,9 +178,17 @@ export function buildSlice(
         const el = hit.element;
         // A stub (keel's known of) is never written, so no row may be planned onto it (the S444 gate, G3).
         if (noteIds.has(el.id) || NOT_IN_SLICE.has(el.type) || isKnownOf(el)) continue;
-        // The slice hands the world to keel's AI: a proposed element is not canon until a keeper
-        // accepts it, so it is never offered as what the world has (src/review.ts, Keel #565).
-        if (handsOnAsProposed(el)) continue;
+        // The slice hands the world to keel's AI: a hidden element stays with its holder (src/hidden.ts,
+        // folder spec §4.8), and a proposed one is not canon until a keeper accepts it, so neither is
+        // offered as what the world has (src/review.ts, Keel #565). The review says how many of each.
+        if (isHidden(el)) {
+          heldBack?.hidden.add(el.id);
+          continue;
+        }
+        if (handsOnAsProposed(el)) {
+          heldBack?.proposed.add(el.id);
+          continue;
+        }
         if (el.type === 'narrative' && (el.supertype === 'Unsorted' || el.supertype === SORTED)) continue;
         // An element with no name, or one past keel's limit, cannot be named in a row: left out.
         const len = [...sliceName(el)].length;
@@ -192,7 +202,11 @@ export function buildSlice(
     .slice(0, SLICE_MAX)
     .map(([id]) => {
       const el = get(id)!;
-      const anchor = anchorOf(el, get);
+      // An anchor names a linked element: never a hidden or proposed one (the slice's own rule above).
+      const anchor = anchorOf(el, (aid) => {
+        const t = get(aid);
+        return t && !isHidden(t) && !handsOnAsProposed(t) ? t : undefined;
+      });
       return { id, type: el.type, name: sliceName(el), ...(anchor ? { anchor } : {}) };
     });
 }

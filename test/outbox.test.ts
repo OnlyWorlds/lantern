@@ -16,6 +16,7 @@ Object.assign(globalThis, {
 const { openWorld, forgetSession, setBuildBehind } = await import('../src/world');
 const { setPin } = await import('../src/pin');
 const db = await import('../src/db');
+const { HIDDEN_REFUSAL } = await import('../src/hidden');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
 
@@ -37,6 +38,8 @@ class FakeKeel {
   keyGone: 'key_revoked' | 'invalid_credentials' | null = null;
   /** The next write answers this error instead. */
   nextError: { status: number; code: string } | null = null;
+  /** Set: this key may not create an element hidden (a member, keel #587). */
+  cannotHide = false;
   /** A walk from zero fails (a resync whose walk drops). */
   failZeroWalk = false;
   /** Runs once while a feed page is in flight, after the page was built (something landing mid-walk). */
@@ -121,6 +124,8 @@ class FakeKeel {
         this.nextError = null;
         return this.err(e.status, e.code);
       }
+      // keel #587: a create carrying hidden: true from a key that cannot hide (probed live, Atlas S461).
+      if (this.cannotHide && method === 'POST' && body.hidden === true) return this.err(403, 'hidden_not_allowed');
     }
     const answer = (r: Response): Response => {
       if (method !== 'GET' && this.dropAnswerOnce) {
@@ -617,6 +622,28 @@ describe('outbox', () => {
     const made = [...keel.els.values()].find((e) => e.name === 'Ada Vell');
     expect(made).toBeTruthy();
     expect(made!.id).not.toBe('a');
+  });
+
+  it("a hidden element's maker keeps it as new: it goes hidden, and a key that cannot hide is refused in words, the key still working (the S462 gate, F4)", async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Wren', hidden: true });
+    const s = await freshWorld();
+    await s.pull();
+    await s.edit('a', { name: 'Wren Vell' });
+    keel.els.delete('a');
+    setPin(s.rec, '1234');
+    await s.flush();
+    const row = s.outbox[0];
+    expect(row.state).toBe('gone');
+    keel.cannotHide = true;
+    await s.keepAsNew(row);
+    await s.flush();
+    expect([...keel.els.values()].find((e) => e.name === 'Wren Vell')).toBeUndefined();
+    expect(s.outbox[0]).toMatchObject({ op: 'create', state: 'refused', error: HIDDEN_REFUSAL });
+    expect(s.status).not.toBe('error');
+    keel.cannotHide = false;
+    await s.retryRefused(s.outbox[0]);
+    await s.flush();
+    expect([...keel.els.values()].find((e) => e.name === 'Wren Vell')?.hidden).toBe(true);
   });
 
   it('holds while the build is behind', async () => {

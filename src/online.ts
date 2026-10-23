@@ -10,6 +10,7 @@ import { setPin } from './pin';
 import { uuid7 } from './uuid7';
 import { moveDraft } from './draft';
 import { isKnownOf } from './knownof';
+import { withHiddenForCreate } from './hidden';
 
 export const BULK_MAX = 1000;
 const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by'];
@@ -84,15 +85,21 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   // 3. Every element in one atomic /bulk: links are checked against the batch, nothing half-lands.
   onStep(`Sending ${elements.length} elements`);
   if (elements.length) {
+    // A hidden element goes up hidden (folder spec §4.8, keel #587): the mark as the boolean keel
+    // takes, and no key at all on any other, so a file's `false` or `null` is never sent.
     const items = elements.map((el) => ({
       type: el.type,
-      element: Object.fromEntries(Object.entries(el).filter(([k]) => !SERVER_OWNED.includes(k))) as Record<string, unknown>,
+      element: withHiddenForCreate(Object.fromEntries(Object.entries(el).filter(([k]) => !SERVER_OWNED.includes(k)))),
     }));
     const res = await client.bulk(items, { atomic: true, idempotencyKey: pending.bulkKey });
     if (res.errors) {
       const bad = res.items.find((x) => x.status >= 400);
       if (bad?.error?.code === 'id_conflict') {
         throw new Error('Some of these elements already live in another world online (a world file of an online world?). Nothing was sent.');
+      }
+      // The world is the account's own, so its key can hide; said plainly if keel ever refuses it.
+      if (bad?.error?.code === 'hidden_not_allowed') {
+        throw new Error('OnlyWorlds would not take a hidden element from this key. Nothing was sent.');
       }
       throw new Error(`Nothing was sent: ${bad?.error?.message ?? 'the server refused an element'}.`);
     }

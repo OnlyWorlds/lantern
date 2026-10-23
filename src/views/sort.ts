@@ -14,6 +14,7 @@ import { fixPlan, runWrites, type WriteRun } from '../sortwrite';
 import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
+import { heldBackSortLine } from '../hidden';
 
 /** A card's state: ticked, a make's edits, an ask's pick. */
 interface RowState {
@@ -34,6 +35,8 @@ interface Kept {
   step?: number;
   /** The photos were not read (refused, or unreadable to the model): this sort used the notes' words. */
   wordsOnly?: boolean;
+  /** Elements the notes touched that the slice held back from keel's AI: hidden, and proposed. */
+  heldBack?: { hidden: number; proposed: number };
   /** The cards' ticks, edits and picks, by row index: a reload mid-review keeps them. */
   ticks?: Record<string, RowState>;
 }
@@ -181,7 +184,8 @@ export function sortView(s: WorldSession): View {
     render();
     const job = (async () => {
       try {
-        const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id));
+        const heldBack = { hidden: new Set<string>(), proposed: new Set<string>() };
+        const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id), heldBack);
         const payload = notesPayload(fit, s.id).notes;
         let result: Sorted;
         let wordsOnly = false;
@@ -194,7 +198,7 @@ export function sortView(s: WorldSession): View {
           result = await sortNotes(s.id, payload.map((n) => (typeof n === 'string' ? n : n.text)), slice);
           wordsOnly = true;
         }
-        kept = { notes: fit.map((n) => n.id), sent: slice.map((x) => x.id), result: clean(result), at: new Date().toISOString(), wordsOnly };
+        kept = { notes: fit.map((n) => n.id), sent: slice.map((x) => x.id), result: clean(result), at: new Date().toISOString(), wordsOnly, heldBack: { hidden: heldBack.hidden.size, proposed: heldBack.proposed.size } };
         writeKept(s.id, kept);
         state.clear();
         phase = 'review';
@@ -493,6 +497,9 @@ export function sortView(s: WorldSession): View {
         typeof remaining === 'number' ? h('span', { class: 'muted small' }, ` ${remaining} AI answers left today.`) : '',
       ),
       kept.wordsOnly ? h('p', { class: 'muted small', style: 'margin:0', 'data-words-only': '' }, 'The photos could not be read, so this sort used the words of your notes.') : '',
+      kept.heldBack && (kept.heldBack.hidden || kept.heldBack.proposed)
+        ? h('p', { class: 'muted small', style: 'margin:0', 'data-held-back': '' }, heldBackSortLine(kept.heldBack.hidden, kept.heldBack.proposed))
+        : '',
       started ? h('p', { class: 'muted small', style: 'margin:0', role: 'status' }, `Writing what you ticked: ${Math.min(kept.step ?? 0, (kept.plan?.length ?? 0) + kept.notes.length)} of ${(kept.plan?.length ?? 0) + kept.notes.length} done.`) : '',
       failed && !writing ? h('p', { class: 'error', role: 'alert', 'data-stopped': '' }, 'Writing stopped. Finish writing goes on from there; Stop here keeps what is written.') : '',
       ...rows.map(card),

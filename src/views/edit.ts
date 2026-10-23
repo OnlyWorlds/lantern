@@ -7,6 +7,8 @@ import { customEditable, customFieldKey, customFieldProblem, customFields, field
 import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { photoPicker } from './photo';
+import { proposedWord } from '../review';
+import { hiddenWord } from '../hidden';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
@@ -200,7 +202,7 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
       const els = (q ? search(pool(), q, 30).map((x) => x.el) : pool().slice(0, 30)).filter((x) => !chosen.includes(x.id) && x.id !== el.id);
       results.replaceChildren(
         ...els.map((x) => {
-          const b = h('button', { class: 'el-row', type: 'button', style: 'background:transparent;border-left:0;border-right:0;border-top:0;width:100%;text-align:left' }, typeChip(x.type), h('span', { class: 'label' }, h('b', null, elName(x))));
+          const b = h('button', { class: 'el-row', type: 'button', style: 'background:transparent;border-left:0;border-right:0;border-top:0;width:100%;text-align:left' }, typeChip(x.type), h('span', { class: 'label' }, h('b', null, elName(x)), ...[proposedWord(x), hiddenWord(x)].filter(Boolean).map((w) => h('span', { class: 'muted' }, ` · ${w}`))));
           b.addEventListener('click', () => {
             if (multi) {
               chosen = [...chosen, x.id];

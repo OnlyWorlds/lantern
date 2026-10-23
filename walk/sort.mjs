@@ -93,10 +93,12 @@ async function walk(engine, deviceName, tag) {
 
   // Two notes caught last night, planted in Unsorted.
   const notes = [
-    { id: '0199aaaa-0000-7000-8000-000000000001', type: 'narrative', name: `${a.name} at the fire`, supertype: 'Unsorted', description: `${a.name} at the fire\nA stranger called Ember tends it`, image_url: `https://media.onlyworlds.com/u/${worldId}/fire-page.webp`, created_at: '2026-10-12T01:00:00Z' },
+    { id: '0199aaaa-0000-7000-8000-000000000001', type: 'narrative', name: `${a.name} at the fire`, supertype: 'Unsorted', description: `${a.name} at the fire\nA stranger called Ember tends it\nQuillfeather Vane watched`, image_url: `https://media.onlyworlds.com/u/${worldId}/fire-page.webp`, created_at: '2026-10-12T01:00:00Z' },
     { id: '0199aaaa-0000-7000-8000-000000000002', type: 'narrative', name: `Someone went to ${place.name}`, supertype: 'Unsorted', description: `Someone went to ${place.name}`, created_at: '2026-10-12T01:05:00Z' },
   ];
-  await putElements(page, worldId, notes);
+  // A Character the world hides (folder spec §4.8), named in a note: never in the slice, and counted.
+  const secret = { id: '0199aaaa-0000-7000-8000-0000000000f1', type: 'character', name: 'Quillfeather Vane', hidden: true };
+  await putElements(page, worldId, [...notes, secret]);
 
   // From here keel is unreachable, but for the fake sorting route.
   const sent = [];
@@ -180,6 +182,9 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('[data-words-only]').count()) === 1, 'and the review says the photos were not read');
   check(tag, sliceIds.includes(a.id) && sliceIds.includes(place.id), `the slice holds what the notes name (${body.slice.length} elements)`);
   check(tag, !sliceIds.some((id) => notes.some((n) => n.id === id)), 'and never the notes');
+  check(tag, !sliceIds.includes(secret.id) && !JSON.stringify(body.slice).includes(secret.name), 'nor the hidden Character a note names');
+  const heldLine = await page.locator('[data-held-back]').innerText().catch(() => '');
+  check(tag, heldLine === 'Not sent with your notes: one hidden element.', `and the review says so: ${JSON.stringify(heldLine)}`);
   check(tag, (await page.locator('.sort-card').count()) === 4, 'four cards');
   check(tag, (await page.locator('.sort-card.on').count()) === 0, 'nothing is ticked at first');
   check(tag, (await page.locator('[data-action=write]').innerText()) === 'File the notes as sorted', 'with nothing ticked, the button only files the notes');

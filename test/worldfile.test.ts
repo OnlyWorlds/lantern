@@ -115,6 +115,22 @@ describe('world files', () => {
     expect((await db.getWorldRecord(id))?.names).toEqual(names);
   });
 
+  it('a hidden element opens with its mark and Save a copy keeps it: a world file is a copy (folder spec §4.8)', async () => {
+    const els = [
+      { id: 'a2222222-0000-4000-8000-000000000001', type: 'character', name: 'Wren', hidden: true },
+      { id: 'a2222222-0000-4000-8000-000000000002', type: 'character', name: 'Ada' },
+    ];
+    const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000d1', name: 'Kept', kind: 'local', addedAt: '' }, els);
+    const id = await openWorldFile(bytes);
+    const back = await db.allElements(id);
+    expect(back.find((e) => e.name === 'Wren')?.hidden).toBe(true);
+    const rec = (await db.getWorldRecord(id))!;
+    const again = readWorldFile(toWorldFile(rec, back).bytes).files.filter((f) => f.path.startsWith('elements/'));
+    const bodies = again.map((f) => JSON.parse(new TextDecoder().decode(f.data)));
+    expect(bodies).toHaveLength(2);
+    expect(bodies.find((b) => b.name === 'Wren')?.hidden).toBe(true);
+  });
+
   it('a saved world opens again whole, the type taken from the folder', async () => {
     const els = [
       { id: 'a1111111-0000-4000-8000-000000000001', type: 'character', name: 'Ada', friends: ['a1111111-0000-4000-8000-000000000002'] },
