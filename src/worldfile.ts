@@ -63,7 +63,52 @@ function producerLineOf(world: unknown): Record<string, unknown> | null {
   return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : null;
 }
 
-export function toWorldFile(rec: db.WorldRecord, elements: OwElement[]): { bytes: Uint8Array; name: string } {
+const RECORDS_MANIFEST = 'records/RECORDS.json';
+
+/** What Save a copy asks before it hands a file over (folder spec §4.5 rule 11, OW-8). */
+export type CopyQuestion = { kind: 'private'; producers: string[] } | { kind: 'unreadable' };
+
+/** The producer a `records/<producer>/…` path belongs to, or null. */
+function producerOf(path: string): string | null {
+  const segs = path.split('/');
+  return segs.length > 2 && segs[0] === 'records' ? segs[1] : null;
+}
+
+/**
+ * A copy of a world on this phone, its records carried through. The SDK decides which records are
+ * private and leaves them out unless asked; which went is read back from the file itself, so
+ * Lantern holds no copy of the rule (Atlas's way, 1.82.0). No bytes when the records list will not
+ * read: nothing is left out by guess, so the person asks for every record or makes no copy.
+ */
+export function worldCopy(
+  rec: db.WorldRecord,
+  elements: OwElement[],
+  records: db.RecordFile[],
+  includePrivateRecords = false,
+): { bytes: Uint8Array | null; name: string; question?: CopyQuestion } {
+  try {
+    const made = toWorldFile(rec, elements, records, includePrivateRecords);
+    if (includePrivateRecords) return made;
+    const had = new Set(records.map((f) => producerOf(f.path)).filter((p): p is string => p !== null));
+    if (!had.size) return made;
+    const kept = new Set(readWorldFile(made.bytes).files.map((f) => producerOf(f.path)));
+    const producers = [...had].filter((p) => !kept.has(p)).sort();
+    return producers.length ? { ...made, question: { kind: 'private', producers } } : made;
+  } catch (e) {
+    // Lantern's options are always well formed, so the writer's TypeError is the records list.
+    if (e instanceof TypeError && !includePrivateRecords && records.some((f) => f.path === RECORDS_MANIFEST)) {
+      return { bytes: null, name: '', question: { kind: 'unreadable' } };
+    }
+    throw e;
+  }
+}
+
+export function toWorldFile(
+  rec: db.WorldRecord,
+  elements: OwElement[],
+  records: db.RecordFile[] = [],
+  includePrivateRecords = false,
+): { bytes: Uint8Array; name: string } {
   const world: Record<string, unknown> = { id: rec.id, name: rec.name };
   if (rec.description) world.description = rec.description;
   // The folder spec's names for the clock (Atlas reads both spellings of now).
@@ -81,8 +126,10 @@ export function toWorldFile(rec: db.WorldRecord, elements: OwElement[]): { bytes
     dir.add(fn.toLowerCase());
     files.push({ path: `${folderOf(type)}/${type}/${fn}`, data: enc.encode(JSON.stringify(body, null, 2) + '\n') });
   }
+  // As they came, byte for byte (rule 6); the writer leaves the private ones out unless asked.
+  for (const f of records) files.push({ path: f.path, data: f.data });
   const top = `${slugify(rec.name) || 'world'}-${rec.id.slice(0, 8)}`;
-  return { bytes: writeWorldFile(files, top), name: `${top}.zip` };
+  return { bytes: writeWorldFile(files, top, { includePrivateRecords }), name: `${top}.zip` };
 }
 
 /** Hand the file to the phone: the share sheet where there is one (Save to Files), else a download. */
@@ -141,7 +188,10 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
     count: elements.length,
     addedAt: new Date().toISOString(),
   };
+  // A file's records are kept unread for its next copy (rule 6); the reader hands over every one.
+  const records = read.files.filter((f) => f.path.startsWith('records/')).map((f) => ({ path: f.path, data: f.data }));
   await db.applyElements(rec.id, elements);
+  await db.putRecords(rec.id, records);
   await db.putWorldRecord(rec);
   return rec.id;
 }

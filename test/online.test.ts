@@ -149,6 +149,16 @@ describe('put it online', () => {
     expect(keel.worlds.size).toBe(1);
   });
 
+  it("a world's records move with it to the online copy, byte for byte, and never reach keel (folder spec §4.5 rule 6a)", async () => {
+    const local = await localWorld(ELS);
+    const recs = [{ path: 'records/lab/ledger.bin', data: new Uint8Array([0, 1, 2, 255]) }];
+    await db.putRecords(local, recs);
+    const id = await putOnline(local, '4321');
+    expect(await db.getRecords(id)).toEqual(recs);
+    expect(await db.getRecords(local)).toEqual([]);
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
+  });
+
   it('a dropped bulk: the retry reuses the world and the key, nothing twice', async () => {
     keel.accountPin = '4321';
     const local = await localWorld(ELS);

@@ -5,8 +5,67 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
-import { lanternProducer, openWorldFile, slugify, toWorldFile } from '../src/worldfile';
+import { lanternProducer, openWorldFile, slugify, toWorldFile, worldCopy } from '../src/worldfile';
 import * as db from '../src/db';
+
+// The standard's own pair for private records (schema-dist fixtures/owworld, OW-8, serial 49):
+// the same world asked for and left out. Vendored; Atlas carries the same two files.
+const ow8 = (name: string) => new Uint8Array(readFileSync(join(__dirname, 'fixtures/owworld', name)));
+const recordsOf = (bytes: Uint8Array) =>
+  readWorldFile(bytes).files.filter((f) => f.path.startsWith('records/')).sort((a, b) => (a.path < b.path ? -1 : 1));
+
+describe('records/ through a copy (folder spec §4.5 rules 6, 6a and 11)', () => {
+  it("a file's records come back byte for byte; a private producer is left out and said, asked it travels", async () => {
+    const asked = ow8('pass-OW-8-private-asked.owworld');
+    const id = await openWorldFile(asked);
+    const rec = (await db.getWorldRecord(id))!;
+    const els = await db.allElements(id);
+    const recs = await db.getRecords(id);
+    expect(recs.map((f) => f.path)).toEqual(recordsOf(asked).map((f) => f.path));
+
+    const def = worldCopy(rec, els, recs);
+    expect(def.question).toEqual({ kind: 'private', producers: ['fold'] });
+    const want = recordsOf(ow8('pass-OW-8-private-left-out.owworld'));
+    const got = recordsOf(def.bytes!);
+    expect(got.map((f) => f.path)).toEqual(want.map((f) => f.path));
+    got.forEach((f, i) => expect(Buffer.from(f.data).equals(Buffer.from(want[i].data))).toBe(true));
+
+    const all = worldCopy(rec, els, recs, true);
+    expect(all.question).toBeUndefined();
+    const every = recordsOf(all.bytes!);
+    const src = recordsOf(asked);
+    expect(every.map((f) => f.path)).toEqual(src.map((f) => f.path));
+    every.forEach((f, i) => expect(Buffer.from(f.data).equals(Buffer.from(src[i].data))).toBe(true));
+    await db.removeWorld(id);
+    expect(await db.getRecords(id)).toEqual([]);
+  });
+
+  it('a records list that will not read leaves nothing out by guess: no copy until every record is asked for', async () => {
+    const enc = new TextEncoder();
+    const file = writeWorldFile(
+      [
+        { path: 'world.json', data: enc.encode(JSON.stringify({ id: 'w0000000-0000-4000-8000-0000000000c1', name: 'Bad list' })) },
+        { path: 'records/RECORDS.json', data: enc.encode('{"producer":"fold"}') },
+        { path: 'records/fold/spine.jsonl', data: enc.encode('{"a":1}\n') },
+      ],
+      'Bad list',
+      { includePrivateRecords: true },
+    );
+    const id = await openWorldFile(file);
+    const rec = (await db.getWorldRecord(id))!;
+    const recs = await db.getRecords(id);
+    const def = worldCopy(rec, [], recs);
+    expect(def).toMatchObject({ bytes: null, question: { kind: 'unreadable' } });
+    expect(recordsOf(worldCopy(rec, [], recs, true).bytes!).map((f) => f.path)).toEqual(['records/RECORDS.json', 'records/fold/spine.jsonl']);
+    await db.removeWorld(id);
+  });
+
+  it('a world with no records asks nothing', () => {
+    const made = worldCopy({ id: 'w0000000-0000-4000-8000-0000000000c2', name: 'Plain', kind: 'local', addedAt: '' }, [], []);
+    expect(made.question).toBeUndefined();
+    expect(recordsOf(made.bytes!)).toEqual([]);
+  });
+});
 
 
 describe('world files', () => {

@@ -20,7 +20,7 @@ import { setPin } from '../pin';
 import { pendingJoin } from '../join';
 import { SIGNUP_URL } from '../invite';
 import { uuid7 } from '../uuid7';
-import { lanternProducer, openWorldFile, saveFile, toWorldFile } from '../worldfile';
+import { lanternProducer, openWorldFile, saveFile, worldCopy, type CopyQuestion } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
 import { errorText, go, sheet, toast, topbar } from '../ui';
 import { installButton, onHomeScreen } from '../install';
@@ -325,10 +325,11 @@ function saveCopyButton(rec: db.WorldRecord): HTMLElement {
   b.addEventListener('click', async () => {
     b.disabled = true;
     try {
-      const { bytes, name } = toWorldFile(rec, await db.allElements(rec.id));
-      const how = await saveFile(bytes, name);
-      await db.updateWorldRecord(rec.id, { lastCopy: new Date().toISOString() });
-      toast(how === 'shared' ? 'Copy handed over.' : `Saved ${name}.`);
+      const elements = await db.allElements(rec.id);
+      const records = await db.getRecords(rec.id);
+      const made = worldCopy(rec, elements, records);
+      if (made.question) privateRecordsSheet(made.question, made.bytes && { bytes: made.bytes, name: made.name }, () => worldCopy(rec, elements, records, true), rec.id);
+      else if (made.bytes) await handOver(rec.id, made.bytes, made.name);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') toast(errorText(e));
     } finally {
@@ -336,6 +337,56 @@ function saveCopyButton(rec: db.WorldRecord): HTMLElement {
     }
   });
   return b;
+}
+
+async function handOver(id: string, bytes: Uint8Array, name: string): Promise<void> {
+  const how = await saveFile(bytes, name);
+  await db.updateWorldRecord(id, { lastCopy: new Date().toISOString() });
+  toast(how === 'shared' ? 'Copy handed over.' : `Saved ${name}.`);
+}
+
+/**
+ * Records a tool keeps private stay out of a copy unless the person asks (folder spec §4.5 rule
+ * 11, Atlas's question in 1.82.0). A records list that will not read leaves nothing out by guess:
+ * every record, or no copy. Each choice is its own tap, so the share sheet opens from it.
+ */
+function privateRecordsSheet(
+  q: CopyQuestion,
+  leftOut: { bytes: Uint8Array; name: string } | null,
+  withAll: () => { bytes: Uint8Array | null; name: string },
+  id: string,
+): void {
+  const list = (xs: string[]) => (xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const unreadable = q.kind === 'unreadable';
+  const title = unreadable ? 'Lantern cannot tell which records are private' : 'Some records are private';
+  sheet((close) => {
+    const choose = (pick: () => { bytes: Uint8Array | null; name: string } | null) => async () => {
+      const made = pick();
+      close();
+      if (!made?.bytes) return;
+      try {
+        await handOver(id, made.bytes, made.name);
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') toast(errorText(e));
+      }
+    };
+    const all = h('button', { class: 'btn', type: 'button', 'data-records': 'include' }, unreadable ? 'Include every record' : 'Include them');
+    all.addEventListener('click', choose(withAll));
+    const other = unreadable
+      ? h('button', { class: 'btn', type: 'button', 'data-records': 'cancel' }, 'Cancel')
+      : h('button', { class: 'btn btn-standard', type: 'button', 'data-records': 'leave-out' }, 'Leave them out');
+    other.addEventListener('click', unreadable ? () => close() : choose(() => leftOut));
+    const what =
+      q.kind === 'private'
+        ? `This world holds records ${q.producers.length === 1 ? 'a tool keeps' : 'tools keep'} private: ${list(q.producers.map((p) => `records/${p}`))}. A copy leaves them out unless you ask, so a tool's own notes stay with you when the world is shared.`
+        : "This world's records list (records/RECORDS.json) cannot be read, so Lantern cannot tell which records their tools keep private, and leaves nothing out by guess.";
+    return [
+      h('h2', null, title),
+      h('p', { class: 'dim', style: 'margin:0' }, what),
+      h('p', { class: 'dim', style: 'margin:0' }, unreadable ? 'Include every record only in a copy you keep for yourself.' : 'Include them only in a copy you keep for yourself.'),
+      h('div', { class: 'row-gap' }, other, all),
+    ];
+  }, title);
 }
 
 function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {

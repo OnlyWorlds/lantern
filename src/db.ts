@@ -160,10 +160,29 @@ export async function updateWorldRecord(id: string, patch: Partial<WorldRecord>)
   return cur ? { ...cur, ...patch } : undefined;
 }
 
+/**
+ * A world file's `records/` entries, kept byte-exact for the next copy (folder spec §4.5 rule 6:
+ * a tool that rewrites a folder copies records through untouched). Lantern never reads them.
+ */
+export interface RecordFile {
+  path: string;
+  data: Uint8Array;
+}
+const recordsKey = (id: string) => `records-${id}`;
+
+export async function getRecords(worldId: string): Promise<RecordFile[]> {
+  return (await kvGet<RecordFile[]>(recordsKey(worldId))) ?? [];
+}
+
+export async function putRecords(worldId: string, files: RecordFile[]): Promise<void> {
+  await kvSet(recordsKey(worldId), files.length ? files : undefined);
+}
+
 export async function removeWorld(id: string): Promise<void> {
   const db = await app();
-  const t = db.transaction('worlds', 'readwrite');
+  const t = db.transaction(['worlds', 'kv'], 'readwrite');
   t.objectStore('worlds').delete(id);
+  t.objectStore('kv').delete(recordsKey(id));
   await done(t);
   worldDbs.get(id)?.then((d) => d.close());
   worldDbs.delete(id);
