@@ -108,6 +108,19 @@ export function typeName(type: string, opts: TypeNameOptions = {}): string {
   return opts.start ? label : label.toLowerCase();
 }
 
+/**
+ * The open world's own word for a supertype ("AI agent" for a Character's Agent), or null when
+ * the world names only the type: a line that prints it has said the supertype, so the data's
+ * value is not printed beside it (Atlas 1.82.2, Seethe h20 #11028).
+ */
+export function supertypeWord(type: string, supertype: unknown, opts: Pick<TypeNameOptions, 'names'> = {}): string | null {
+  if (typeof supertype !== 'string' || !supertype.trim()) return null;
+  const names = 'names' in opts ? opts.names : openWorldWords()?.names;
+  if (names === undefined || names === null) return null;
+  const own = typeWord({ x_names: names }, type, { supertype });
+  return own !== null && own !== typeWord({ x_names: names }, type, {}) ? own : null;
+}
+
 /** "Characters" */
 export function typePlural(type: string): string {
   return typeName(type, { many: true, start: true });

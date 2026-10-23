@@ -8,6 +8,7 @@ import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinFor, setPin } from '../pin';
 import { keyRefusalText, newKeyCures } from '../keyrefusal';
 import {
+  supertypeWord,
   customEditable,
   customFields,
   fieldInfo,
@@ -682,7 +683,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
 
     // A caught note is a Narrative underneath (Skeld's convention), but it reads as what it is to the
     // one who caught it (Quillon, h37 #4275: "Narrative · Unsorted" beside a card that said "not elements").
-    const kind = isUnsortedNote(el) ? 'Unsorted note' : [typeLabel(el.type, el.supertype), el.supertype, el.subtype].filter(Boolean).join(' · ');
+    const kind = isUnsortedNote(el) ? 'Unsorted note' : [typeLabel(el.type, el.supertype), supertypeWord(el.type, el.supertype) ? '' : el.supertype, el.subtype].filter(Boolean).join(' · ');
     // A caught line can be a sentence long: the title steps down so it does not fill the screen.
     const len = [...elName(el)].length;
     const nameH = h('h1', { style: len > 44 ? 'font-size:1.2rem' : len > 26 ? 'font-size:1.4rem' : null }, elName(el), wait('name'));

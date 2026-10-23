@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { ELEMENT_TYPES, getElementLabel } from '@onlyworlds/sdk';
 import fixture from './fixtures/names.fixture.json';
-import { aTypeName, setTypeWordsSource, typeCount, typeLabel, typeName, typePlural } from '../src/schema';
+import { aTypeName, setTypeWordsSource, supertypeWord, typeCount, typeLabel, typeName, typePlural } from '../src/schema';
 
 const standard = (type: string, many: boolean): string =>
   many ? (ELEMENT_TYPES.includes(type as never) ? getElementLabel(type as never) : type).toLowerCase() : type.toLowerCase();
@@ -45,5 +45,14 @@ describe("the open world's words", () => {
     setTypeWordsSource(() => null);
     expect(typeLabel('character')).toBe('Character');
     expect(typeCount(2, 'family')).toBe('2 families');
+  });
+
+  it("name a supertype only when the world has a word for it (Seethe h20 #11028)", () => {
+    setTypeWordsSource(() => ({ names }));
+    expect(supertypeWord('character', 'Agent')).toBe('AI agent');
+    expect(supertypeWord('character', 'Hero')).toBeNull(); // the type's word, not the supertype's
+    expect(supertypeWord('character', '')).toBeNull();
+    setTypeWordsSource(() => null);
+    expect(supertypeWord('character', 'Agent')).toBeNull();
   });
 });

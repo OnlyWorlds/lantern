@@ -56,10 +56,15 @@ async function read(page, tag, w, own) {
   await page.waitForTimeout(600);
   const list = await page.locator('main').innerText();
   check(tag, list.includes(want('2 Employees', '2 characters')), `the type screen's count (${want('2 Employees', '2 characters')})`);
+  // Bot's row says the world's word for its supertype once (Atlas 1.82.2, Seethe h20 #11028).
+  check(tag, own ? list.includes('AI agent') && !list.includes('AI agent · Agent') : /character · Agent/i.test(list),
+    `Bot's row (${want('AI agent, said once', 'character · Agent')})`);
   await page.goto(`${BASE}/#/w/${id(w, 0)}/e/${id(w, 2)}`);
   await page.waitForSelector('[data-screen=element]');
   const el = await page.locator('main').innerText();
-  check(tag, el.includes(want('AI agent · Agent', 'Character · Agent')), `Bot's kind line (${want('AI agent · Agent', 'Character · Agent')})`);
+  // The world's word for the supertype says it once (Atlas 1.82.2, Seethe h20 #11028).
+  check(tag, own ? el.includes('AI agent') && !el.includes('AI agent · Agent') : el.includes('Character · Agent'),
+    `Bot's kind line (${want('AI agent, said once', 'Character · Agent')})`);
   await page.screenshot({ path: `${OUT}/names-${tag}-${own ? 'own' : 'std'}-bot.png` });
   await page.goto(`${BASE}/#/w/${id(w, 0)}/t/law`);
   await page.waitForTimeout(600);
