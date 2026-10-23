@@ -14,4 +14,4 @@ No secret ever goes into this repository or into anything the browser loads: the
 
 ## Licence and contributions
 
-The code is MIT (`LICENSE`). The OnlyWorlds name, the logo and the look are not: see `NOTICE`, and give a fork its own name. Issues are welcome on this repository; pull requests are read, but merging one is not promised.
+The code is MIT (`LICENSE`). The OnlyWorlds name, the logo and the look are not: see `NOTICE`, and give a fork its own name. Issues are welcome: a bug, a wrong word, a thing you could not do. Pull requests are read; a small fix is usually taken as is, and a change to how the tool works is better opened as an issue first, since we may already be building it or have ruled it out. The person who answers here is the tool's maintainer; a reply can take a few days.
