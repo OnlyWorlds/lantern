@@ -108,6 +108,13 @@ h2 {
   font-size: 0.82em;
 }
 
+/* Proposed, not yet reviewed (src/review.ts): words in the accent, never only a colour. */
+.proposed-mark {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--lan-accent);
+}
+
 .dim {
   color: var(--lan-ink-dim);
 }

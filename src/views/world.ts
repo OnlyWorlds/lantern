@@ -36,6 +36,7 @@ import { moveNow } from './time';
 import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { agentLine } from '../agentmark';
+import { proposedWord } from '../review';
 import { knownOfLine } from '../knownof';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
@@ -333,9 +334,12 @@ export function homeView(s: WorldSession): View {
       return;
     }
     const counts = s.counts();
+    // Proposed elements are counted apart (src/review.ts): a type holding only those keeps its tile.
+    const proposedByType = s.proposedCounts();
+    const proposedTotal = [...proposedByType.values()].reduce((a, b) => a + b, 0);
     // Pins and markers are map furniture, mostly unnamed: they go last, after the world's things.
     const furniture = (t: string) => (t === 'pin' || t === 'marker' ? 1 : 0);
-    const present = TYPES.filter((t) => counts.get(t)).sort((a, b) => furniture(a) - furniture(b) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
+    const present = TYPES.filter((t) => counts.get(t) || proposedByType.get(t)).sort((a, b) => furniture(a) - furniture(b) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
     // A world you can write offers every type but the map ones, the empty last: "New" lives on a type's list,
     // so a type with no tile could never get its first element (S397).
     const all = s.canWrite ? [...present, ...TYPES.filter((t) => !counts.get(t) && !MAP_TYPES.has(t))] : present;
@@ -435,6 +439,10 @@ export function homeView(s: WorldSession): View {
         : '',
       h('p', { class: 'section-label' }, 'In this world'),
       h('div', { class: 'type-grid' }, ...tiles),
+      proposedTotal
+        ? h('p', { class: 'muted small', style: 'margin:0', 'data-role': 'home-proposed' },
+          `${proposedTotal} proposed, not yet reviewed, ${proposedTotal === 1 ? 'is' : 'are'} not counted above. Each says so on its row.`)
+        : '',
       more ?? '',
       roomChoice(s, renderBody),
       // Invite someone: the owner makes the link here (keel C1, SDK 4.24; S407 sent them to the website).
@@ -695,7 +703,10 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         return c && c.type === 'character' ? elName(c) : undefined;
       })
       : null;
+    // Proposed, not yet reviewed (src/review.ts, Keel #565's reader rule): a word, since a keeper has to see it.
+    const proposed = proposedWord(el);
     const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind),
+      proposed ? h('span', { class: 'proposed-mark', 'data-role': 'proposed-mark' }, proposed === 'proposed' ? 'Proposed, not yet reviewed: not part of the world until a keeper accepts it on OnlyWorlds.' : 'Proposed and not yet reviewed; the proposal has lapsed.') : null,
       agent ? h('span', { class: 'muted agent-mark', 'data-role': 'agent-mark' }, agent) : null);
     if (editable) {
       headText.style.cursor = 'pointer';

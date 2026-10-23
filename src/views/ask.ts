@@ -3,6 +3,7 @@
 // "your world does not say" is the answer. For an account world, with signal, the same elements
 // can be put into a sentence by keel's proxy (#159), on a tap: the sources stay on screen.
 import { buildAskContext, lookupWorld, type OwElement, type OwLookupHit } from '@onlyworlds/sdk';
+import { handsOnAsProposed } from '../review';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { fieldLabel } from '../schema';
@@ -78,8 +79,17 @@ export function askView(s: WorldSession): View {
   };
   const sentence = (q: string, hits: OwLookupHit<OwElement>[], askNow: boolean): HTMLElement | '' => {
     if (!signedIn || !accountWorld) return '';
+    // Ask hands the world to keel's AI, so a proposed element stays on the phone (src/review.ts, Keel
+    // #565's reader rule): shown in the list with its word, never sent as fact, and said how many.
+    const handed = hits.filter((x) => !handsOnAsProposed(x.element));
+    const leftOut = hits.length - handed.length;
+    const leftLine = leftOut ? ` ${leftOut === 1 ? 'One proposed element, not yet reviewed, is' : `${leftOut} proposed elements, not yet reviewed, are`} not sent.` : '';
+    if (!handed.length) {
+      return h('p', { class: 'muted small', style: 'margin:0', 'data-why': 'proposed' },
+        'Only proposed elements match, and a proposed element is not sent to be put into words until a keeper accepts it.');
+    }
     // The elements on screen, in their order (the SDK's buildAskContext, keel's limits).
-    const { context } = buildAskContext(hits, s.lookupIndex());
+    const { context } = buildAskContext(handed, s.lookupIndex());
     // One box per world, question and the very text sent: a redraw while it asks, or after, shows
     // the same box (never a second spend); elements that changed make a new one.
     const key = `${s.id}|${q}|${context.join('|')}`;
@@ -93,7 +103,7 @@ export function askView(s: WorldSession): View {
     answered.set(key, box);
     const btn = h('button', { class: 'btn', type: 'button' }, icon('spark', 18), 'Answer it in a sentence');
     const n = context.length;
-    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends ${n === hits.length ? 'these' : `the first`} ${n === 1 ? 'one' : n} to OnlyWorlds to be put into words. It answers from them only.`);
+    const hint = h('p', { class: 'muted small', style: 'margin:0' }, `Sends ${n === handed.length ? 'these' : `the first`} ${n === 1 ? 'one' : n} to OnlyWorlds to be put into words. It answers from them only.${leftLine}`);
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       hint.textContent = 'Asking…';

@@ -4,6 +4,7 @@
 // POST /account/sort). Nothing here writes: the screen hands the plan to the outbox.
 import { isKnownOf, lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
 import { BASE_FIELDS, fieldInfo, isType } from './schema';
+import { handsOnAsProposed } from './review';
 
 /** One element the notes may be about, as the route takes it. */
 export interface SliceItem {
@@ -175,6 +176,9 @@ export function buildSlice(
         const el = hit.element;
         // A stub (keel's known of) is never written, so no row may be planned onto it (the S444 gate, G3).
         if (noteIds.has(el.id) || NOT_IN_SLICE.has(el.type) || isKnownOf(el)) continue;
+        // The slice hands the world to keel's AI: a proposed element is not canon until a keeper
+        // accepts it, so it is never offered as what the world has (src/review.ts, Keel #565).
+        if (handsOnAsProposed(el)) continue;
         if (el.type === 'narrative' && (el.supertype === 'Unsorted' || el.supertype === SORTED)) continue;
         // An element with no name, or one past keel's limit, cannot be named in a row: left out.
         const len = [...sliceName(el)].length;

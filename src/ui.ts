@@ -4,6 +4,7 @@ import { h } from './dom';
 import { icon } from './icons';
 import { supertypeWord, typeAbbr, typeColor, typeName } from './schema';
 import { isKnownOf } from './knownof';
+import { proposedWord } from './review';
 
 /** replace: the screen we leave (a form just submitted) drops out of Back's history. */
 export function go(hash: string, replace = false): void {
@@ -24,7 +25,8 @@ export function elRow(worldId: string, el: OwElement, extra?: string): HTMLEleme
   // A caught note reads as one in every list, as on its own page (Quillon, h37 #4275).
   const note = el.type === 'narrative' && el.supertype === 'Unsorted';
   // keel's stub says so before the tap: a player knows of it, not its details.
-  const hint = [...(note ? ['unsorted note'] : [typeName(el.type, { supertype: el.supertype }), supertypeWord(el.type, el.supertype) ? '' : el.supertype]), isKnownOf(el) ? 'known of' : '', extra].filter(Boolean).join(' · ');
+  // A proposed element says so too (src/review.ts, Keel #565's reader rule).
+  const hint = [...(note ? ['unsorted note'] : [typeName(el.type, { supertype: el.supertype }), supertypeWord(el.type, el.supertype) ? '' : el.supertype]), isKnownOf(el) ? 'known of' : '', proposedWord(el), extra].filter(Boolean).join(' · ');
   return h(
     'a',
     { class: 'el-row', href: `#/w/${worldId}/e/${el.id}` },

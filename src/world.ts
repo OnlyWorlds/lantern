@@ -24,6 +24,7 @@ import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
 import { isRoomElement, roomShown, setRoomShown } from './room';
+import { isProposed } from './review';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -417,9 +418,17 @@ export class WorldSession {
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
   }
 
+  /** What the world holds, by type: a proposed element is not yet the world's own (src/review.ts). */
   counts(): Map<string, number> {
     const m = new Map<string, number>();
-    for (const e of this.lore()) m.set(e.type, (m.get(e.type) ?? 0) + 1);
+    for (const e of this.lore()) if (!isProposed(e)) m.set(e.type, (m.get(e.type) ?? 0) + 1);
+    return m;
+  }
+
+  /** The proposed elements in view, by type: their tiles stay reachable, and the home says how many. */
+  proposedCounts(): Map<string, number> {
+    const m = new Map<string, number>();
+    for (const e of this.lore()) if (isProposed(e)) m.set(e.type, (m.get(e.type) ?? 0) + 1);
     return m;
   }
 
