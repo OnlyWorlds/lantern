@@ -152,10 +152,14 @@ describe('put it online', () => {
   it("a world's records move with it to the online copy, byte for byte, and never reach keel (folder spec §4.5 rule 6a)", async () => {
     const local = await localWorld(ELS);
     const recs = [{ path: 'records/lab/ledger.bin', data: new Uint8Array([0, 1, 2, 255]) }];
+    const media = [{ path: 'media/a.png', data: new Uint8Array([137, 80, 78, 71]) }];
     await db.putRecords(local, recs);
+    await db.putMedia(local, media);
     const id = await putOnline(local, '4321');
     expect(await db.getRecords(id)).toEqual(recs);
+    expect(await db.getMedia(id)).toEqual(media);
     expect(await db.getRecords(local)).toEqual([]);
+    expect(await db.getMedia(local)).toEqual([]);
     expect(keel.worlds.get(id)!.els.size).toBe(2);
   });
 

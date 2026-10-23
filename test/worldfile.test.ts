@@ -20,10 +20,19 @@ describe('records/ through a copy (folder spec §4.5 rules 6, 6a and 11)', () =>
     const id = await openWorldFile(asked);
     const rec = (await db.getWorldRecord(id))!;
     const els = await db.allElements(id);
-    const recs = await db.getRecords(id);
-    expect(recs.map((f) => f.path)).toEqual(recordsOf(asked).map((f) => f.path));
+    const recs = [...(await db.getRecords(id)), ...(await db.getMedia(id))];
+    expect(recs.filter((f) => f.path.startsWith('records/')).map((f) => f.path)).toEqual(recordsOf(asked).map((f) => f.path));
+    // The file's picture comes back too, whatever is asked (OW-9: a rewriter passes the parts through).
+    const mediaOf = (bytes: Uint8Array) => readWorldFile(bytes).files.filter((f) => f.path.startsWith('media/'));
+    const picture = mediaOf(asked);
+    expect(picture.map((f) => f.path)).toEqual(['media/a.png']);
 
     const def = worldCopy(rec, els, recs);
+    for (const made of [def.bytes!, worldCopy(rec, els, recs, true).bytes!]) {
+      const back = mediaOf(made);
+      expect(back.map((f) => f.path)).toEqual(['media/a.png']);
+      expect(Buffer.from(back[0].data).equals(Buffer.from(picture[0].data))).toBe(true);
+    }
     expect(def.question).toEqual({ kind: 'private', producers: ['fold'] });
     const want = recordsOf(ow8('pass-OW-8-private-left-out.owworld'));
     const got = recordsOf(def.bytes!);
@@ -38,6 +47,7 @@ describe('records/ through a copy (folder spec §4.5 rules 6, 6a and 11)', () =>
     every.forEach((f, i) => expect(Buffer.from(f.data).equals(Buffer.from(src[i].data))).toBe(true));
     await db.removeWorld(id);
     expect(await db.getRecords(id)).toEqual([]);
+    expect(await db.getMedia(id)).toEqual([]);
   });
 
   it('a records list that will not read leaves nothing out by guess: no copy until every record is asked for', async () => {

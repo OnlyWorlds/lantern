@@ -121,9 +121,10 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     throw new Error(`The world is online, but only ${arrived} of ${elements.length} elements read back. Your phone copy is kept; try again.`);
   }
 
-  // 5. Only now: the phone-only copy goes. Its records move across first: keel holds none, so
+  // 5. Only now: the phone-only copy goes. Its records and media files move across first: keel holds none, so
   // they are not the capture's to drop (folder spec §4.5 rule 6a).
   await db.putRecords(online.id, await db.getRecords(localId));
+  await db.putMedia(online.id, await db.getMedia(localId));
   forgetSession(localId);
   await db.removeWorld(localId);
   moveDraft(localId, online.id);

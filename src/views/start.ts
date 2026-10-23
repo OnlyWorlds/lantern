@@ -326,9 +326,9 @@ function saveCopyButton(rec: db.WorldRecord): HTMLElement {
     b.disabled = true;
     try {
       const elements = await db.allElements(rec.id);
-      const records = await db.getRecords(rec.id);
-      const made = worldCopy(rec, elements, records);
-      if (made.question) privateRecordsSheet(made.question, made.bytes && { bytes: made.bytes, name: made.name }, () => worldCopy(rec, elements, records, true), rec.id);
+      const kept = [...(await db.getRecords(rec.id)), ...(await db.getMedia(rec.id))];
+      const made = worldCopy(rec, elements, kept);
+      if (made.question) privateRecordsSheet(made.question, made.bytes && { bytes: made.bytes, name: made.name }, () => worldCopy(rec, elements, kept, true), rec.id);
       else if (made.bytes) await handOver(rec.id, made.bytes, made.name);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') toast(errorText(e));

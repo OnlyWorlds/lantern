@@ -75,7 +75,8 @@ function producerOf(path: string): string | null {
 }
 
 /**
- * A copy of a world on this phone, its records carried through. The SDK decides which records are
+ * A copy of a world on this phone, the parts it keeps unread carried through (`kept`: its records/
+ * and media/, as they came). The SDK decides which records are
  * private and leaves them out unless asked; which went is read back from the file itself, so
  * Lantern holds no copy of the rule (Atlas's way, 1.82.0). No bytes when the records list will not
  * read: nothing is left out by guess, so the person asks for every record or makes no copy.
@@ -83,20 +84,20 @@ function producerOf(path: string): string | null {
 export function worldCopy(
   rec: db.WorldRecord,
   elements: OwElement[],
-  records: db.RecordFile[],
+  kept: db.RecordFile[],
   includePrivateRecords = false,
 ): { bytes: Uint8Array | null; name: string; question?: CopyQuestion } {
   try {
-    const made = toWorldFile(rec, elements, records, includePrivateRecords);
+    const made = toWorldFile(rec, elements, kept, includePrivateRecords);
     if (includePrivateRecords) return made;
-    const had = new Set(records.map((f) => producerOf(f.path)).filter((p): p is string => p !== null));
+    const had = new Set(kept.map((f) => producerOf(f.path)).filter((p): p is string => p !== null));
     if (!had.size) return made;
-    const kept = new Set(readWorldFile(made.bytes).files.map((f) => producerOf(f.path)));
-    const producers = [...had].filter((p) => !kept.has(p)).sort();
+    const inFile = new Set(readWorldFile(made.bytes).files.map((f) => producerOf(f.path)));
+    const producers = [...had].filter((p) => !inFile.has(p)).sort();
     return producers.length ? { ...made, question: { kind: 'private', producers } } : made;
   } catch (e) {
     // Lantern's options are always well formed, so the writer's TypeError is the records list.
-    if (e instanceof TypeError && !includePrivateRecords && records.some((f) => f.path === RECORDS_MANIFEST)) {
+    if (e instanceof TypeError && !includePrivateRecords && kept.some((f) => f.path === RECORDS_MANIFEST)) {
       return { bytes: null, name: '', question: { kind: 'unreadable' } };
     }
     throw e;
@@ -106,7 +107,7 @@ export function worldCopy(
 export function toWorldFile(
   rec: db.WorldRecord,
   elements: OwElement[],
-  records: db.RecordFile[] = [],
+  kept: db.RecordFile[] = [],
   includePrivateRecords = false,
 ): { bytes: Uint8Array; name: string } {
   const world: Record<string, unknown> = { id: rec.id, name: rec.name };
@@ -126,8 +127,8 @@ export function toWorldFile(
     dir.add(fn.toLowerCase());
     files.push({ path: `${folderOf(type)}/${type}/${fn}`, data: enc.encode(JSON.stringify(body, null, 2) + '\n') });
   }
-  // As they came, byte for byte (rule 6); the writer leaves the private ones out unless asked.
-  for (const f of records) files.push({ path: f.path, data: f.data });
+  // As they came, byte for byte (rule 6, OW-9); the writer leaves private records out unless asked.
+  for (const f of kept) files.push({ path: f.path, data: f.data });
   const top = `${slugify(rec.name) || 'world'}-${rec.id.slice(0, 8)}`;
   return { bytes: writeWorldFile(files, top, { includePrivateRecords }), name: `${top}.zip` };
 }
@@ -188,10 +189,12 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
     count: elements.length,
     addedAt: new Date().toISOString(),
   };
-  // A file's records are kept unread for its next copy (rule 6); the reader hands over every one.
-  const records = read.files.filter((f) => f.path.startsWith('records/')).map((f) => ({ path: f.path, data: f.data }));
+  // A file's records and media are kept unread for its next copy (rule 6, OW-9); the reader hands
+  // over every one.
+  const part = (p: string) => read.files.filter((f) => f.path.startsWith(p)).map((f) => ({ path: f.path, data: f.data }));
   await db.applyElements(rec.id, elements);
-  await db.putRecords(rec.id, records);
+  await db.putRecords(rec.id, part('records/'));
+  await db.putMedia(rec.id, part('media/'));
   await db.putWorldRecord(rec);
   return rec.id;
 }

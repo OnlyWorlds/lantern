@@ -66,6 +66,8 @@ if (left.download) {
   const got = recordsOf(await bytesOf(left.download));
   const want = source.filter((f) => !f.path.startsWith('records/fold/'));
   check(same(got, want), `Leave them out: every other record byte for byte, RECORDS.json kept, fold left out (${got.length} of ${source.length})`);
+  const mediaOf = (bytes) => readWorldFile(bytes).files.filter((f) => f.path.startsWith('media/'));
+  check(same(mediaOf(await bytesOf(left.download)), mediaOf(asked)), "the file's picture, media/a.png, comes back byte for byte");
 } else check(false, 'Leave them out hands a file over');
 
 const all = await saveWith('Include them');

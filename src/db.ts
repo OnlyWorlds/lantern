@@ -161,14 +161,16 @@ export async function updateWorldRecord(id: string, patch: Partial<WorldRecord>)
 }
 
 /**
- * A world file's `records/` entries, kept byte-exact for the next copy (folder spec §4.5 rule 6:
- * a tool that rewrites a folder copies records through untouched). Lantern never reads them.
+ * A world file's parts Lantern keeps but never reads, byte-exact for the next copy: its
+ * `records/` (folder spec §4.5 rule 6: a tool that rewrites a folder copies records through
+ * untouched) and its `media/` (OW-9: a rewriter passes the parts through).
  */
 export interface RecordFile {
   path: string;
   data: Uint8Array;
 }
 const recordsKey = (id: string) => `records-${id}`;
+const mediaKey = (id: string) => `media-${id}`;
 
 export async function getRecords(worldId: string): Promise<RecordFile[]> {
   return (await kvGet<RecordFile[]>(recordsKey(worldId))) ?? [];
@@ -178,11 +180,20 @@ export async function putRecords(worldId: string, files: RecordFile[]): Promise<
   await kvSet(recordsKey(worldId), files.length ? files : undefined);
 }
 
+export async function getMedia(worldId: string): Promise<RecordFile[]> {
+  return (await kvGet<RecordFile[]>(mediaKey(worldId))) ?? [];
+}
+
+export async function putMedia(worldId: string, files: RecordFile[]): Promise<void> {
+  await kvSet(mediaKey(worldId), files.length ? files : undefined);
+}
+
 export async function removeWorld(id: string): Promise<void> {
   const db = await app();
   const t = db.transaction(['worlds', 'kv'], 'readwrite');
   t.objectStore('worlds').delete(id);
   t.objectStore('kv').delete(recordsKey(id));
+  t.objectStore('kv').delete(mediaKey(id));
   await done(t);
   worldDbs.get(id)?.then((d) => d.close());
   worldDbs.delete(id);
