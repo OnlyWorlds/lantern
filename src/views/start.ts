@@ -443,7 +443,8 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
 
 /** Open a world file. The welcome's quiet "I have a world file" is the same door for a phone with no world yet. */
 function openFileButton(words = 'Open a world file', attrs: Record<string, string> = { class: 'btn' }): HTMLElement {
-  const input = h('input', { type: 'file', accept: '.zip,application/zip', style: 'display:none', 'aria-label': 'A world file' });
+  // The standard's .owworld beside the .zip Atlas and Lantern save: one file (folder spec 4.7 OW-1), and the bytes decide.
+  const input = h('input', { type: 'file', accept: '.owworld,.zip,application/zip', style: 'display:none', 'aria-label': 'A world file' });
   const label = h('span', null, words);
   const b = h('button', { ...attrs, type: 'button' }, label, input);
   b.addEventListener('click', (e) => {

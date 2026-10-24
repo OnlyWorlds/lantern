@@ -2,7 +2,7 @@
 // pins, zones and markers under spatial/<type>/), the way Atlas keeps a world on disk (SDK
 // readWorldFile/writeWorldFile). A world on this phone only is saved as one, and any world file
 // opens as a world on this phone.
-import { readWorldFile, SPATIAL_TYPES, writeWorldFile, type OwElement, type OwWorldFileEntry } from '@onlyworlds/sdk';
+import { OwWorldFileError, readWorldFile, SPATIAL_TYPES, writeWorldFile, type OwElement, type OwWorldFileEntry } from '@onlyworlds/sdk';
 import * as db from './db';
 import { isType } from './schema';
 import { clockFrom } from './time';
@@ -152,8 +152,16 @@ export async function saveFile(bytes: Uint8Array, name: string): Promise<'shared
 }
 
 /** Open a world file as a world on this phone. Returns its id; an id already here is refused. */
+/** Said for a file the SDK cannot read at all (damaged, cut short, not a zip), in place of its path-and-cause line. */
+export const NOT_OPENABLE = 'That file is not a world Lantern can open.';
+
 export async function openWorldFile(bytes: Uint8Array): Promise<string> {
-  const read = readWorldFile(bytes);
+  let read: ReturnType<typeof readWorldFile>;
+  try {
+    read = readWorldFile(bytes);
+  } catch (e) {
+    throw e instanceof OwWorldFileError && e.reason === 'not_openable' ? new Error(NOT_OPENABLE) : e;
+  }
   if (await db.getWorldRecord(read.worldId)) {
     throw new Error(`"${read.name || 'This world'}" is already on this phone.`);
   }

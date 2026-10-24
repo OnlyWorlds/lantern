@@ -301,7 +301,12 @@ async function walk(engine, tag) {
         { path: 'world.json', data: enc({ id: '0f0f0f0f-0000-4000-8000-00000000f17e', name: 'Sent by a friend' }) },
         { path: 'elements/character/elrod--0000f17e.json', data: enc({ id: 'f17e0000-0000-4000-8000-000000000001', name: 'Elrod' }) },
       ], 'sent-by-a-friend');
-      await (await chooser).setFiles({ name: 'sent-by-a-friend.zip', mimeType: 'application/zip', buffer: Buffer.from(sent) });
+      // S467: sent as the standard names it (.owworld, what the toolkit's carry writes), with no type
+      // a phone knows; the picker must offer it, or a phone's file picker hides it (OW-1).
+      const picker = await chooser;
+      const accept = await picker.element().getAttribute('accept');
+      check(tag, (accept ?? '').split(',').includes('.owworld'), `the world file picker offers .owworld (accept: ${accept})`);
+      await picker.setFiles({ name: 'sent-by-a-friend.owworld', mimeType: '', buffer: Buffer.from(sent) });
       await p.waitForSelector('[data-screen="home"]', { timeout: 15000 });
       check(tag, /Sent by a friend/.test(await p.locator('main').innerText()), 'the world file opens as a world on this phone');
       await p.screenshot({ path: `${OUT}/first-${tag}-${String(++n).padStart(2, '0')}-welcome-world-file.png` });

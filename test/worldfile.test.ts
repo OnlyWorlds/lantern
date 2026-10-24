@@ -79,6 +79,14 @@ describe('records/ through a copy (folder spec §4.5 rules 6, 6a and 11)', () =>
 
 
 describe('world files', () => {
+  it("a damaged world file is refused whole, in Lantern's words, and nothing is kept (folder spec 4.7 OW-14, SDK 4.72.1)", async () => {
+    // The standard's own file (schema-dist dist.60): the stream ends four bytes early, those bytes junk,
+    // the sizes and CRC honest. Read whole on SDK 4.72.0. Vendored; Atlas carries the same file.
+    const before = (await db.listWorlds()).length;
+    await expect(openWorldFile(ow8('fail-OW-14-deflate-early-end.owworld'))).rejects.toThrow(/^That file is not a world Lantern can open\.$/);
+    expect((await db.listWorlds()).length).toBe(before);
+  });
+
   it('names files as Atlas does', () => {
     expect(slugify('José’s Ferry-Debt!')).toBe('jose-s-ferry-debt');
     const { bytes } = toWorldFile({ id: '019f0000-0000-7000-8000-00000000abcd', name: 'Bus stop ideas', kind: 'local', addedAt: '' }, [
