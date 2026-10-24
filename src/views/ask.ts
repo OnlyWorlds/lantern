@@ -2,14 +2,14 @@
 // lookupWorld). It finds what exists and shows why; it never invents. When nothing matches,
 // "your world does not say" is the answer. For an account world, with signal, the same elements
 // can be put into a sentence by keel's proxy (#159), on a tap: the sources stay on screen.
-import { buildAskContext, lookupWorld, type OwElement, type OwLookupHit } from '@onlyworlds/sdk';
+import { lookupWorld, type OwElement, type OwLookupHit } from '@onlyworlds/sdk';
 import { handOnHold, heldBackLine } from '../hidden';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { fieldLabel } from '../schema';
 import { elRow, tabbar } from '../ui';
 import { accountToken, cachedAccountWorlds } from '../account';
-import { askInASentence } from '../ask';
+import { askContext, askInASentence } from '../ask';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 
@@ -98,7 +98,7 @@ export function askView(s: WorldSession): View {
       return h('p', { class: 'muted small', style: 'margin:0', 'data-why': hiddenOut ? 'hidden' : 'proposed' }, why);
     }
     // The elements on screen, in their order (the SDK's buildAskContext, keel's limits).
-    const { context } = buildAskContext(handed, s.handOnIndex());
+    const { context } = askContext(s.id, handed, s.handOnIndex());
     // One box per world, question and the very text sent: a redraw while it asks, or after, shows
     // the same box (never a second spend); elements that changed make a new one.
     const key = `${s.id}|${q}|${context.join('|')}`;

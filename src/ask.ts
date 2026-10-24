@@ -3,8 +3,9 @@
 // say." otherwise). The key and the meter are keel's: the page never holds a model key. Each
 // account has a daily allowance; an answer costs one, a refusal costs none.
 // The wire and the context are the SDK's (4.13: ask, buildAskContext, typed refusals).
-import { OwApiError, OwNetworkError, OwV2Client } from '@onlyworlds/sdk';
+import { buildAskContext, OwApiError, OwNetworkError, OwV2Client, type OwAskContext, type OwElement, type OwLookupHit, type OwWorldIndex } from '@onlyworlds/sdk';
 import { accountToken } from './account';
+import { roomShown } from './room';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 
 export interface Answer {
@@ -15,6 +16,15 @@ export interface Answer {
 }
 
 export class AskRefused extends Error {}
+
+/**
+ * What Ask hands keel's AI (the SDK's buildAskContext, keel's limits). Since SDK 4.72 it leaves the
+ * parlor's room out unless asked (Kael h56 #11977): Ask follows this phone's room switch, so a room the
+ * person chose to show is asked about like the rest. Hidden and proposed never reach it (`handOnHold`).
+ */
+export function askContext(worldId: string, handed: OwLookupHit<OwElement>[], index: OwWorldIndex<OwElement>): OwAskContext {
+  return buildAskContext(handed, index, { includeRoom: roomShown(worldId) });
+}
 
 export async function askInASentence(worldId: string, question: string, context: string[]): Promise<Answer> {
   const token = await accountToken();
