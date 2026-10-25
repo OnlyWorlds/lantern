@@ -2,6 +2,10 @@
 
 Session and gate records moved verbatim out of PROGRESS.md on 2026-10-12 (#209: state is rewritten whole, history lives in records). Newest first, as they stood. The limits each left are Known gaps in PROGRESS.
 
+## Folded 2026-10-25 (S476): the live builds 58d4269 back to f10bdbb
+
+Before it `58d4269` (S467, SDK 4.72.3, comments only; Boss h56 #12590, production c8f41091). Before it `24cfe49` (S467, SDK 4.72.2 and the world file picker offers .owworld, Next's first paragraph; Boss h56 #12555, production 295754eb). Before it `de0ff69` (S464, SDK 4.72.0 and Ask follows the room switch; Boss h56 #12014, production c8431250). Before it `f10bdbb` (S462, the hidden mark; Boss h56 #11597, production 7380ae94).
+
 ## Folded 2026-10-24 (S464): the live builds e733e14 back to 8ec7e46
 
 Moved verbatim out of CURRENT STATE's first paragraph, which keeps the live build and the one before it (the control).

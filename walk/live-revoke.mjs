@@ -27,7 +27,10 @@ p.on('response', async (r) => {
     try { const j = await r.json(); minted.push({ id: j.id, token: j.token }); } catch { /* not json */ }
   }
 });
-const alive = async (tok) => (await fetch(`${API}/account`, { headers: { Authorization: `Bearer ${tok}` } })).status;
+// Every request of the walk's own has a limit, and the walk a watchdog: a WebKit run on production hung
+// 32 minutes after its Sign out, its teardown never reached (S476).
+const alive = async (tok) => (await fetch(`${API}/account`, { headers: { Authorization: `Bearer ${tok}` }, signal: AbortSignal.timeout(15000) })).status;
+setTimeout(() => { console.log(`[${engine} ${tag}] FAIL the walk hung past 3 minutes; minted ids: ${minted.map((m) => m.id).join(', ') || 'none'}`); process.exit(2); }, 180000).unref();
 
 try {
   await p.goto(url);
@@ -56,12 +59,12 @@ try {
   // Teardown: anything this walk recorded and keel still honours is revoked by its recorded id.
   for (const m of minted) {
     if ((await alive(m.token)) === 200) {
-      const r = await fetch(`${API}/account/tokens/${encodeURIComponent(m.id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${m.token}` } });
+      const r = await fetch(`${API}/account/tokens/${encodeURIComponent(m.id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${m.token}` }, signal: AbortSignal.timeout(15000) });
       console.log(`[${engine} ${tag}] teardown revoke by recorded id: ${r.status}, then ${await alive(m.token)}`);
     }
   }
 }
 check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
-await b.close();
+await Promise.race([b.close(), new Promise((r) => setTimeout(r, 15000))]);
 console.log(failures ? `${failures} FAILED` : 'all ok');
 process.exit(failures ? 1 : 0);
