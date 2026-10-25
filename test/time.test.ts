@@ -84,6 +84,29 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
     expect(spanText(ev('1', 'War', 10, 20), 'Year')).toBe('Year 10 to 20');
   });
 
+  it('reads a version 2 calendar: a leap rule with exceptions, every 4 years but not every 100, yet every 400 (SDK 4.76)', () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const greg = {
+      version: 2, grain: 'day',
+      bundles: { months: { names: months, lengths: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] } },
+      intercalary: [{ name: 'Leap day', after_month: 2, every_years: 4, except: [100, 400], offset: 1 }],
+      eras: [{ name: 'Common Era', abbrev: 'CE', start: 0 }],
+    };
+    const cal = calendarOf([calendar('g', greg)]);
+    expect(cal).not.toBeNull();
+    // The step after 28 Feb, counted by the proleptic Gregorian rule written out here, not the SDK's.
+    const leap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+    const mar1 = (year: number) => { let d = 0; for (let y = 1; y < year; y++) d += leap(y) ? 366 : 365; return d + 31 + 28; };
+    expect(dateText(mar1(1900), 'Day', cal)).toBe('1 Mar, 1900 CE');
+    expect(dateText(mar1(2000), 'Day', cal)).toBe('Leap day, 2000 CE');
+    expect(dateText(mar1(2000) + 1, 'Day', cal)).toBe('1 Mar, 2000 CE');
+  });
+
+  it('an open era runs to the next up era, a down era listed after it skipped (SDK 4.76)', () => {
+    const eras = { version: 1, grain: 'Year', eras: [{ name: 'After', abbrev: 'AF', start: 0 }, { name: 'Before', abbrev: 'BF', start: 0, direction: 'down' }] };
+    expect(dateText(5, 'Year', calendarOf([calendar('e', eras)]))).toContain('6 AF');
+  });
+
   it("knows a schema date field by Atlas's rule, never a custom one", () => {
     for (const f of ['date', 'start_date', 'end_date', 'birth_date', 'formation_date']) expect(isDateField(f)).toBe(true);
     for (const f of ['x_wedding_date', 'shadow_birth_date', 'atlas_calendar', 'update', 'dates']) expect(isDateField(f)).toBe(false);

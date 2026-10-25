@@ -1,7 +1,8 @@
 // The world's calendar (SDK 4.20, Atlas's kernel): a world file holding one calendar Construct names
 // its dates on Before now, the now line, the home's Before now row and an Event's date fields (the
 // number kept beside it); a world holding two keeps the numbers with the unit, as Atlas does on a
-// device that never chose. The calendar's own field never shows. Keel is cut off.
+// device that never chose. The calendar's own field never shows. A version 2 calendar (SDK 4.76, a
+// leap rule with exceptions) names 2000's leap day and not 1900's. Keel is cut off.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/calendar.mjs [webkit|chromium]
 import './guard.mjs';
 // WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
@@ -34,6 +35,28 @@ const world = (w, name, cals) =>
         ...cals.map((c, i) => ({ path: `elements/construct/cal${i}.json`, data: enc({ id: id(w, 5 + i), name: `Calendar ${i + 1}`, supertype: 'calendar', atlas_calendar: c }) })),
       ],
       name,
+    ),
+  );
+
+const GREG = {
+  version: 2, grain: 'day',
+  bundles: { months: { names: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], lengths: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] } },
+  intercalary: [{ name: 'Leap day', after_month: 2, every_years: 4, except: [100, 400], offset: 1 }],
+  eras: [{ name: 'Common Era', abbrev: 'CE', start: 0 }],
+};
+const leap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+/** The step of 1 March in `year` (the day after 28 Feb), counted by the proleptic Gregorian rule. */
+const mar1 = (year) => { let d = 0; for (let y = 1; y < year; y++) d += leap(y) ? 366 : 365; return d + 31 + 28; };
+/** A world file whose one calendar is Gregorian (version 2), its clock at `now`, one Event at `at`. */
+const gregWorld = (now, at) =>
+  Buffer.from(
+    writeWorldFile(
+      [
+        { path: 'world.json', data: enc({ id: id(3, 0), name: 'Gregorian', time_current: now, time_basic_unit: 'Day' }) },
+        { path: 'elements/event/census.json', data: enc({ id: id(3, 1), name: 'The census', start_date: at }) },
+        { path: 'elements/construct/cal0.json', data: enc({ id: id(3, 5), name: 'Gregorian', supertype: 'calendar', atlas_calendar: GREG }) },
+      ],
+      'Gregorian',
     ),
   );
 
@@ -95,6 +118,19 @@ async function walk(engine, deviceName, tag) {
   await page.getByRole('button', { name: /^Numbers/ }).tap();
   await page.waitForFunction(() => document.querySelector('.now-line')?.textContent?.trim() === 'Now · Year 453');
   check(tag, true, 'Numbers: back to Year 453');
+
+  // A version 2 calendar (SDK 4.76): Gregorian's leap rule, every 4 years, not every 100, yet every 400.
+  // The steps are counted by the rule written out here, the words written by hand: not the SDK's.
+  await open(page, gregWorld(mar1(2000), mar1(1900)), 'gregorian');
+  await page.goto(`${BASE}/#/w/${id(3, 0)}/time`);
+  await page.waitForSelector('.now-line');
+  const gNow = (await page.locator('.now-line').textContent()).trim();
+  check(tag, gNow === 'Now · Leap day, 2000 CE', `a version 2 calendar: 2000 has its leap day (${gNow})`);
+  await page.screenshot({ path: `${OUT}/calendar-${tag}-04-version2.png` });
+  await page.goto(`${BASE}/#/w/${id(3, 0)}/e/${id(3, 1)}`);
+  await page.waitForSelector('[data-screen=element]');
+  const gDates = await page.$$eval('[data-part=calendar-date]', (els) => els.map((e) => e.textContent));
+  check(tag, JSON.stringify(gDates) === JSON.stringify([`1 Mar, 1900 CE · ${mar1(1900)}`]), `and 1900 has none (${JSON.stringify(gDates)})`);
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
