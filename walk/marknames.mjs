@@ -5,11 +5,17 @@
 // 2. The hidden one's page: Linked from's chip for the proposed one says "· proposed".
 // 3. Show on map: the pin's card says hidden.
 // 4. Give it to the party (an owner's world, keel unreachable): the hidden Collective's choice says hidden.
+// Then a world file made to look like an account world (keel cut off), S478:
+// 5. The edit picker on a link field: the chosen chip says "· hidden"; the rows offered say hidden
+//    or known of (a stub keel served a player, carried in a file).
+// 6. Waiting to send: an edit to the hidden one waits with its word, an edit to an unmarked one without.
+// 7. A player's Share with the party, in two groups: the hidden group's choice says hidden.
 // Each check has a twin that an unmarked name carries no word. Nothing is written.
 // Run: npm run build && (npx vite preview &) && node walk/marknames.mjs [webkit|chromium]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { writeWorldFile } from '@onlyworlds/sdk';
 
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
@@ -172,7 +178,120 @@ async function walk(engine, deviceName, tag) {
   await browser.close();
 }
 
+const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
+const WID = '0f0f0f0f-0000-4000-8000-0000000004a7';
+const id = (n) => `4a780000-0000-4000-8000-00000000000${n}`;
+const [MIRA, WREN, HALE, BRAM, TOM, PARTY, WATCH] = [1, 2, 3, 4, 5, 6, 7].map(id);
+const reach = Buffer.from(
+  writeWorldFile(
+    [
+      { path: 'world.json', data: enc({ id: WID, name: 'The Reach' }) },
+      { path: 'elements/character/mira.json', data: enc({ id: MIRA, name: 'Mira', friends: [WREN] }) },
+      { path: 'elements/character/wren.json', data: enc({ id: WREN, name: 'Wren', description: 'A runner.', hidden: true }) },
+      { path: 'elements/character/hale.json', data: enc({ id: HALE, name: 'Hale', hidden: true }) },
+      { path: 'elements/character/bram.json', data: enc({ id: BRAM, name: 'Bram', known_of: true }) },
+      { path: 'elements/character/tom.json', data: enc({ id: TOM, name: 'Tom', description: 'A miller.' }) },
+      { path: 'elements/collective/party.json', data: enc({ id: PARTY, name: 'The Party', supertype: 'Party', characters: [MIRA] }) },
+      { path: 'elements/collective/watch.json', data: enc({ id: WATCH, name: 'The Watch', characters: [MIRA], hidden: true }) },
+    ],
+    'reach',
+  ),
+);
+
+/** Patch the app db: the world's record, and kv values. */
+const patchApp = (page, patch, kv = {}) =>
+  page.evaluate(
+    ([id, patch, kv]) =>
+      new Promise((res, rej) => {
+        const r = indexedDB.open('lantern');
+        r.onsuccess = () => {
+          const t = r.result.transaction(['worlds', 'kv'], 'readwrite');
+          const st = t.objectStore('worlds');
+          const g = st.get(id);
+          g.onsuccess = () => st.put({ ...g.result, ...patch });
+          for (const [k, v] of Object.entries(kv)) t.objectStore('kv').put(v, k);
+          t.oncomplete = () => {
+            r.result.close();
+            res(true);
+          };
+          t.onerror = () => rej(t.error);
+        };
+      }),
+    [WID, patch, kv],
+  );
+
+async function walkFile(engine, deviceName, tag) {
+  const browser = await engine.launch();
+  const page = await (await browser.newContext({ ...devices[deviceName], viewport: { width: 360, height: 780 }, serviceWorkers: 'block' })).newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push(m.text()));
+  await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, (r) => r.abort());
+
+  await page.goto(`${BASE}/#/worlds`);
+  await page.waitForSelector('input[aria-label="A world file"]', { state: 'attached' });
+  await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'reach.zip', mimeType: 'application/zip', buffer: reach });
+  await page.waitForSelector('[data-screen="home"]', { timeout: 30000 });
+  await patchApp(page, { kind: 'online', role: 'owner', apiKey: 'ow_w_' + 'x'.repeat(40), keyKind: 'write' });
+
+  // 5. The edit picker on Mira's friends.
+  await page.goto(`${BASE}/?owner#/w/${WID}/e/${MIRA}`);
+  await page.waitForSelector('[data-screen="element"] .el-head');
+  await page.locator('.frow[data-field=friends] .edit-btn').tap();
+  await page.waitForSelector('.sheet .picker-results');
+  const chosen = await page.locator('.sheet .chips .link-chip').allInnerTexts();
+  check(tag, chosen.length === 1 && /Wren/.test(chosen[0]) && /· hidden/.test(chosen[0]), `the chosen chip: ${JSON.stringify(chosen)}`);
+  const rowTexts = (await page.locator('.sheet .picker-results .el-row').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+  const offered = Object.fromEntries(['Hale', 'Bram', 'Tom'].map((n) => [n, rowTexts.find((t) => t.includes(n))]));
+  check(tag, /· hidden/.test(offered.Hale ?? ''), `the hidden one offered: ${JSON.stringify(offered.Hale)}`);
+  check(tag, /· known of/.test(offered.Bram ?? ''), `the known of one offered: ${JSON.stringify(offered.Bram)}`);
+  check(tag, !!offered.Tom && !/·/.test(offered.Tom), `an unmarked one offered with no word: ${JSON.stringify(offered.Tom)}`);
+  await page.locator('.sheet').screenshot({ path: `${OUT}/marknames-${tag}-5-picker.png` });
+  await page.locator('.sheet').getByRole('button', { name: 'Cancel' }).tap();
+  await page.waitForFunction(() => !document.querySelector('.sheet'));
+
+  // 6. Waiting to send: an edit to Wren and one to Tom.
+  for (const who of [WREN, TOM]) {
+    await page.goto(`${BASE}/?edit${who.slice(-1)}#/w/${WID}/e/${who}`);
+    await page.waitForSelector('[data-screen="element"] .el-head');
+    await page.locator('main .prose').first().tap();
+    await page.waitForSelector('.sheet textarea');
+    await page.locator('.sheet textarea').fill('Seen by the mill at dusk.');
+    await page.locator('.sheet button[type=submit]').tap();
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  }
+  await page.goto(`${BASE}/?out#/w/${WID}/outbox`);
+  await page.waitForSelector('[data-screen="outbox"]');
+  const rows = (await page.locator('[data-screen="outbox"] .el-row, [data-screen="outbox"] li').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+  const wrenRow = rows.find((t) => t.includes('Wren'));
+  const tomRow = rows.find((t) => t.includes('Tom'));
+  check(tag, /· hidden/.test(wrenRow ?? ''), `Wren's waiting change: ${JSON.stringify(wrenRow)}`);
+  check(tag, !!tomRow && !/hidden|proposed/.test(tomRow), `Tom's waiting change, no word: ${JSON.stringify(tomRow)}`);
+  await page.screenshot({ path: `${OUT}/marknames-${tag}-6-outbox.png` });
+
+  // 7. The player's phone: two groups, one hidden.
+  await patchApp(page, { kind: 'online', apiKey: 'ow_r_' + 'p'.repeat(30), keyKind: 'read', role: 'collaborator', memberRole: 'guest', characterId: MIRA }, { accountToken: 'ow_a_' + 'z'.repeat(30) });
+  await page.goto(`${BASE}/?player#/w/${WID}/notes`);
+  await page.waitForSelector('[data-screen=notes]');
+  await page.locator('textarea[aria-label="A note"]').fill('The innkeeper lied');
+  await page.getByRole('button', { name: 'Save the note' }).tap();
+  await page.waitForSelector('[data-action=share-note]');
+  await page.locator('[data-action=share-note]').first().tap();
+  await page.getByRole('dialog', { name: 'Share with which group?' }).waitFor({ timeout: 8000 });
+  const groups = (await page.locator('.sheet .choice').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+  const watch = groups.find((t) => t.startsWith('The Watch'));
+  const party = groups.find((t) => t.startsWith('The Party'));
+  check(tag, /hidden/.test(watch ?? ''), `the hidden group's choice: ${JSON.stringify(watch)}`);
+  check(tag, !!party && !/hidden|proposed/.test(party), `the other group, no word: ${JSON.stringify(party)}`);
+  await page.locator('.sheet').screenshot({ path: `${OUT}/marknames-${tag}-7-groups.png` });
+
+  check(tag, errors.length === 0, `no page errors on the world file (${errors.join(' | ').slice(0, 200)})`);
+  await browser.close();
+}
+
 if (only !== 'webkit') await walk(chromium, 'Pixel 7', 'chromium');
 if (only !== 'chromium') await walk(webkit, 'iPhone 13', 'webkit');
+if (only !== 'webkit') await walkFile(chromium, 'Pixel 7', 'chromium');
+if (only !== 'chromium') await walkFile(webkit, 'iPhone 13', 'webkit');
 console.log(failures ? `${failures} FAILED` : 'all ok');
 process.exit(failures ? 1 : 0);
