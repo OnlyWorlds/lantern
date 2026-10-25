@@ -48,6 +48,10 @@ const button = p.locator('[data-action="signin-onlyworlds"]');
 report.button = await button.count();
 await p.screenshot({ path: `${out}-1-signin.png` });
 if (!report.button) {
+  // The control's way out: the walk's own token goes too (S470's control run left it live once).
+  const delWalk = await fetch(`${API}/account/tokens/${walkToken.id}`, { method: 'DELETE', headers: walkAuth });
+  const walkAfter = await fetch(`${API}/account`, { headers: walkAuth });
+  report.walkTokenRevoked = `DELETE ${delWalk.status}, then GET /account ${walkAfter.status}`;
   console.log(JSON.stringify({ ...report, errors }, null, 2));
   await b.close();
   process.exit(1);
