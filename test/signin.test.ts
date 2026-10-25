@@ -16,13 +16,15 @@ Object.assign(globalThis, {
 });
 
 const db = await import('../src/db');
-const { signInWithPassword } = await import('../src/account');
+const { accountName, signInWithPassword, signOut } = await import('../src/account');
 
 class FakeKeel {
   logins: Record<string, unknown>[] = [];
   minted: string[] = [];
   ended = 0;
   verified = true;
+  accountId = 'acc-ana';
+  worldsDown = false;
   offline = false;
 
   json(status: number, body: unknown) {
@@ -57,8 +59,14 @@ class FakeKeel {
       this.minted.push(name);
       return this.json(201, { id: 'tok-1', name, last4: 'abcd', token: 'ow_a_minted0000abcd' });
     }
+    if (path === '/account' && method === 'GET') {
+      // keel's profile, unwrapped (accounts/api.py _profile): which account the token is.
+      if (headers.get('Authorization') !== 'Bearer ow_a_minted0000abcd') return this.json(401, { error: { code: 'invalid_credentials' } });
+      return this.json(200, { id: this.accountId, username: 'ana', email: 'ana@example.com', date_joined: null });
+    }
     if (path === '/account/worlds' && method === 'GET') {
       if (headers.get('Authorization') !== 'Bearer ow_a_minted0000abcd') return this.json(401, { error: { code: 'invalid_credentials' } });
+      if (this.worldsDown) throw new TypeError('Failed to fetch');
       return this.json(200, { data: [{ id: 'w1', name: 'Blood Meridian', role: 'owner' }] });
     }
     return this.json(404, { error: { code: 'not_found' } });
@@ -71,6 +79,10 @@ beforeEach(async () => {
   globalThis.fetch = keel.fetch as typeof fetch;
   store.clear();
   await db.kvSet('accountToken', undefined);
+  await db.kvSet('accountId', undefined);
+  await db.kvSet('accountName', undefined);
+  await db.kvSet('accountWorlds', undefined);
+  for (const w of await db.listWorlds()) await db.removeWorld(w.id);
 });
 
 describe('signing in with a password', () => {
@@ -84,6 +96,58 @@ describe('signing in with a password', () => {
     expect(keel.ended).toBe(1);
     const kept = JSON.stringify([...store.values()]);
     expect(kept.includes('right')).toBe(false);
+  });
+
+  it('keeps which account it is, so Lantern can name it', async () => {
+    await signInWithPassword('ana', 'right');
+    expect(await db.kvGet('accountId')).toBe('acc-ana');
+    expect(await accountName()).toBe('ana');
+  });
+
+  it('another account than the last holds the old role aside, with its PIN slot and list let go (the S470 gate G6)', async () => {
+    await signInWithPassword('ana', 'right');
+    await db.putWorldRecord({ id: 'w-ana', name: 'Ana own', kind: 'online', apiKey: 'k', role: 'collaborator', memberRole: 'contributor' } as never);
+    store.set('lantern-pin-account', '1234');
+    // The same account again, no sign-out between: nothing let go.
+    await signInWithPassword('ana', 'right');
+    expect((await db.getWorldRecord('w-ana'))?.role).toBe('collaborator');
+    expect(store.get('lantern-pin-account')).toBe('1234');
+    expect(await db.kvGet('accountWorlds')).not.toBeUndefined();
+    // Another account, straight over the first (no sign-out to clear anything first).
+    keel.accountId = 'acc-bo';
+    keel.worldsDown = true;
+    // A tap on Sign in with OnlyWorlds abandoned before this: its record goes with the sign-in.
+    store.set('ow_signin:lantern', '{"state":"s"}');
+    await signInWithPassword('ana', 'right');
+    const held = await db.getWorldRecord('w-ana');
+    expect(held?.role).toBeUndefined();
+    expect(held?.heldRole).toBe('collaborator');
+    expect(held?.heldBy).toBe('acc-ana');
+    expect(held?.memberRole).toBe('contributor');
+    expect(store.has('lantern-pin-account')).toBe(false);
+    expect(await db.kvGet('accountWorlds')).toBeUndefined();
+    expect(store.has('ow_signin:lantern')).toBe(false);
+    expect(await db.kvGet('accountId')).toBe('acc-bo');
+    // The first account again: its role comes back (the code gate C1).
+    keel.accountId = 'acc-ana';
+    await signInWithPassword('ana', 'right');
+    const back = await db.getWorldRecord('w-ana');
+    expect(back?.role).toBe('collaborator');
+    expect(back?.heldBy).toBeUndefined();
+    expect(back?.memberRole).toBe('contributor');
+  });
+
+  it('a phone with no account id kept treats the next account as unknown, never as another', async () => {
+    await db.putWorldRecord({ id: 'w-x', name: 'X', kind: 'online', apiKey: 'k', role: 'owner' } as never);
+    keel.accountId = 'acc-bo';
+    await signInWithPassword('ana', 'right');
+    expect((await db.getWorldRecord('w-x'))?.role).toBe('owner');
+  });
+
+  it('a list that fails after the token is kept is no failed sign-in (the code gate C4)', async () => {
+    keel.worldsDown = true;
+    await expect(signInWithPassword('ana', 'right')).resolves.toEqual([]);
+    expect(await db.kvGet('accountToken')).toBe('ow_a_minted0000abcd');
   });
 
   it('takes a username as well as an email', async () => {

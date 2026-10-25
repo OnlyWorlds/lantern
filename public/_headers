@@ -17,3 +17,10 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Sign in with OnlyWorlds returns here with a code in the address (Keel #515): never cached, never
+# sent on as a Referer (the inherited policy detached, as Atlas's; read on the preview).
+/signin/callback
+  ! Referrer-Policy
+  Referrer-Policy: no-referrer
+  Cache-Control: no-store

@@ -1385,3 +1385,6 @@ select.input {
 /* Files on an element (keel #393): the name, its line, Download under them. */
 .file-name { display: block; overflow-wrap: anywhere; }
 .file-line { display: block; margin: 2px 0 8px; }
+
+/* A line that carries an account name (S470): a long one-word username breaks rather than push the page sideways. */
+.wrap-name { overflow-wrap: anywhere; }

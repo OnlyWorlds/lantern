@@ -25,14 +25,85 @@ function accountClient(token: string): OwV2Client {
   return new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
 }
 
+export interface AccountWho {
+  id: string;
+  username: string;
+}
+
+/** Which account a token is: keel's profile (`GET /account`, id and username). */
+export async function whoAmI(token: string): Promise<AccountWho> {
+  const res = await accountClient(token).request<{ id?: string; username?: string; data?: { id?: string; username?: string } }>('GET', '/account');
+  const p = res.data ?? res;
+  if (typeof p.id !== 'string' || !p.id) throw new Error('OnlyWorlds did not say which account this is. Try again.');
+  return { id: p.id, username: typeof p.username === 'string' ? p.username : '' };
+}
+
+/** The name of the account this phone is signed in as, when it knows it. */
+export async function accountName(): Promise<string | undefined> {
+  if (!(await accountToken())) return undefined;
+  return (await db.kvGet<string>('accountName')) || undefined;
+}
+
+/** The SDK's record of a Sign in with OnlyWorlds under way (src/signin.ts): no attempt outlives a sign-in or a sign-out. */
+const HANDOFF_RECORD = 'ow_signin:lantern';
+function dropHandoffRecord(): void {
+  try {
+    localStorage.removeItem(HANDOFF_RECORD);
+  } catch {
+    /* storage refused */
+  }
+}
+
+/** Set when a sign-in is kept, so another window of this browser hears it (a `storage` event; the S470 code gate's C5). */
+export const SIGNED_IN_SIGNAL = 'lantern-signed-in';
+
+/**
+ * Keep a sign-in, by any door (the password, a pasted token, Sign in with OnlyWorlds). The token is
+ * written first (the S470 code gate's C10). Another account than the one this phone last knew holds
+ * the old account's role aside on the worlds it opened (the S470 gate's G6): they stay on the phone as
+ * worlds opened with a key, each with its own key and PIN, and the role comes back when that account
+ * signs in again (the code gate's C1). A world's `memberRole` is its key's and stays (C3); an open
+ * session is dropped, so nothing in memory keeps the old role (C2). The account id is written last,
+ * so a sign-in cut off midway is redone by the next, which still sees the old id. A phone that never
+ * kept an account id counts as unknown, never as another account (`fetchAccountWorlds` backfills it).
+ */
+export async function keepAccount(token: string, who: AccountWho): Promise<void> {
+  await db.kvSet('accountToken', token);
+  const before = await db.kvGet<string>('accountId');
+  if (before && before !== who.id) {
+    await db.kvSet('accountWorlds', undefined);
+    forgetAccountPin();
+    for (const w of await db.listWorlds()) {
+      if (w.role) {
+        await db.updateWorldRecord(w.id, { role: undefined, heldRole: w.role, heldBy: before });
+        forgetSession(w.id);
+      } else if (w.heldBy === who.id && w.heldRole) {
+        await db.updateWorldRecord(w.id, { role: w.heldRole, heldRole: undefined, heldBy: undefined });
+        forgetSession(w.id);
+      }
+    }
+  }
+  await db.kvSet('accountName', who.username);
+  await db.kvSet('accountId', who.id);
+  dropHandoffRecord();
+  try {
+    localStorage.setItem(SIGNED_IN_SIGNAL, String(Date.now()));
+  } catch {
+    /* storage refused: the other window learns it on its next return to the front */
+  }
+}
+
 export async function signIn(token: string): Promise<AccountWorld[]> {
   const t = token.trim();
   if (detectKeyKind(t) !== 'account') {
     throw new Error('That is not an account token. Account tokens start with ow_a_.');
   }
-  const worlds = await fetchAccountWorlds(t);
-  await db.kvSet('accountToken', t);
-  return worlds;
+  // The profile both checks the token and says which account it is.
+  const who = await whoAmI(t);
+  await keepAccount(t, who);
+  // Kept: a list that fails to arrive is asked again on Your worlds, never a failed sign-in (the
+  // code gate's C4: a retry would mint a second token).
+  return fetchAccountWorlds(t).catch(() => cachedAccountWorlds());
 }
 
 /** What to tell someone for each refused sign-in. Never keel's raw text. */
@@ -77,6 +148,8 @@ export async function signOut(): Promise<void> {
   await db.kvSet('pendingJoin', undefined);
   await db.kvSet('accountWorlds', undefined);
   forgetAccountPin();
+  // The account id stays, so the next sign-in can tell whether it is the same account.
+  dropHandoffRecord();
 }
 
 export async function fetchAccountWorlds(token?: string): Promise<AccountWorld[]> {
@@ -84,6 +157,17 @@ export async function fetchAccountWorlds(token?: string): Promise<AccountWorld[]
   if (!t) return [];
   const res = await accountClient(t).request<{ data: AccountWorld[] }>('GET', '/account/worlds');
   await db.kvSet('accountWorlds', res.data);
+  // A phone signed in before accounts were kept by id learns its own, once, so its next switch is
+  // known (the S470 code gate's C7). Quiet: a failure only means asking again next time.
+  if (!token && !(await db.kvGet<string>('accountId'))) {
+    void whoAmI(t)
+      .then(async (who) => {
+        if ((await accountToken()) !== t || (await db.kvGet<string>('accountId'))) return;
+        await db.kvSet('accountName', who.username);
+        await db.kvSet('accountId', who.id);
+      })
+      .catch(() => undefined);
+  }
   return res.data;
 }
 

@@ -5,6 +5,7 @@ import { icon } from '../icons';
 import * as db from '../db';
 import {
   DEMO_KEY,
+  accountName,
   accountToken,
   cachedAccountWorlds,
   fetchAccountWorlds,
@@ -23,6 +24,7 @@ import { uuid7 } from '../uuid7';
 import { lanternProducer, openWorldFile, saveFile, worldCopy, type CopyQuestion } from '../worldfile';
 import { PinNeeded, putOnline } from '../online';
 import { errorText, go, sheet, toast, topbar } from '../ui';
+import { beginOnlyWorldsSignIn, canSignInWithOnlyWorlds, takeSignInNotice } from '../signin';
 import { installButton, onHomeScreen } from '../install';
 import { applyTheme, currentTheme, fieldsShown, setFieldsShown, BUILD_ID, type FieldsShown } from '../app-state';
 
@@ -103,7 +105,53 @@ export function signInView(): HTMLElement {
   const email = h('input', { class: 'input', type: 'text', inputmode: 'email', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Email or username' });
   const password = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Password' });
   const err = h('p', { class: 'error', role: 'alert' });
-  const btn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Sign in');
+  // Sign in with OnlyWorlds (Keel #515): the screen's main act where it is offered, so the
+  // password form's Sign in steps down to a Standard button beside it (the house ladder).
+  const handoff = canSignInWithOnlyWorlds();
+  const btn = h('button', { class: handoff ? 'btn btn-standard' : 'btn btn-primary', type: 'submit' }, 'Sign in');
+  // One sign-in at a time (L8): the form waits while the tap is leaving, and the tap while the form submits.
+  const busy = { on: false };
+  // The round trip's own line (a refusal on return, no signal at the tap): an error only while it has
+  // words, so an empty one is never the screen's first error.
+  const notice = h('p', { role: 'alert', 'data-part': 'signin-notice' });
+  const say = (line: string) => {
+    notice.textContent = line;
+    notice.className = line ? 'error' : '';
+  };
+  say(takeSignInNotice() ?? '');
+  const owBtn = handoff ? h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'signin-onlyworlds' }, 'Sign in with OnlyWorlds') : null;
+  // Whose account it is: the browser's onlyworlds.com sign-in decides, with no page after the first
+  // (the S470 gate's G1), so the screen says so before the tap. Shown once the phone is read as
+  // signed out (L9), never for a moment on a signed-in one (G11).
+  const handoffPart = owBtn
+    ? h(
+        'div',
+        { class: 'stack', hidden: true, 'data-part': 'signin-handoff' },
+        owBtn,
+        h('p', { class: 'dim small', style: 'margin:0' }, 'It uses the account signed in on onlyworlds.com in this browser.'),
+        h('p', { class: 'dim', style: 'margin:0' }, 'or with your email or username and password'),
+      )
+    : null;
+  owBtn?.addEventListener('click', async () => {
+    if (busy.on) return;
+    busy.on = true;
+    owBtn.disabled = true;
+    btn.disabled = true;
+    say('');
+    try {
+      await beginOnlyWorldsSignIn();
+    } catch (ex) {
+      say(errorText(ex));
+      busy.on = false;
+      owBtn.disabled = false;
+      btn.disabled = false;
+    }
+  });
+  // Signed in already, the round trip would only replace the token: no button (L9).
+  if (handoffPart) void accountToken().then((t) => {
+    if (t) handoffPart.remove();
+    else handoffPart.hidden = false;
+  });
   const form = h(
     'form',
     { class: 'stack' },
@@ -119,14 +167,19 @@ export function signInView(): HTMLElement {
       err.textContent = 'Your email or username and password, as on onlyworlds.com.';
       return;
     }
+    if (busy.on) return;
+    busy.on = true;
     btn.disabled = true;
+    if (owBtn) owBtn.disabled = true;
     try {
       await signInWithPassword(email.value, password.value);
       go((await pendingJoin()) ? '#/join' : '#/worlds', true);
     } catch (ex) {
       err.textContent = errorText(ex);
     } finally {
+      busy.on = false;
       btn.disabled = false;
+      if (owBtn) owBtn.disabled = false;
     }
   });
 
@@ -170,6 +223,8 @@ export function signInView(): HTMLElement {
     { class: 'screen', 'data-screen': 'signin' },
     topbar('Sign in', '#/'),
     h('p', { class: 'dim', style: 'margin:0' }, 'Your OnlyWorlds account. This phone keeps its own key, which you can take back on onlyworlds.com.'),
+    notice,
+    handoffPart,
     form,
     reveal,
     tokenForm,
@@ -181,6 +236,17 @@ export function signInView(): HTMLElement {
       h('a', { href: SIGNUP_URL, target: '_blank', rel: 'noopener' }, 'Make a free one on onlyworlds.com'),
       ', then sign in here.',
     ),
+  );
+}
+
+/** Back from onlyworlds.com while the code is traded for this phone's token. */
+export function signingInView(): HTMLElement {
+  return h(
+    'main',
+    { class: 'screen', 'data-screen': 'signing-in' },
+    // No way back from here: the outcome lands where this screen goes (the S470 gate's G9).
+    topbar('Sign in'),
+    h('p', { class: 'dim', role: 'status', style: 'margin:0' }, 'Signing in…'),
   );
 }
 
@@ -641,6 +707,7 @@ export function settingsView(): HTMLElement {
     // On a shared phone the next person can read what stays (the security pass, F2; the Captain
     // h37 #4072: offered, not the default). The account's worlds are the ones with a role, as the PIN's are.
     const mine = token ? (await db.listWorlds()).filter((w) => w.role) : [];
+    const who = await accountName();
     let unsent = 0;
     for (const w of mine) unsent += (await db.outboxRows(w.id)).length;
     const outAll = h(
@@ -672,7 +739,7 @@ export function settingsView(): HTMLElement {
       h('p', { class: 'dim', style: 'margin:0' }, fieldsSaid),
       h('p', { class: 'section-label' }, 'Account'),
       token
-        ? h('div', { class: 'stack' }, h('p', { class: 'dim', style: 'margin:0' }, 'Signed in. This phone has its own key to your account.'), out, mine.length ? outAll : '')
+        ? h('div', { class: 'stack' }, h('p', { class: 'dim wrap-name', style: 'margin:0', 'data-part': 'signed-in-as' }, `${who ? `Signed in as ${who}.` : 'Signed in.'} This phone has its own key to your account.`), out, mine.length ? outAll : '')
         : h('a', { class: 'btn', href: '#/signin' }, 'Sign in to OnlyWorlds'),
       h('p', { class: 'section-label' }, 'This phone'),
       h(

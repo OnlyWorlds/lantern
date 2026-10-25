@@ -61,7 +61,11 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/version.json' || url.pathname === '/sw.js') return;
 
   if (req.mode === 'navigate') {
-    if (!SHELL.has(url.pathname)) return;
+    // Sign in with OnlyWorlds comes back to /signin/callback (Keel #515): the phone's own build
+    // answers it from this cache, as it answers "/", so the sign-in finishes under the build the
+    // phone runs and never the host's newer one (the S470 gate's G2). The address and its code stay
+    // as they came; nothing is stored under that path.
+    if (!SHELL.has(url.pathname) && url.pathname.replace(/\/$/, '') !== '/signin/callback') return;
     event.respondWith(
       (async () => {
         const cached = await caches.match('/', { cacheName: CACHE });

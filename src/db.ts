@@ -25,6 +25,10 @@ export interface WorldRecord {
   /** From the account list: owner, or collaborator with a member role. */
   role?: 'owner' | 'collaborator';
   memberRole?: 'co_builder' | 'contributor' | 'guest';
+  /** The account role held aside while another account is signed in (`keepAccount`, src/account.ts):
+   * whose it was, and the role, given back when that account signs in again. */
+  heldBy?: string;
+  heldRole?: 'owner' | 'collaborator';
   /** A player's own Character, from keel's /me (Skeld #3457); null once asked and there is none. */
   characterId?: string | null;
   /** Joined with a player link, no account (Keel #353): a read key only, so nothing is ever shared from it. */

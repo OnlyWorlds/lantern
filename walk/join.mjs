@@ -53,6 +53,8 @@ async function walk(engine, deviceName, tag) {
     r.fulfill(json(200, { reader: 'person', world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: 'guest', with_character: false, expires_at: '2026-10-19T00:00:00+00:00' })),
   );
   await page.route('**/api/v2/account/worlds', (r) => r.fulfill(json(200, { data: [] })));
+  // A pasted token is read for which account it is (keel's profile, S470).
+  await page.route('**/api/v2/account', (r) => r.fulfill(json(200, { id: 'acc-walk', username: 'walker', email: 'w@example.com', date_joined: null })));
   await page.route('**/api/v2/account/join', (r) => r.fulfill(joinAnswer));
 
   // Shared from a chat: the message holds the link
@@ -85,8 +87,8 @@ async function walk(engine, deviceName, tag) {
   await tokenInput.press('Enter');
   await page.waitForSelector('[data-screen="join"] .invite', { timeout: 15000 });
   check(tag, true, 'after the sign-in, the invite is back');
-  const joinBtn = page.getByRole('button', { name: 'Join The Reach' });
-  check(tag, (await joinBtn.count()) === 1, 'signed in, the button says Join The Reach');
+  const joinBtn = page.getByRole('button', { name: 'Join The Reach as walker', exact: true });
+  check(tag, (await joinBtn.count()) === 1, 'signed in, the button says Join The Reach as walker (the account, S470)');
 
   // Already a member (accepting asks no PIN since keel #297, so there is no PIN step to walk)
   await joinBtn.tap();

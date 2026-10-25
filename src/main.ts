@@ -8,10 +8,10 @@ import './style.css';
 
 import './install'; // listens for the browser's install offer from the first moment
 import * as db from './db';
-import { accountToken } from './account';
+import { accountToken, SIGNED_IN_SIGNAL } from './account';
 import { applyTheme, checkForUpdate, currentTheme } from './app-state';
 import { openWorld, type WorldSession } from './world';
-import { keyView, newWorldView, settingsView, signInView, welcomeView, worldsView } from './views/start';
+import { keyView, newWorldView, settingsView, signingInView, signInView, welcomeView, worldsView } from './views/start';
 import { elementView, homeView, notFound, setBehindReload, typeView, type View } from './views/world';
 import { captureView } from './views/capture';
 import { outboxView } from './views/outbox';
@@ -22,10 +22,24 @@ import { notesView } from './views/notes';
 import { mapView } from './views/map';
 import { shareView } from './views/share';
 import { consumeShared, peekShared, takeShared } from './share';
-import { joinCode } from './join';
+import { joinCode, pendingJoin } from './join';
 import { joinView } from './views/join';
 import { isType, setTypeWordsSource } from './schema';
-import { elName, errorText, toast } from './ui';
+import { elName, errorText, go, toast } from './ui';
+import { applySignInOutcome, isSignInCallback, NOT_KEPT_LINE, setSignInNotice, SIGNING_IN_HASH, startSignInCallback, takeSignedInLine, type SignInOutcome } from './signin';
+
+// Back from onlyworlds.com (Sign in with OnlyWorlds): the exchange starts before anything else asks
+// onlyworlds.com, and the address is /#/signing-in before the router or the share target reads it.
+const signInReturn: Promise<SignInOutcome> | null = isSignInCallback() ? startSignInCallback() : null;
+// Applied once, whatever redraws the screen (a page brought back by Back routes again: the S470
+// code gate's C11). A failure keeping the token is said, never a screen left on Signing in (G10).
+const signInLanding: Promise<string> | null = signInReturn
+  ? signInReturn.then(applySignInOutcome).catch((e: unknown) => {
+      console.warn('[sign-in] not kept:', e);
+      setSignInNotice(NOT_KEPT_LINE);
+      return '#/signin';
+    })
+  : null;
 
 applyTheme(currentTheme());
 
@@ -102,6 +116,19 @@ async function route(): Promise<void> {
     case 'signin':
       mount(signInView());
       return;
+    case 'signing-in': {
+      if (!signInLanding) {
+        go('#/', true);
+        return;
+      }
+      mount(signingInView());
+      const to = await signInLanding;
+      if (location.hash === SIGNING_IN_HASH) go(to, true);
+      // Who the phone is signed in as, said where the return lands (the S470 gate's G1).
+      const said = takeSignedInLine();
+      if (said) toast(said);
+      return;
+    }
     case 'key':
       mount(keyView());
       return;
@@ -133,6 +160,22 @@ async function route(): Promise<void> {
 }
 
 window.addEventListener('hashchange', () => void route());
+// A page the browser kept and brought back (Back from onlyworlds.com) is drawn again, so a screen
+// left mid-tap with its buttons off, or signed out in memory, is never what shows (the S470 gate's G3).
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) void route();
+});
+// Signed in from another window of this browser (a sign-in that came back in a browser tab while the
+// home-screen app waited): a screen that only asks to sign in moves on (the S470 gate's G4).
+// Only the welcome and sign-in screens move: Your worlds is left as it is (the S470 code gate's C6).
+async function signedInElsewhere(): Promise<void> {
+  if (!app.querySelector('[data-screen="welcome"], [data-screen="signin"]')) return;
+  if (!(await accountToken())) return;
+  go((await pendingJoin()) ? '#/join' : '#/worlds', true);
+}
+window.addEventListener('storage', (e) => {
+  if (e.key === SIGNED_IN_SIGNAL) void signedInElsewhere();
+});
 // replaceState fires no hashchange: one route, so one catch screen takes the note.
 // A shared invite link goes to the join screen instead of becoming a note.
 let sharedJoin: string | null = null;
@@ -203,6 +246,7 @@ window.setInterval(() => {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
+  void signedInElsewhere();
   void checkForUpdate(onBehind);
   if (activeSession && navigator.onLine) void activeSession.pull().then(() => activeSession?.flush());
 });

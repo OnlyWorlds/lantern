@@ -1,6 +1,6 @@
 // Join a world with an invite link: paste it (or share it to Lantern), see the invite, join.
 import { h } from '../dom';
-import { accountToken } from '../account';
+import { accountName, accountToken } from '../account';
 import { acceptJoin, isPlayerLink, isTable, joinCode, pendingJoin, PickRefused, previewJoin, redeemPlayer, roleWords, setPendingJoin, tablePicks, type JoinPreview, type TablePick } from '../join';
 import { errorText, go, topbar } from '../ui';
 
@@ -10,7 +10,7 @@ function whenText(iso: string): string {
 }
 
 export async function joinView(given?: string | null): Promise<HTMLElement> {
-  const [token, waiting] = await Promise.all([accountToken(), pendingJoin()]);
+  const [token, waiting, me] = await Promise.all([accountToken(), pendingJoin(), accountName()]);
   const input = h('input', {
     class: 'input',
     // Text, not url: a bare code is a fine answer, and a url field would refuse it unseen.
@@ -41,7 +41,7 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
       showPlayer(code, p, who, until, said);
       return;
     }
-    const join = h('button', { class: 'btn btn-primary', type: 'button' }, token ? `Join ${p.world.name}` : 'Sign in to join');
+    const join = h('button', { class: 'btn btn-primary wrap-name', type: 'button' }, token ? (me ? `Join ${p.world.name} as ${me}` : `Join ${p.world.name}`) : 'Sign in to join');
     const joinErr = h('p', { class: 'error', role: 'alert' });
     join.addEventListener('click', async () => {
       joinErr.textContent = '';
