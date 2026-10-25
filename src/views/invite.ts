@@ -46,7 +46,7 @@ async function qrCode(text: string): Promise<SVGSVGElement> {
 }
 
 export function inviteSheet(worldId: string, worldName: string): void {
-  sheet((close) => {
+  sheet((close, hold) => {
     let inviteFor: InviteFor = 'contributor';
     const choice = (r: InviteFor) => {
       const b = h(
@@ -101,8 +101,9 @@ export function inviteSheet(worldId: string, worldName: string): void {
 
     // Everything the link is made from is locked while keel makes it: a choice tapped during the
     // wait named a role the link did not have (Atlas 1.47's gate, H1). The role sent is the role
-    // said, and the Character too.
+    // said, and the Character too. The backdrop holds as well, so the link is never made for no one.
     const lock = (on: boolean) => {
+      hold(on);
       for (const el of [make, cancel, name, playsAs, ...roles.querySelectorAll('button')] as (HTMLButtonElement | HTMLInputElement | HTMLSelectElement)[]) el.disabled = on;
     };
     make.addEventListener('click', async () => {
@@ -149,6 +150,7 @@ export function inviteSheet(worldId: string, worldName: string): void {
           h('a', { class: 'dim', href: accessUrl(worldId), target: '_blank', rel: 'noopener' }, 'See or take back links on onlyworlds.com'),
           h('div', { class: 'row-gap' }, done),
         );
+        // Still held: the link is shown only now, so a stray tap on the backdrop never takes it away; Done closes.
         qrCode(made.link).then((svg) => qr.appendChild(svg)).catch(() => qr.remove());
       } catch (e) {
         err.textContent = errorText(e);

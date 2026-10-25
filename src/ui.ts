@@ -99,7 +99,11 @@ export function toast(text: string, ms = 2600): void {
  * A bottom sheet. Returns a close function; closes on the backdrop and on navigation. One at a
  * time: a second tap on what opened it opens nothing (stacked sheets wrote twice, the S396 gate).
  */
-export function sheet(build: (close: () => void) => Node[], label: string): () => void {
+/**
+ * `hold(true)` keeps a backdrop tap from closing the sheet while its work is in flight (Invite while
+ * keel makes the link: closed then, the link it made was shown to no one; S414's left gap, S477).
+ */
+export function sheet(build: (close: () => void, hold: (on: boolean) => void) => Node[], label: string): () => void {
   if (document.querySelector('.backdrop')) return () => undefined;
   const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label });
   const back = h('div', { class: 'backdrop' }, panel);
@@ -121,11 +125,12 @@ export function sheet(build: (close: () => void) => Node[], label: string): () =
     vv?.removeEventListener('resize', fit);
     vv?.removeEventListener('scroll', fit);
   };
+  let held = false;
   back.addEventListener('click', (e) => {
-    if (e.target === back) close();
+    if (e.target === back && !held) close();
   });
   window.addEventListener('hashchange', close);
-  for (const n of build(close)) panel.appendChild(n);
+  for (const n of build(close, (on) => (held = on))) panel.appendChild(n);
   document.body.appendChild(back);
   fit();
   const first = panel.querySelector<HTMLElement>('input, textarea');

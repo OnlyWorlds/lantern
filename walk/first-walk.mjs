@@ -248,6 +248,9 @@ async function walk(engine, tag) {
   await page.locator('.sheet [data-action=make-invite]').tap();
   await page.waitForFunction(() => document.querySelector('.sheet [data-role=contributor]')?.disabled === true);
   check(tag, await page.locator('.sheet [data-role=contributor]').isDisabled() && await page.locator('.sheet input').isDisabled(), 'while the link is made, the choice and the name are locked');
+  // S477 (S414's left gap): a tap on the backdrop while keel makes the link leaves the sheet, so the link is shown.
+  await page.locator('.backdrop').tap({ position: { x: 12, y: 12 } });
+  check(tag, (await page.locator('.sheet').count()) === 1, 'a tap on the backdrop during the wait keeps the sheet');
   release();
   await page.waitForSelector('.sheet [data-role=invite-link]');
   check(tag, /as a player with an account:$/.test((await page.locator(".sheet p").first().innerText()).trim()), "the link says the role it was made for (S433: a guest link is a player with an account)");
@@ -256,6 +259,8 @@ async function walk(engine, tag) {
   check(tag, await page.locator('.sheet svg.invite-qr').waitFor({ timeout: 5000 }).then(() => true, () => false), 'with its QR code');
   check(tag, (await page.locator('.sheet [data-action=copy-invite]').count()) === 1, 'and Copy');
   await shot('invite-made');
+  await page.locator('.backdrop').tap({ position: { x: 12, y: 12 } });
+  check(tag, (await page.locator('.sheet [data-role=invite-link]').count()) === 1, 'shown only now: a tap on the backdrop keeps the link on screen, Done closes it');
   await page.locator('.sheet').getByRole('button', { name: 'Done' }).tap();
   await page.waitForSelector('.sheet', { state: 'detached' });
   await page.goto(`${BASE}/#/w/${worldId}/t/character`);
