@@ -40,6 +40,9 @@ const zip = Buffer.from(
       file('relation', { id: id(6), name: "Fix Ada's age", supertype: 'Work item', characters: [ada], x_room_of: wid }),
       file('relation', { id: id(7), name: 'Vote of Bo', supertype: 'Vote', x_room_of: wid }),
       file('event', { id: id(8), name: 'Sitting one', supertype: 'Sitting', start_date: 5, x_room_of: wid }),
+      // A take on the work item (the ninth pair, dist.66, SDK 4.75.0), and a Relation called Take that no parlor made.
+      file('relation', { id: id(10), name: "Taken: Fix Ada's age", supertype: 'Take', x_room_of: wid, x_room_item: id(6) }),
+      file('relation', { id: id(11), name: 'The harbour take', supertype: 'Take', description: "The ferry's share of the catch." }),
     ],
     'room-walk',
   ),
@@ -82,8 +85,8 @@ async function walk(engine, tag) {
 
   // Hidden, as it opens.
   let t = await tiles();
-  check(tag, t.Characters === '2' && t.Narratives === '2' && t.Laws === '1' && !t.Relations && !t.Events, `the tiles read the lore: ${JSON.stringify(t)}`);
-  check(tag, (await card.count()) === 1 && (await card.innerText()).includes("The parlor's room · 4"), `the home says the room holds 4 (${(await card.count()) ? await card.innerText() : 'no card'})`);
+  check(tag, t.Characters === '2' && t.Narratives === '2' && t.Laws === '1' && t.Relations === '1' && !t.Events, `the tiles read the lore, the harbour take with it: ${JSON.stringify(t)}`);
+  check(tag, (await card.count()) === 1 && (await card.innerText()).includes("The parlor's room · 5"), `the home says the room holds 5, the take with it (${(await card.count()) ? await card.innerText() : 'no card'})`);
   check(tag, (await beforeNow.count()) === 0, 'Before now is not offered for the sitting alone');
   let hits = await search('rename');
   check(tag, hits.length === 0, `search leaves the message out (${JSON.stringify(hits)})`);
@@ -98,7 +101,7 @@ async function walk(engine, tag) {
   await card.tap();
   await page.waitForTimeout(400);
   t = await tiles();
-  check(tag, t.Narratives === '3' && t.Relations === '2' && t.Events === '1', `shown, the tiles count the room: ${JSON.stringify(t)}`);
+  check(tag, t.Narratives === '3' && t.Relations === '4' && t.Events === '1', `shown, the tiles count the room: ${JSON.stringify(t)}`);
   check(tag, (await card.getAttribute('aria-pressed')) === 'true' && (await card.innerText()).includes('Tap to keep them out'), 'the card says the room is shown');
   check(tag, (await beforeNow.count()) === 1, 'Before now is offered for the sitting');
   hits = await search('rename');
@@ -109,11 +112,11 @@ async function walk(engine, tag) {
   // The choice is kept by this phone across a reload; a second tap hides the room again.
   await page.reload();
   await page.waitForSelector('[data-screen="home"]', { timeout: 30000 });
-  check(tag, (await tiles()).Relations === '2', 'a reload keeps the room shown');
+  check(tag, (await tiles()).Relations === '4', 'a reload keeps the room shown');
   await card.tap();
   await page.waitForTimeout(400);
   t = await tiles();
-  check(tag, !t.Relations && t.Narratives === '2', `a second tap hides it again: ${JSON.stringify(t)}`);
+  check(tag, t.Relations === '1' && t.Narratives === '2', `a second tap hides it again: ${JSON.stringify(t)}`);
 
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ')})`);
   await browser.close();
