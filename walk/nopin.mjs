@@ -64,7 +64,8 @@ async function walk(engine, deviceName, tag) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push('console: ' + m.text()));
-  const keel = { hasPin: false, keys: [{ id: 'k-1', last4: 'RRRR', scope: 'READ' }], deleted: [], writeMints: 0 };
+  // keel's key ids are UUIDs; a decoy read key of the member's, made elsewhere and listed first, ends in the same four (S476).
+  const keel = { hasPin: false, keys: [{ id: 'a2940000-0000-4000-8000-0000000000d0', last4: 'RRRR', scope: 'READ' }, { id: 'a2940000-0000-4000-8000-0000000000a1', last4: 'RRRR', scope: 'READ' }], deleted: [], writeMints: 0 };
   const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {
     const req = r.request();
@@ -72,8 +73,8 @@ async function walk(engine, deviceName, tag) {
     if (path === `/account/worlds/${WID}/keys` && req.method() === 'POST') {
       keel.writeMints++;
       if (!keel.hasPin) return r.fulfill(json(409, { error: { type: 'invalid_request', code: 'pin_required', message: 'Set an account PIN first.', param: null } }));
-      keel.keys.push({ id: 'k-2', last4: 'WWWW', scope: 'WRITE' });
-      return r.fulfill(json(201, { id: 'k-2', last4: 'WWWW', scope: 'WRITE', name: '', revoked: false, key: WRITE }));
+      keel.keys.push({ id: 'a2940000-0000-4000-8000-0000000000a2', last4: 'WWWW', scope: 'WRITE' });
+      return r.fulfill(json(201, { id: 'a2940000-0000-4000-8000-0000000000a2', last4: 'WWWW', scope: 'WRITE', name: '', revoked: false, key: WRITE }));
     }
     if (path === `/account/worlds/${WID}/keys` && req.method() === 'GET') return r.fulfill(json(200, { data: keel.keys }));
     const del = path.match(/\/keys\/([^/]+)$/);
@@ -89,7 +90,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('input[aria-label="A world file"]', { state: 'attached' });
   await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'walk.zip', mimeType: 'application/zip', buffer: zip });
   await page.waitForSelector('[data-screen="home"]', { timeout: 30000 });
-  await idb(page, 'worlds', WID, { kind: 'online', apiKey: READ, keyKind: 'read', role: 'collaborator', memberRole: 'contributor' });
+  await idb(page, 'worlds', WID, { kind: 'online', apiKey: READ, keyKind: 'read', keyMint: { id: 'a2940000-0000-4000-8000-0000000000a1', tail: READ.slice(-8) }, role: 'collaborator', memberRole: 'contributor' });
   await idb(page, 'kv', 'accountToken', 'ow_a_walk');
   // As openAccountWorld leaves it for a world that opened to read for want of a PIN.
   await page.evaluate((id) => sessionStorage.setItem('lantern:no-pin-said:' + id, '1'), WID);
@@ -121,7 +122,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForTimeout(500);
   check(tag, /You can change Temper walk now/.test(await toastText()), 'with a PIN: it says so');
   check(tag, (await page.getByRole('button', { name: 'Read only · why' }).count()) === 0 && (await page.getByText('Read only', { exact: true }).count()) === 0, 'with a PIN: no Read only on the home');
-  check(tag, JSON.stringify(keel.deleted) === '["k-1"]', `the read key taken back (${JSON.stringify(keel.deleted)})`);
+  check(tag, JSON.stringify(keel.deleted) === '["a2940000-0000-4000-8000-0000000000a1"]', `the read key Lantern minted taken back, by its id, the decoy kept (${JSON.stringify(keel.deleted)})`);
   await page.screenshot({ path: `${OUT}/nopin-${tag}-03-writes.png` });
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ')})`);
   await browser.close();

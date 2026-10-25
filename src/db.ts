@@ -22,6 +22,10 @@ export interface WorldRecord {
   /** The world key (ow_w_, ow_r_ or a legacy 10-digit key). Absent for a world on this phone only. */
   apiKey?: string;
   keyKind?: OwKeyKind;
+  /** keel's id for a key Lantern minted from the account, beside the key's last eight characters:
+   * the id counts only while `apiKey` ends in `tail` (`mintedTokenId`, src/revoke.ts). Absent on a
+   * pasted key and on records from before S476. */
+  keyMint?: { id: string; tail: string };
   /** From the account list: owner, or collaborator with a member role. */
   role?: 'owner' | 'collaborator';
   memberRole?: 'co_builder' | 'contributor' | 'guest';

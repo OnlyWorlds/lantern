@@ -271,7 +271,7 @@ export async function openAccountWorld(w: AccountWorld): Promise<db.WorldRecord>
   const name = `Lantern on ${deviceName()}`;
   // Guests read; everyone else writes. A member without an account PIN gets 409 pin_required
   // on a write key, and then this phone reads until they set one on onlyworlds.com.
-  let key: { key: string; scope: string };
+  let key: { key: string; scope: string; id?: string };
   const scope = w.member_role === 'guest' ? 'read' : 'write';
   try {
     key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope, name } });
@@ -286,6 +286,7 @@ export async function openAccountWorld(w: AccountWorld): Promise<db.WorldRecord>
     kind: 'online',
     apiKey: key.key,
     keyKind: detectKeyKind(key.key),
+    keyMint: mintOf(key.key, key.id),
     role: w.role,
     memberRole: w.member_role,
     addedAt: new Date().toISOString(),
@@ -326,20 +327,21 @@ export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
   const token = await accountToken();
   if (!token) throw new Error('Sign in first.');
   const c = accountClient(token);
-  let key: { key: string };
+  let key: { key: string; id?: string };
   try {
     key = await c.request('POST', `/account/worlds/${rec.id}/keys`, { body: { scope: 'write', name: `Lantern on ${deviceName()}` } });
   } catch (e) {
     if ((e as { code?: string }).code === 'pin_required') throw new Error(NO_PIN_YET);
     throw e;
   }
-  const old = rec.apiKey ?? '';
-  await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: detectKeyKind(key.key) });
+  // The read key goes only by the id kept at its own mint, beside that very key: never found by its
+  // last four on a list, where another of the member's keys can share them (the S476 gate's note).
+  const oldId = mintedTokenId(rec.apiKey, rec.keyMint);
+  await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: detectKeyKind(key.key), keyMint: mintOf(key.key, key.id) });
   forgetSession(rec.id);
+  if (!oldId) return; // a key from before S476, or pasted: it stays listed on the keys page, reading no more than the world did
   try {
-    const listed = await c.request<{ data: Array<{ id: string; last4: string; scope: string }> }>('GET', `/account/worlds/${rec.id}/keys`);
-    const gone = listed.data.find((k) => k.scope === 'READ' && old.endsWith(k.last4));
-    if (gone) await c.request('DELETE', `/account/worlds/${rec.id}/keys/${gone.id}`);
+    await c.request('DELETE', `/account/worlds/${rec.id}/keys/${encodeURIComponent(oldId)}`);
   } catch {
     // The read key stays listed on the member's keys page; it opens nothing more than the world did.
   }
@@ -364,8 +366,8 @@ export async function renewWorldKey(rec: db.WorldRecord, cause: 'key_revoked' | 
       : `${rec.name} is not on the account this phone is signed in to, so Lantern can't make its key. Put in a key from the world's page on onlyworlds.com.`);
   }
   const c = accountClient(token);
-  const mint = (scope: 'write' | 'read') => c.request<{ key: string }>('POST', `/account/worlds/${rec.id}/keys`, { body: { scope, name: `Lantern on ${deviceName()}` } });
-  let key: { key: string };
+  const mint = (scope: 'write' | 'read') => c.request<{ key: string; id?: string }>('POST', `/account/worlds/${rec.id}/keys`, { body: { scope, name: `Lantern on ${deviceName()}` } });
+  let key: { key: string; id?: string };
   if (listed.member_role === 'guest') key = await mint('read');
   else {
     try {
@@ -376,7 +378,7 @@ export async function renewWorldKey(rec: db.WorldRecord, cause: 'key_revoked' | 
     }
   }
   const kind = detectKeyKind(key.key);
-  await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: kind, role: listed.role, memberRole: listed.member_role });
+  await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: kind, keyMint: mintOf(key.key, key.id), role: listed.role, memberRole: listed.member_role });
   forgetSession(rec.id);
   return { readOnly: !kindCanWrite(kind) };
 }

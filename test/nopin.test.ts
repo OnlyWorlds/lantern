@@ -28,6 +28,7 @@ const { openAccountWorld, readsForWantOfPin, takeNoPinMark, upgradeMemberKey, NO
 const W = '0ccc0000-0000-4000-8000-000000000003';
 const READ = 'ow_r_' + 'R'.repeat(28) + 'RRRR';
 const WRITE = 'ow_w_' + 'W'.repeat(28) + 'WWWW';
+const kid = (n: number) => `0ccc0000-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`;
 
 class FakeKeel {
   hasPin = false;
@@ -47,7 +48,8 @@ class FakeKeel {
       const scope = JSON.parse(String(init.body ?? '{}')).scope ?? 'write';
       if (scope === 'write' && !this.hasPin) return this.json(409, { error: { code: 'pin_required', message: 'Set an account PIN first.' } });
       const key = scope === 'read' ? READ : WRITE;
-      const row = { id: `k-${this.keys.length + 1}`, last4: key.slice(-4), scope: scope === 'read' ? 'READ' as const : 'WRITE' as const };
+      // keel's key ids are UUIDs (accounts/api.py `_key_row`: str(wk.id)).
+      const row = { id: kid(this.keys.length + 1), last4: key.slice(-4), scope: scope === 'read' ? 'READ' as const : 'WRITE' as const };
       this.keys.push(row);
       return this.json(201, { ...row, name: '', revoked: false, key });
     }
@@ -105,7 +107,27 @@ describe('a member with no PIN', () => {
     expect(after?.apiKey).toBe(WRITE);
     expect(after?.keyKind).toBe('write');
     expect(readsForWantOfPin(after!)).toBe(false);
-    expect(keel.deleted).toEqual(['k-1']);
+    expect(keel.deleted).toEqual([kid(1)]);
     expect(keel.keys.map((k) => k.scope)).toEqual(['WRITE']);
+  });
+
+  it('takes back only the read key it minted, never another of the member\'s keys that ends the same (the S476 gate)', async () => {
+    // Another read key of the member's, made elsewhere, listed first and ending in the same four.
+    keel.keys.push({ id: kid(90), last4: READ.slice(-4), scope: 'READ' });
+    const rec = await openAccountWorld(ROW);
+    keel.hasPin = true;
+    await upgradeMemberKey(rec);
+    expect(keel.deleted).toEqual([kid(2)]);
+    expect(keel.keys.map((k) => k.id)).toContain(kid(90));
+  });
+
+  it('a record from before mint records, or a key put in by hand since, takes nothing back', async () => {
+    const rec = await openAccountWorld(ROW);
+    keel.hasPin = true;
+    await upgradeMemberKey({ ...rec, keyMint: undefined });
+    expect(keel.deleted).toEqual([]);
+    const rec2 = await openAccountWorld(ROW);
+    await upgradeMemberKey({ ...rec2, apiKey: 'ow_r_' + 'P'.repeat(28) + 'RRRR' });
+    expect(keel.deleted).toEqual([]);
   });
 });
