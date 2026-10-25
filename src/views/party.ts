@@ -6,6 +6,7 @@ import { h } from '../dom';
 import { partyChoices, partySize, revealValues } from '../party';
 import { noteGiven } from '../given';
 import { elName, errorText, go, sheet, toast } from '../ui';
+import { markWords } from '../hidden';
 import type { WorldSession } from '../world';
 
 interface Draft {
@@ -127,7 +128,7 @@ function chooseParty(s: WorldSession, then: () => void, changing = false): void 
         'button',
         { class: 'choice', type: 'button', 'aria-pressed': c.id === s.rec.partyId ? 'true' : null },
         h('b', null, elName(c)),
-        h('span', null, [c.id === s.rec.partyId ? 'The party now' : c.supertype, typeCount(partySize(c), 'character', { start: true })].filter(Boolean).join(' · ')),
+        h('span', null, [c.id === s.rec.partyId ? 'The party now' : c.supertype, typeCount(partySize(c), 'character', { start: true }), ...markWords(c)].filter(Boolean).join(' · ')),
       );
       b.addEventListener('click', () => void pick(async () => c.id));
       list.appendChild(b);

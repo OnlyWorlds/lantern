@@ -1283,12 +1283,12 @@ select.input {
   border: 1px solid var(--lan-border);
 }
 
+/* The label wraps: a word after the type (hidden, proposed) is what the card is for, never cut to an ellipsis
+   (the S462 gate's F3, S477). The card sits on the bottom edge and grows upward. */
 .map-card .label {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* A pin's name, to the right of its dot; a halo of the ground keeps it legible on any picture. */

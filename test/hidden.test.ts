@@ -2,7 +2,7 @@
 // the words, a create's body, and the sort slice leaving a hidden element out and counting it.
 import { describe, expect, it } from 'vitest';
 import { buildAskContext, buildWorldIndex, type OwElement } from '@onlyworlds/sdk';
-import { handOnElements, handOnHold, heldBackLine, heldBackSortLine, hiddenLine, hiddenWord, isHidden, withHiddenForCreate } from '../src/hidden';
+import { handOnElements, handOnHold, heldBackLine, heldBackSortLine, hiddenLine, hiddenWord, isHidden, markWords, withHiddenForCreate } from '../src/hidden';
 import { buildSlice } from '../src/sortplan';
 
 const MARK = { by: '19e1c2e5-5e8e-4d46-8382-e5ad445d13a0', evidence: 'seat', expires: '2099-11-22' };
@@ -97,5 +97,18 @@ describe('the sort slice hands the world on', () => {
     const shown = els.map((e) => (e.id === 'wren' ? ({ ...e, hidden: false } as OwElement) : e));
     const s2 = new Map(shown.map((e) => [e.id, e]));
     expect(buildSlice([s2.get('n1')!], buildWorldIndex(shown), (id) => s2.get(id)).map((x) => x.id)).toContain('wren');
+  });
+});
+
+describe('the words a name carries away from its row (the S462 gate F3)', () => {
+  it('proposed first, then hidden, and none for a settled shown element', () => {
+    expect(markWords({ hidden: true, x_review_proposed: MARK })).toEqual(['proposed', 'hidden']);
+    expect(markWords({ hidden: true })).toEqual(['hidden']);
+    expect(markWords({ x_review_proposed: MARK })).toEqual(['proposed']);
+    expect(markWords({ hidden: false, x_review_proposed: null })).toEqual([]);
+    expect(markWords(undefined)).toEqual([]);
+  });
+  it('a lapsed proposal says so, as its row does', () => {
+    expect(markWords({ x_review_proposed: { ...MARK, expires: '2000-01-01' } })).toEqual(['proposed, lapsed']);
   });
 });

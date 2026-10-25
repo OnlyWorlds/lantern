@@ -4,6 +4,7 @@ import type { OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { fieldInfo, fieldLabel, isEmptyValue } from '../schema';
 import { elName, tabbar, toast, topbar } from '../ui';
+import { markWords } from '../hidden';
 import { movedFields, type WorldSession } from '../world';
 import type { OutboxRow } from '../db';
 import { askPin, pinSheet, type View } from './world';
@@ -142,7 +143,7 @@ export function outboxView(s: WorldSession): View {
                   h(
                     'span',
                     { class: 'muted' },
-                    `· ${[r.op === 'create' ? 'new' : r.op === 'delete' ? 'delete' : Object.keys(r.values).map(fieldLabel).join(', '), r.photo ? 'a photo' : '', r.state === 'sending' ? 'sending' : ''].filter(Boolean).join(' · ')}`,
+                    `· ${[r.op === 'create' ? 'new' : r.op === 'delete' ? 'delete' : Object.keys(r.values).map(fieldLabel).join(', '), r.photo ? 'a photo' : '', r.state === 'sending' ? 'sending' : '', ...(r.op === 'delete' ? [] : markWords(s.get(r.id)))].filter(Boolean).join(' · ')}`,
                   ),
                 ),
               ),

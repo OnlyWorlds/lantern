@@ -5,7 +5,7 @@ import { icon } from './icons';
 import { supertypeWord, typeAbbr, typeColor, typeName } from './schema';
 import { isKnownOf } from './knownof';
 import { proposedWord } from './review';
-import { hiddenWord } from './hidden';
+import { hiddenWord, markWords } from './hidden';
 
 /** replace: the screen we leave (a form just submitted) drops out of Back's history. */
 export function go(hash: string, replace = false): void {
@@ -35,6 +35,12 @@ export function elRow(worldId: string, el: OwElement, extra?: string): HTMLEleme
     typeChip(el.type),
     h('span', { class: 'label' }, h('b', null, elName(el)), ' ', h('span', { class: 'muted' }, `· ${hint}`)),
   );
+}
+
+/** A link chip's tail for a proposed or hidden element ('· hidden'), in the chip's own ink; null for any other. */
+export function chipMark(el: unknown): HTMLElement | null {
+  const w = markWords(el);
+  return w.length ? h('span', { class: 'chip-mark', 'data-role': 'chip-mark' }, `· ${w.join(' · ')}`) : null;
 }
 
 export function topbar(title: string | Node, backHref?: string, ...actions: Node[]): HTMLElement {

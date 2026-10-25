@@ -9,6 +9,7 @@ import { circlesOf, sharedNoteValues } from '../party';
 import { pinFor, setPin } from '../pin';
 import { uuid7 } from '../uuid7';
 import { elName, errorText, sheet, tabbar, toast, topbar } from '../ui';
+import { markWords } from '../hidden';
 import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinSheet, type View } from './world';
 
@@ -146,7 +147,7 @@ function chooseCircle(s: WorldSession, circles: OwElement[], then: (c: OwElement
         'button',
         { class: 'choice', type: 'button', 'aria-pressed': c.id === s.rec.partyId ? 'true' : null },
         h('b', null, elName(c)),
-        h('span', null, [c.supertype, typeCount(Array.isArray(c.characters) ? c.characters.length : 0, 'character', { start: true })].filter(Boolean).join(' · ')),
+        h('span', null, [c.supertype, typeCount(Array.isArray(c.characters) ? c.characters.length : 0, 'character', { start: true }), ...markWords(c)].filter(Boolean).join(' · ')),
       );
       b.addEventListener('click', async () => {
         await s.rememberParty(c.id).catch(() => undefined);

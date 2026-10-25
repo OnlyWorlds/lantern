@@ -4,11 +4,11 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { search } from '../search';
 import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, isProfileField, typeColor, typeName, aTypeName } from '../schema';
-import { elName, errorText, go, sheet, toast, typeChip } from '../ui';
+import { chipMark, elName, errorText, go, sheet, toast, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import { photoPicker } from './photo';
 import { proposedWord } from '../review';
-import { hiddenWord } from '../hidden';
+import { hiddenWord, markWords } from '../hidden';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
@@ -182,8 +182,9 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
           const t = s.get(id);
           const b = h(
             'button',
-            { class: 'link-chip', type: 'button', style: `--type:${typeColor(target)}`, 'aria-label': `Remove ${elName(t)}` },
+            { class: 'link-chip', type: 'button', style: `--type:${typeColor(target)}`, 'aria-label': `Remove ${[elName(t), ...markWords(t)].join(', ')}` },
             elName(t),
+            chipMark(t),
             icon('close', 14, 2),
           );
           b.addEventListener('click', () => {

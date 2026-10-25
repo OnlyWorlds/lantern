@@ -23,7 +23,7 @@ import {
   typePlural,
   TYPES,
 } from '../schema';
-import { elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
+import { chipMark, elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
 import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { roomShown } from '../room';
 import { noteOpened, recent } from '../recent';
@@ -583,7 +583,7 @@ function initials(name: string): string {
 function linkChip(s: WorldSession, id: string): HTMLElement {
   const t = s.get(id);
   if (!t) return h('span', { class: 'link-chip missing' }, 'Not on this phone');
-  return h('a', { class: 'link-chip', href: `#/w/${s.id}/e/${id}`, style: `--type:${typeColor(t.type)}` }, elName(t));
+  return h('a', { class: 'link-chip', href: `#/w/${s.id}/e/${id}`, style: `--type:${typeColor(t.type)}` }, elName(t), chipMark(t));
 }
 
 function valueNode(s: WorldSession, type: string, field: string, v: unknown): Node {
@@ -803,7 +803,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       const shown = showAllBacklinks ? links : links.slice(0, 8);
       const chips = shown.map((lid) => {
         const t = s.get(lid);
-        return h('a', { class: 'link-chip plain', href: `#/w/${s.id}/e/${lid}` }, t ? typeChip(t.type) : '', elName(t));
+        return h('a', { class: 'link-chip plain', href: `#/w/${s.id}/e/${lid}` }, t ? typeChip(t.type) : '', elName(t), chipMark(t));
       });
       const more =
         links.length > 8 && !showAllBacklinks

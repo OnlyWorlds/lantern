@@ -7,7 +7,7 @@
 // counts like any other. Ask and the sort hand the world to keel's AI, so there it is left out and
 // counted. Put it online sends the mark on the create, the only write keel takes it on (keel #587).
 
-import { handsOnAsProposed } from './review';
+import { handsOnAsProposed, proposedWord } from './review';
 
 export const HIDDEN_KEY = 'hidden';
 
@@ -24,6 +24,14 @@ export const HIDDEN_REFUSAL = 'This element is hidden, and only the owner and co
 /** The word in a row's hint, or '' for an element nobody hid. */
 export function hiddenWord(el: unknown): string {
   return isHidden(el) ? 'hidden' : '';
+}
+
+/**
+ * The words a name carries wherever it shows without its row (the S462 gate's F3): a link chip,
+ * Linked from, the map's card, Waiting to send, the party pickers. Proposed first, as a row says it.
+ */
+export function markWords(el: unknown): string[] {
+  return [proposedWord(el), hiddenWord(el)].filter(Boolean);
 }
 
 /** The line on its page: who can see it online, or what the phone does with it. */

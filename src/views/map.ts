@@ -9,6 +9,7 @@ import { icon } from '../icons';
 import { CLUSTER_ABOVE, mapPicture, maxZoomFor, pinsToLabel, placeLabels, zoneAt, zoneColor, zonePoints, zoneShape, type Place } from '../maps';
 import { typeColor, typeName } from '../schema';
 import { elName, typeChip } from '../ui';
+import { markWords } from '../hidden';
 import type { WorldSession } from '../world';
 import { notFound, type View } from './world';
 
@@ -156,7 +157,7 @@ export function mapView(s: WorldSession, place: Place): View {
     }
     card.replaceChildren(
       typeChip('zone'),
-      h('span', { class: 'label' }, h('b', null, elName(zone)), ' ', h('span', { class: 'muted' }, '· zone')),
+      h('span', { class: 'label' }, h('b', null, elName(zone)), ' ', h('span', { class: 'muted' }, `· ${['zone', ...markWords(zone)].join(' · ')}`)),
       zone ? h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/e/${zone.id}` }, 'Open') : '',
     );
     card.hidden = false;
@@ -177,7 +178,8 @@ export function mapView(s: WorldSession, place: Place): View {
     const t = pinType(s, pin);
     card.replaceChildren(
       typeChip(t),
-      h('span', { class: 'label' }, h('b', null, pinName(s, pin)), ' ', h('span', { class: 'muted' }, `· ${typeName(t)}`)),
+      // What the pin places says its words, and a hidden pin its own (the S462 gate's F3).
+      h('span', { class: 'label' }, h('b', null, pinName(s, pin)), ' ', h('span', { class: 'muted' }, `· ${[typeName(t), ...new Set([...markWords(target), ...markWords(pin)])].join(' · ')}`)),
       h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/e/${target.id}` }, 'Open'),
     );
     card.hidden = false;
