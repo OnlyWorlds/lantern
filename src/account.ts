@@ -8,6 +8,7 @@ import { API_BASE, LANTERN_CLIENT_NAME, forgetSession } from './world';
 import { plural } from './dom';
 import { forgetAccountPin, setPin } from './pin';
 import { clearNotes } from './notes';
+import { mintOf, mintedTokenId, revokeToken, type RevokeOutcome, type TokenMint } from './revoke';
 
 export interface AccountWorld {
   id: string;
@@ -66,9 +67,12 @@ export const SIGNED_IN_SIGNAL = 'lantern-signed-in';
  * session is dropped, so nothing in memory keeps the old role (C2). The account id is written last,
  * so a sign-in cut off midway is redone by the next, which still sees the old id. A phone that never
  * kept an account id counts as unknown, never as another account (`fetchAccountWorlds` backfills it).
+ * `tokenId` is keel's id for a token Lantern minted (src/revoke.ts), kept with the token's tail right
+ * after it; a pasted token has none, and its write clears the old one's.
  */
-export async function keepAccount(token: string, who: AccountWho): Promise<void> {
+export async function keepAccount(token: string, who: AccountWho, tokenId?: string | null): Promise<void> {
   await db.kvSet('accountToken', token);
+  await db.kvSet('accountTokenMint', mintOf(token, tokenId));
   const before = await db.kvGet<string>('accountId');
   if (before && before !== who.id) {
     await db.kvSet('accountWorlds', undefined);
@@ -93,14 +97,14 @@ export async function keepAccount(token: string, who: AccountWho): Promise<void>
   }
 }
 
-export async function signIn(token: string): Promise<AccountWorld[]> {
+export async function signIn(token: string, tokenId?: string | null): Promise<AccountWorld[]> {
   const t = token.trim();
   if (detectKeyKind(t) !== 'account') {
     throw new Error('That is not an account token. Account tokens start with ow_a_.');
   }
   // The profile both checks the token and says which account it is.
   const who = await whoAmI(t);
-  await keepAccount(t, who);
+  await keepAccount(t, who, tokenId);
   // Kept: a list that fails to arrive is asked again on Your worlds, never a failed sign-in (the
   // code gate's C4: a retry would mint a second token).
   return fetchAccountWorlds(t).catch(() => cachedAccountWorlds());
@@ -129,6 +133,7 @@ export function signInRefusal(err: unknown): string {
 export async function signInWithPassword(login: string, password: string): Promise<AccountWorld[]> {
   const id = login.trim();
   let token: string;
+  let tokenId: string;
   try {
     const signed = await new OwV2Client({ baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).signInWithPassword({
       ...(id.includes('@') ? { email: id } : { username: id }),
@@ -136,20 +141,66 @@ export async function signInWithPassword(login: string, password: string): Promi
       tokenName: `Lantern on ${deviceName()}`,
     });
     token = signed.token;
+    tokenId = signed.id;
   } catch (err) {
     throw new Error(signInRefusal(err));
   }
-  return signIn(token);
+  try {
+    return await signIn(token, tokenId);
+  } catch (err) {
+    // Not awaited: the refusal is said now, not after keel answers (the S476 gate's S2); keepalive carries it.
+    void revokeIfNotKept(token, tokenId);
+    throw err;
+  }
 }
 
-export async function signOut(): Promise<void> {
+/**
+ * A token Lantern minted that the phone did not keep (the profile call after the mint failed, or
+ * the keep itself) is a live bearer nobody holds: revoked at once by its id, quietly. A token that
+ * did land in `kv` is never touched here.
+ */
+export async function revokeIfNotKept(token: string, tokenId: string | null | undefined): Promise<void> {
+  if (!tokenId) return;
+  let held: string | undefined;
+  try {
+    held = await accountToken();
+  } catch {
+    // The store did not answer: the token may have landed, so it is left alone (the S476 gate's S1).
+    return;
+  }
+  if (held === token) return;
+  await revokeToken(token, tokenId);
+}
+
+/**
+ * Sign out: the phone lets go first (the token, its mint record, a waiting invite, the PIN), so the
+ * sign-out holds offline; then a token Lantern minted is revoked on onlyworlds.com with the copy
+ * held here (S476). `revoking` is the revoke's outcome, to say once it lands (wrapped, so awaiting
+ * the sign-out never waits on keel); null when there is nothing Lantern may revoke (a pasted token,
+ * or one kept before mint records). The revoke never writes the app database.
+ */
+export async function signOut(): Promise<{ revoking: Promise<RevokeOutcome> | null }> {
+  const token = await accountToken();
+  const tokenId = mintedTokenId(token, await db.kvGet<TokenMint>('accountTokenMint'));
   await db.kvSet('accountToken', undefined);
+  // Sent the moment the phone has let go, so a later step that fails cannot strand it (the S476 gate's S4).
+  const revoking = token && tokenId ? revokeToken(token, tokenId) : null;
+  await db.kvSet('accountTokenMint', undefined);
   // An invite waiting for this account is not the next account's.
   await db.kvSet('pendingJoin', undefined);
   await db.kvSet('accountWorlds', undefined);
   forgetAccountPin();
   // The account id stays, so the next sign-in can tell whether it is the same account.
   dropHandoffRecord();
+  return { revoking };
+}
+
+export const TOKEN_MAY_WORK = "Lantern's token may still work: remove it on onlyworlds.com in Account settings under Account tokens.";
+
+/** What Sign out says once the revoke has answered (`rest`: what happened to the worlds on the phone). */
+export function signedOutLine(outcome: RevokeOutcome | null, rest: string): string {
+  if (outcome === 'kept') return `Signed out here. ${rest} ${TOKEN_MAY_WORK}`;
+  return outcome === 'revoked' ? `Signed out. Lantern's token is revoked on OnlyWorlds. ${rest}` : `Signed out. ${rest}`;
 }
 
 export async function fetchAccountWorlds(token?: string): Promise<AccountWorld[]> {

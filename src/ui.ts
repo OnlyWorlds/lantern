@@ -80,12 +80,13 @@ export function tabbar(s: { id: string; canWrite: boolean; takesNotes?: boolean 
 }
 
 let toastTimer: number | undefined;
-export function toast(text: string): void {
+/** A line said for a moment; `ms` longer for one that asks the person to do something. */
+export function toast(text: string, ms = 2600): void {
   document.querySelector('.toast')?.remove();
   const t = h('div', { class: 'toast', role: 'status' }, text);
   document.body.appendChild(t);
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => t.remove(), 2600);
+  toastTimer = window.setTimeout(() => t.remove(), ms);
 }
 
 /**

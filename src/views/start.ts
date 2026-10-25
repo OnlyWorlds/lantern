@@ -14,8 +14,10 @@ import {
   signIn,
   signInWithPassword,
   signOut,
+  signedOutLine,
   type AccountWorld,
 } from '../account';
+import type { RevokeOutcome } from '../revoke';
 import { forgetSession } from '../world';
 import { setPin } from '../pin';
 import { pendingJoin } from '../join';
@@ -700,9 +702,11 @@ export function settingsView(): HTMLElement {
     });
     const out = h('button', { class: 'btn', type: 'button' }, 'Sign out');
     out.addEventListener('click', async () => {
-      await signOut();
-      toast('Signed out. Worlds already on this phone stay.');
+      // One sign-out per tap: a second tap would say the line twice (the S476 gate's notes).
+      out.setAttribute('disabled', '');
+      const { revoking } = await signOut();
       void render();
+      void saySignedOut(revoking, 'Worlds already on this phone stay.');
     });
     // On a shared phone the next person can read what stays (the security pass, F2; the Captain
     // h37 #4072: offered, not the default). The account's worlds are the ones with a role, as the PIN's are.
@@ -726,9 +730,9 @@ export function settingsView(): HTMLElement {
       }
       outAll.setAttribute('disabled', '');
       for (const w of mine) await removeWorldFromPhone(w.id);
-      await signOut();
-      toast(`Signed out. ${plural(mine.length, 'world')} removed from this phone.`);
+      const { revoking } = await signOut();
       void render();
+      void saySignedOut(revoking, `${plural(mine.length, 'world')} removed from this phone.`);
     });
     main.replaceChildren(
       topbar('Settings', '#/worlds'),
@@ -759,6 +763,14 @@ export function settingsView(): HTMLElement {
   };
   void render();
   return main;
+}
+
+/** Said once the revoke answers; dropped when the phone signed in again meanwhile (its own line is the news). */
+async function saySignedOut(revoking: Promise<RevokeOutcome> | null, rest: string): Promise<void> {
+  const outcome = revoking ? await revoking : null;
+  if (revoking && (await accountToken().catch(() => undefined))) return;
+  // The line that asks for a step on onlyworlds.com stays long enough to read.
+  toast(signedOutLine(outcome, rest), outcome === 'kept' ? 7000 : undefined);
 }
 
 export async function removeWorldFromPhone(id: string): Promise<void> {

@@ -6,7 +6,7 @@
 import { OwV2Client, OwSignInError, detectKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
-import { fetchAccountWorlds, keepAccount, type AccountWho } from './account';
+import { fetchAccountWorlds, keepAccount, revokeIfNotKept, type AccountWho } from './account';
 import { pendingJoin } from './join';
 
 /** keel's registry (`GET /api/v2/auth/clients`) lists `lantern` with exactly this address, production only. */
@@ -67,7 +67,7 @@ export async function beginOnlyWorldsSignIn(navigate?: (url: string) => void): P
 }
 
 export type SignInOutcome =
-  | { ok: true; token: string; account: AccountWho }
+  | { ok: true; token: string; tokenId: string | null; account: AccountWho }
   | { ok: false; cancelled: boolean; error: unknown };
 
 function fetchWithin(limitMs: number): typeof fetch {
@@ -102,7 +102,7 @@ export function startSignInCallback(href: string = location.href, fetchImpl?: ty
     /* the address stays; the router still runs */
   }
   return pending.then(
-    (r): SignInOutcome => ({ ok: true, token: r.token, account: { id: r.account.id, username: r.account.username } }),
+    (r): SignInOutcome => ({ ok: true, token: r.token, tokenId: r.tokenId ?? null, account: { id: r.account.id, username: r.account.username } }),
     (error: unknown): SignInOutcome => ({ ok: false, cancelled, error }),
   );
 }
@@ -163,10 +163,11 @@ export async function applySignInOutcome(outcome: SignInOutcome): Promise<string
       return '#/signin';
     }
     try {
-      await keepAccount(outcome.token, outcome.account);
+      await keepAccount(outcome.token, outcome.account, outcome.tokenId);
     } catch (e) {
-      // Only a failure to keep is "not kept" (the S470 code gate's C12).
+      // Only a failure to keep is "not kept" (the S470 code gate's C12); a token nobody kept is revoked (S476).
       console.warn('[sign-in] not kept:', e);
+      void revokeIfNotKept(outcome.token, outcome.tokenId).catch(() => undefined);
       notice = NOT_KEPT_LINE;
       return '#/signin';
     }
