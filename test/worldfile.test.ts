@@ -203,7 +203,7 @@ describe('world files', () => {
     expect(of('pin').every((p) => p.map === map.id && !('map_id' in p))).toBe(true);
     expect(of('marker').filter((m) => typeof m.zone === 'string').length).toBeGreaterThan(0);
     expect(of('marker').some((m) => 'zone_id' in m)).toBe(false);
-  });
+  }, 30_000); // a real world folder, read and opened whole: about 7 s here under either Vitest
 
   it("a file with both map and map_id lands where Atlas puts it; one id in both folders is one element (the gate, C2 C3)", async () => {
     const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
