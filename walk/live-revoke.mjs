@@ -1,4 +1,4 @@
-// S476: Sign out revokes Lantern's token, read live on a crew account (claim it in h57 first). Signs
+// Sign out revokes Lantern's token, read live on a crew account. Signs
 // in by email and password on the phone's sign-in screen, records the token's id from keel's mint
 // answer (the walk's own record), taps Sign out, and asks keel whether the token still works. A
 // build with the revoke: 401, "Signed out. Lantern's token is revoked on OnlyWorlds. ..." The build
@@ -28,7 +28,7 @@ p.on('response', async (r) => {
   }
 });
 // Every request of the walk's own has a limit, and the walk a watchdog: a WebKit run on production hung
-// 32 minutes after its Sign out, its teardown never reached (S476).
+// 32 minutes after its Sign out, its teardown never reached.
 const alive = async (tok) => (await fetch(`${API}/account`, { headers: { Authorization: `Bearer ${tok}` }, signal: AbortSignal.timeout(15000) })).status;
 setTimeout(() => { console.log(`[${engine} ${tag}] FAIL the walk hung past 3 minutes; minted ids: ${minted.map((m) => m.id).join(', ') || 'none'}`); process.exit(2); }, 180000).unref();
 

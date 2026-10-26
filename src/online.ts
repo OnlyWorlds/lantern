@@ -15,7 +15,7 @@ import { withHiddenForCreate } from './hidden';
 export const BULK_MAX = 1000;
 const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by'];
 
-/** A data: address as its picture, read in place: the host's connect-src refuses a fetch of one (S409). */
+/** A data: address as its picture, read in place: the host's connect-src refuses a fetch of one. */
 export function dataUrlBlob(url: string): Blob {
   const comma = url.indexOf(',');
   if (!url.startsWith('data:') || comma < 0) throw new Error('not a data address');
@@ -42,7 +42,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   if (!rec || rec.kind !== 'local') throw new Error('This world is not a world on this phone.');
   // A stub (keel's known of) is never sent (the folder spec §4.4 rule 3), and the whole elements
   // beside it link to it, so a world holding one (a player's view, saved as a file) does not go
-  // online at all: nothing is made, nothing sent, the phone copy stays (the S444 gate, G1).
+  // online at all: nothing is made, nothing sent, the phone copy stays (the stub gate, G1).
   const elements = await db.allElements(localId);
   const stubs = elements.filter((el) => isKnownOf(el)).length;
   if (stubs) {

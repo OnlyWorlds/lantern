@@ -1,5 +1,5 @@
-// The review profile's proposed mark (schema-dist dist.52 `profiles/review.md`, Keel #565's reader
-// rule, Skeld h29 #11116; Atlas 1.84.0's twin, conv. 168). An element whose `x_review_proposed` is an
+// The review profile's proposed mark (schema-dist dist.52 `profiles/review.md`, keel's reader
+// rule, Skeld, 2026-10-23; Atlas 1.84.0's twin). An element whose `x_review_proposed` is an
 // object was written as proposed (an AI seat's new element on a world whose keeper reviews them) and
 // is not canon until a keeper settles it on onlyworlds.com: accept writes the mark null, decline
 // deletes it.

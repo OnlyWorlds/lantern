@@ -1,4 +1,4 @@
-// S443: the party link's pick on live keel (PR 110), as a phone taps it. One throwaway world on crew-walk-a with three
+// The party link's pick on live keel (PR 110), as a phone taps it. One throwaway world on crew-walk-a with three
 // Characters; a table link (3 uses: Captain White, Alexander Doniphan, Sarah Borginnis) whose Captain White a seat takes
 // over the API first, and a table with no list (2 uses).
 // Checks: White greyed and last; Open waits for a pick and names it; Doniphan opens the world; with no list an empty

@@ -1,4 +1,4 @@
-// The morning after's writes, composed with the outbox (the S399 merge gate's confirmed findings,
+// The morning after's writes, composed with the outbox (the merge gate's confirmed findings,
 // each now a guard): a late Finish writing is judged against the plan's base; a target with a
 // conflict waiting is not added to; a target removed elsewhere is passed, not a dead end; the
 // slice trims as keel does; a map's colour is never a row's to write. And upheld: with no PIN the

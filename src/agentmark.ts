@@ -1,5 +1,5 @@
 /**
- * The quiet agent mark (#347; the agents page §10, Orrery council/2026-10-15-agents-in-worlds.md:
+ * The quiet agent mark (#347; the agents page §10:
  * a fact about the record, derived on read, in the tool's chrome). keel records the door of every
  * element write (#299): `changed_via` is seat (an agent seat), mcp, declared (a client that said
  * it is an agent), or a person's surface (api, v1, sync, server); `changed_by` the membership.

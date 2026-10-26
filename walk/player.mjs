@@ -1,4 +1,4 @@
-// A player link, no account (Keel #353, keel PR 55), as a phone taps it, both engines, on a fake
+// A player link, no account (keel PR 55), as a phone taps it, both engines, on a fake
 // keel shaped by keel's own join_api.py: the preview says reader player; "Open The Reach" posts
 // POST /join with no credential and an optional name; the 201 PlayerJoined's read key is kept and
 // the world opens to read; the player's notes stay on the phone with no Share; a spent link is

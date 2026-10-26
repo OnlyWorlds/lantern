@@ -1,8 +1,8 @@
 // Invite someone: the owner makes an invite link on the phone (keel C1, SDK 4.24) and sends it with
 // the phone's share sheet, copies it, or shows its QR code across the table. The link is shown once:
 // keel keeps only a hash, and Lantern keeps nothing. Seeing and taking back links is the website's.
-// "A player" is keel's no-account player link (#416, the Captain's yes on the sharing floor, h50
-// #7610), reading as a Character the owner picks or a new one; an account guest is one choice down.
+// "A player" is keel's no-account player link (#416, Titus's yes,
+// 2026-10-19), reading as a Character the owner picks or a new one; an account guest is one choice down.
 // Atlas's half: `tools/atlas/src/ui/invite-modal.ts`. The choices and words match.
 import { typeLabel } from '../schema';
 import * as db from '../db';

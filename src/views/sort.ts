@@ -1,7 +1,7 @@
 // The morning after: Unsorted notes read beside what the world already has, the AI proposing what
 // they make, link and add, and the person ticking what is true. Nothing is written before the tick;
 // what is ticked goes to the outbox like any edit, and the sorted notes are filed as Sorted (kept:
-// every row points at its note). Design: Forge/Notes/2026-10-12-lantern-morning-after.md.
+// every row points at its note).
 import type { OwElement } from '@onlyworlds/sdk';
 import { h, plural } from '../dom';
 import { icon } from '../icons';
@@ -63,7 +63,7 @@ function readKept(worldId: string): Kept | null {
 
 /** A sort under way, per world: leaving and coming back waits for it instead of spending a second answer. */
 const inFlight = new Map<string, Promise<void>>();
-/** Why the last sort here was refused, per world: a screen that comes back after it still says why (the S399 merge gate). */
+/** Why the last sort here was refused, per world: a screen that comes back after it still says why (the merge gate). */
 const refusals = new Map<string, { text: string; token: string | undefined }>();
 /** A write run under way, per world: one at a time, joined by a screen that comes back to it. */
 const writingRun = new Map<string, Promise<void>>();
@@ -315,7 +315,7 @@ export function sortView(s: WorldSession): View {
         b.disabled = locked;
         picks.appendChild(b);
       }
-      // Neither: an empty card to make it new, written fresh (Simmer h37 #3598: never a model's guess behind a tap).
+      // Neither: an empty card to make it new, written fresh (Simmer, 2026-10-12: never a model's guess behind a tap).
       const neither = h('button', { class: 'btn btn-quiet', type: 'button', 'data-neither': String(i) }, row.candidates.length ? 'Neither: it is something new' : 'It is something new');
       neither.addEventListener('click', () => {
         if (!kept) return;
@@ -367,7 +367,7 @@ export function sortView(s: WorldSession): View {
 
   // Write is one plan, fixed at the first tap and kept with the sort, done step by step: a second
   // tap while it runs does nothing, and a retry after a failure resumes where it stopped, so nothing
-  // is made or appended twice (the S398 sort gate).
+  // is made or appended twice (the sort gate).
   const write = async () => {
     if (!kept || writingRun.has(s.id)) return;
     if (!s.canWrite) {
@@ -375,7 +375,7 @@ export function sortView(s: WorldSession): View {
       return;
     }
     // The kept sort is the truth, not this screen's copy of it: another tab may have fixed its plan,
-    // moved its step, written it or let it go (the S400 gate).
+    // moved its step, written it or let it go.
     const saved = readKept(s.id);
     if (!saved || saved.at !== kept.at) {
       kept = saved;
@@ -408,7 +408,7 @@ export function sortView(s: WorldSession): View {
         return;
       }
       // The plan's ids live in the kept sort: if the phone will not keep it, a reload would make
-      // everything again, so nothing starts (the S400 gate).
+      // everything again, so nothing starts.
       if (!writeKept(s.id, { ...kept, plan: fixPlan(plan.writes), step: 0 })) {
         toast('This phone would not keep the plan, so nothing was written. Free some space and try again.');
         return;
@@ -419,7 +419,7 @@ export function sortView(s: WorldSession): View {
     const plan = k.plan!;
     let gone = 0;
     // One write run per world, wherever the screen is: leaving and coming back joins this run
-    // instead of starting a second one over the same steps (the S399 merge gate).
+    // instead of starting a second one over the same steps (the merge gate).
     const run = (async () => {
       // The kept sort is the run's state: its step moves with each write and is saved after it.
       ({ gone } = await runWrites(s, k as Kept & WriteRun, () => writeKept(s.id, k)));
@@ -462,7 +462,7 @@ export function sortView(s: WorldSession): View {
     writeBtn.addEventListener('click', () => void write());
     // Before writing: let the sort go. Once started and stopped (a failure, a reload, a target that
     // cannot be written), stopping keeps what was written and leaves the unfiled notes in Unsorted,
-    // so a sort can never be stuck for good (the S399 merge gate).
+    // so a sort can never be stuck for good (the merge gate).
     const letGo = h(
       'button',
       { class: 'btn btn-quiet', type: 'button', style: 'align-self:center', hidden: writing, 'data-action': 'let-go' },

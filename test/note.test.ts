@@ -22,7 +22,7 @@ describe('elementFromNote', () => {
     expect(r.description).toBe(long + '\nmore');
   });
 
-  it('a long first line is cut at a word, never inside one (Quillon, h37 #4275)', () => {
+  it('a long first line is cut at a word, never inside one (Quillon)', () => {
     const r = elementFromNote("Ines, the lighthouse keeper's daughter, who keeps the lamp lit when her father drinks");
     // "…keeps the lamp" runs to 58 characters, past the 57 kept, so "lamp" goes whole.
     expect(r.name).toBe("Ines, the lighthouse keeper's daughter, who keeps the…");

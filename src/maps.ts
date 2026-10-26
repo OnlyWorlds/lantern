@@ -1,6 +1,6 @@
 // What a map needs, as plain rules (the view draws them): which maps an element can be shown on,
 // a zone's shape and outline, and how far a picture may be zoomed. Quillon measured the rules on a
-// phone (Armature/Notes/2026-10-12-lantern-maps-report.md); coordinates are the schema's: x and y
+// phone (2026-10-12); coordinates are the schema's: x and y
 // from the map's bottom left, which is Leaflet CRS.Simple's lng and lat with no conversion.
 import type { OwElement } from '@onlyworlds/sdk';
 
@@ -178,7 +178,7 @@ export type PlacedLabel<T> = LabelSpot<T> & { side: 'right' | 'left'; gap: numbe
  * left near the screen's right edge; a name that fits on neither side is left out (a tap names it).
  * First come, first placed: put the shown pin first. `widthOf` is the name's real width in px
  * (the screen measures it in the label's own font: an estimate per character missed capitals and
- * CJK, the S396 gate); `height` is the label's line box.
+ * CJK); `height` is the label's line box.
  */
 export function placeLabels<T>(spots: LabelSpot<T>[], screenWidth: number, widthOf: (name: string) => number, height = 16): PlacedLabel<T>[] {
   type Box = [number, number, number, number];

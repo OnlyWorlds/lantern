@@ -1,4 +1,4 @@
-// Keel #565's reader rule on the phone (src/review.ts; Atlas 1.84.0's twin, conv. 168), both engines.
+// The reader rule on the phone (src/review.ts; Atlas 1.84.0's twin, conv. 168), both engines.
 // The demo world, made to look like an account world on this phone, one of its Characters marked
 // proposed in the phone's copy as keel serves the mark, and keel's Ask proxy routed (no question spent):
 // the home counts it apart and says so; its row and its page say proposed; Ask lists it with its word,

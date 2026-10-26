@@ -1,4 +1,4 @@
-// Every button on one line, at a narrow phone's width (the Captain's walk, 2026-10-12: "some
+// Every button on one line, at a narrow phone's width (Titus's walk, 2026-10-12: "some
 // buttons were two lines"). Visits each screen at 360 CSS px (a Galaxy S22), both themes, and counts
 // the lines each control's text paints, per text leaf (a .choice's title and hint are two leaves by
 // design). Pointed at a known two-line label first, so a zero is a measurement, not a blind spot.
@@ -95,7 +95,7 @@ async function walk(engine, tag) {
       await page.waitForTimeout(50);
       for (const w of await wrapped(page)) seen.push({ ...w, at: `${name}/${theme}` });
       // At 320 (the smallest phones) a label may wrap, but nothing may run out of its control or
-      // push the page sideways (the S398 gate: a one-line rule makes long labels spill).
+      // push the page sideways (a one-line rule makes long labels spill).
       await page.setViewportSize({ width: 320, height: 780 });
       await page.waitForTimeout(50);
       for (const w of await wrapped(page)) if (w.overflow) seen.push({ ...w, at: `${name}/${theme}/320` });
@@ -208,7 +208,7 @@ async function walk(engine, tag) {
   await page.waitForFunction(() => !document.querySelector('.banner'), null, { timeout: 60000 }).catch(() => {});
   await measure('demo-home');
   // A type's name cut to an ellipsis is neither a wrap nor a spill, so the measure above cannot
-  // see it (S399: at 360, six of the 22 were cut). Every type shown, at four phone widths.
+  // see it (at 360, six of the 22 were cut). Every type shown, at four phone widths.
   await page.getByRole('button', { name: /All 22 types/ }).click();
   for (const w of [320, 360, 390, 412]) {
     await page.setViewportSize({ width: w, height: 780 });

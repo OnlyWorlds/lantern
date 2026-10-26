@@ -1,4 +1,4 @@
-// Share with the party (the Captain h37 #4420, B; keel #241), as a player taps it, both engines.
+// Share with the party (keel #241), as a player taps it, both engines.
 // A world file made to look like a player's account world (a read key, a guest with a Character in
 // The Party); keel routed: the key mint, the PIN read and the Narrative's POST are answered as keel
 // answers them, every other call is cut off. Checks: the player's screens stay read only; the first
@@ -11,7 +11,7 @@ import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';
 
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
 const OUT = 'walk/shots';

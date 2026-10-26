@@ -1,5 +1,5 @@
 // keel's "known of" stub (keel PR 113, B16) on a player's phone, both engines, on a fake keel
-// shaped by the live probe (Forge/tools/atlas/Notes/ui-snapshots/2026-10-20-s443/probe-stub.log):
+// shaped by the live probe:
 // a player link opens The Reach as Tor, whose friend Ana comes as a stub. The list says "known of"
 // beside Ana and not beside Tor; Ana's page shows her name, description and the public fields keel
 // shares (PR 117) as rows nothing changes, with "Known of: …", no empty-field toggle, Linked from

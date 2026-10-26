@@ -111,7 +111,7 @@ describe('a member with no PIN', () => {
     expect(keel.keys.map((k) => k.scope)).toEqual(['WRITE']);
   });
 
-  it('takes back only the read key it minted, never another of the member\'s keys that ends the same (the S476 gate)', async () => {
+  it('takes back only the read key it minted, never another of the member\'s keys that ends the same', async () => {
     // Another read key of the member's, made elsewhere, listed first and ending in the same four.
     keel.keys.push({ id: kid(90), last4: READ.slice(-4), scope: 'READ' });
     const rec = await openAccountWorld(ROW);

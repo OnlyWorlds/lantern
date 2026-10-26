@@ -1,10 +1,10 @@
-// Joining with an invite link (Keel #212), as a phone taps it, both engines. A bad link goes to
+// Joining with an invite link, as a phone taps it, both engines. A bad link goes to
 // live keel (the real 404). The rest routes keel's join and account answers to a fake shaped by
 // keel's tests, since a good link is the owner's to make: shared from a chat, the link opens the
 // invite; "Sign in to join" keeps it through the sign-in; already a member is said plainly.
 // Run: npm run build && (npx vite preview &) && node walk/join.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -23,7 +23,7 @@ const json = (status, body) => ({ status, contentType: 'application/json', body:
 async function walk(engine, deviceName, tag) {
   const browser = await engine.launch();
   // No worker: with one in control, Playwright's WebKit does not route the page's requests, and
-  // the fake keel below would be bypassed for the live one (S395). The worker has its own walks.
+  // the fake keel below would be bypassed for the live one. The worker has its own walks.
   const page = await (await browser.newContext({ ...devices[deviceName], serviceWorkers: 'block' })).newPage();
   const errors = [];
   let expect4xx = false;
@@ -53,7 +53,7 @@ async function walk(engine, deviceName, tag) {
     r.fulfill(json(200, { reader: 'person', world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: 'guest', with_character: false, expires_at: '2026-10-19T00:00:00+00:00' })),
   );
   await page.route('**/api/v2/account/worlds', (r) => r.fulfill(json(200, { data: [] })));
-  // A pasted token is read for which account it is (keel's profile, S470).
+  // A pasted token is read for which account it is (keel's profile).
   await page.route('**/api/v2/account', (r) => r.fulfill(json(200, { id: 'acc-walk', username: 'walker', email: 'w@example.com', date_joined: null })));
   await page.route('**/api/v2/account/join', (r) => r.fulfill(joinAnswer));
 
@@ -67,7 +67,7 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('input[aria-label="Invite link"]').inputValue()).includes('ow_j_fromachat'), 'the link is in the field');
   await shot('invite');
 
-  // keel's join page hands the code on in the fragment (Keel #294): a fresh load, then the same
+  // keel's join page hands the code on in the fragment: a fresh load, then the same
   // link followed from inside the app (a hashchange). Each opens the invite with the code, and
   // the code leaves the address bar, as Atlas's door clears it (its R2).
   for (const [how, url] of [['a fresh load', `${BASE}/?from=keel#/join/ow_j_fromkeel`], ['inside the app', `${BASE}/?from=keel#/join/ow_j_fromkeel2`]]) {
@@ -88,7 +88,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('[data-screen="join"] .invite', { timeout: 15000 });
   check(tag, true, 'after the sign-in, the invite is back');
   const joinBtn = page.getByRole('button', { name: 'Join The Reach as walker', exact: true });
-  check(tag, (await joinBtn.count()) === 1, 'signed in, the button says Join The Reach as walker (the account, S470)');
+  check(tag, (await joinBtn.count()) === 1, 'signed in, the button says Join The Reach as walker (the account)');
 
   // Already a member (accepting asks no PIN since keel #297, so there is no PIN step to walk)
   await joinBtn.tap();

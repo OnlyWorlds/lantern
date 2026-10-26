@@ -64,7 +64,7 @@ async function walk(engine, deviceName, tag) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push('console: ' + m.text()));
-  // keel's key ids are UUIDs; a decoy read key of the member's, made elsewhere and listed first, ends in the same four (S476).
+  // keel's key ids are UUIDs; a decoy read key of the member's, made elsewhere and listed first, ends in the same four.
   const keel = { hasPin: false, keys: [{ id: 'a2940000-0000-4000-8000-0000000000d0', last4: 'RRRR', scope: 'READ' }, { id: 'a2940000-0000-4000-8000-0000000000a1', last4: 'RRRR', scope: 'READ' }], deleted: [], writeMints: 0 };
   const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {

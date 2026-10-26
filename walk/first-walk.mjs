@@ -1,11 +1,11 @@
-// The Captain's first phone walk (h37 #3552, 2026-10-12), each thing he hit walked as fixed, on a
+// Titus's first phone walk (2026-10-12), each thing he hit walked as fixed, on a
 // world on this phone: Add to home screen does something; Catch makes a Character at once and
 // opens it with its empty fields; a linked field changes from its pencil while its chip still
 // opens the place; a picture added after the element was made (camera or gallery); the tab bar on
 // every screen, World going home; Ask says why it gives no sentence.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/first-walk.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -44,7 +44,7 @@ async function walk(engine, tag) {
   check(tag, steps.length === 2, `the install button opens the steps (${JSON.stringify(steps[0] ?? '')})`);
   await shot('install-steps');
   await page.locator('.sheet').getByRole('button', { name: 'Got it' }).tap();
-  // S407: Sign in says where an account comes from (an invited friend lands here with none).
+  // Sign in says where an account comes from (an invited friend lands here with none).
   await page.goto(`${BASE}/#/signin`);
   await page.waitForSelector('[data-screen="signin"]');
   const signup = page.locator('[data-part="no-account"] a');
@@ -60,7 +60,7 @@ async function walk(engine, tag) {
   await page.locator('input[aria-label="World name"]').fill('First walk');
   await page.getByRole('button', { name: 'Start the world' }).tap();
   await page.waitForSelector('[data-screen="home"]');
-  check(tag, (await page.locator('[data-action=invite]').count()) === 0, 'a world on this phone only offers no invite (S407)');
+  check(tag, (await page.locator('[data-action=invite]').count()) === 0, 'a world on this phone only offers no invite');
   const catchTab = page.locator('.tabbar [data-tab=catch]');
   check(tag, (await catchTab.count()) === 1, 'the tab bar has Catch');
   await catchTab.tap();
@@ -103,7 +103,7 @@ async function walk(engine, tag) {
   await shot('pencil-sheet');
   await page.locator('.sheet').getByRole('button', { name: 'Cancel' }).tap();
   await page.waitForFunction(() => !document.querySelector('.sheet'));
-  // His second walk (#3660): a single link laid out like a multi link, the chip under its label line.
+  // His second walk: a single link laid out like a multi link, the chip under its label line.
   const lay = await page.evaluate(() => {
     const row = document.querySelector('.frow[data-field=location]');
     const k = row?.querySelector('.k')?.getBoundingClientRect();
@@ -111,7 +111,7 @@ async function walk(engine, tag) {
     return { block: row?.classList.contains('block'), below: !!k && !!chip && chip.top >= k.bottom - 1 };
   });
   check(tag, lay.block && lay.below, `a single link's chip sits under its label, as a multi link's does (${JSON.stringify(lay)})`);
-  // h37 #4050: the pencil at the label line's far right; its glyph's right edge on the row's, inside the page.
+  // The pencil at the label line's far right; its glyph's right edge on the row's, inside the page.
   const right = await page.evaluate(() => {
     const row = document.querySelector('.frow[data-field=location]')?.getBoundingClientRect();
     const svg = document.querySelector('.frow[data-field=location] .edit-btn svg')?.getBoundingClientRect();
@@ -126,7 +126,7 @@ async function walk(engine, tag) {
   await page.waitForFunction(() => /Mira/.test(document.querySelector('.el-head h1')?.textContent ?? ''));
 
   // 4. A picture after the element was made, from the gallery. The empty picture itself opens the
-  // same sheet (#3660).
+  // same sheet.
   await page.locator('[data-action=avatar-picture]').tap();
   await page.waitForSelector('.sheet [data-photo=gallery]', { state: 'attached' });
   check(tag, (await page.locator('.sheet [data-photo=camera]').count()) === 1, 'tapping the empty picture offers Camera or Gallery');
@@ -150,7 +150,7 @@ async function walk(engine, tag) {
   await page.locator('.tabbar [data-tab=world]').tap();
   await page.waitForSelector('[data-screen="home"] .type-tile');
   check(tag, true, 'World in the tab bar lands on the world home');
-  // On the home itself, the tab goes up a level and says so (#3675).
+  // On the home itself, the tab goes up a level and says so.
   const up = page.locator('.tabbar [data-tab=world]');
   check(tag, (await up.innerText()).trim() === 'Worlds' && (await up.getAttribute('href')) === '#/worlds', 'on the world home, the tab reads Worlds and goes to Your worlds');
   await up.tap();
@@ -171,7 +171,7 @@ async function walk(engine, tag) {
   check(tag, await page.locator('.tabbar').waitFor({ state: 'visible', timeout: 2000 }).then(() => true, () => false), 'and it comes back, a moment after');
   const worldId = page.url().match(/#\/w\/([^/?]+)/)[1];
 
-  // 6. Pin a world (#3660): it leads the list under Pinned, through a reload, until unpinned.
+  // 6. Pin a world: it leads the list under Pinned, through a reload, until unpinned.
   await page.goto(`${BASE}/#/new`);
   await page.locator('input[aria-label="World name"]').fill('Second world');
   await page.getByRole('button', { name: 'Start the world' }).tap();
@@ -199,7 +199,7 @@ async function walk(engine, tag) {
   await page.waitForFunction(() => ![...document.querySelectorAll('.section-label')].some((l) => l.textContent === 'Pinned'));
   check(tag, true, 'unpinned, the Pinned section goes');
 
-  // 7. A change waiting on the PIN says so where it waits, and asks for it there (#3660). The first
+  // 7. A change waiting on the PIN says so where it waits, and asks for it there. The first
   // world made an owner's account world with a write key; keel cut off, so nothing is sent.
   cutOff = true;
   await page.route('**/api/v2/**', (r) => r.abort());
@@ -221,7 +221,7 @@ async function walk(engine, tag) {
   );
   await page.goto(`${BASE}/#/w/${worldId}`);
   await page.waitForSelector('[data-screen="home"]');
-  // S411: an owner's online world offers Invite someone, and the link is made here (keel C1, routed
+  // An owner's online world offers Invite someone, and the link is made here (keel C1, routed
   // as keel answers: 201 with the code, the link and the line, shown once).
   const sent = [];
   // Held until the walk has tried to change the choice during the wait (Atlas 1.47's gate, H1).
@@ -248,12 +248,12 @@ async function walk(engine, tag) {
   await page.locator('.sheet [data-action=make-invite]').tap();
   await page.waitForFunction(() => document.querySelector('.sheet [data-role=contributor]')?.disabled === true);
   check(tag, await page.locator('.sheet [data-role=contributor]').isDisabled() && await page.locator('.sheet input').isDisabled(), 'while the link is made, the choice and the name are locked');
-  // S477 (S414's left gap): a tap on the backdrop while keel makes the link leaves the sheet, so the link is shown.
+  // A tap on the backdrop while keel makes the link leaves the sheet, so the link is shown.
   await page.locator('.backdrop').tap({ position: { x: 12, y: 12 } });
   check(tag, (await page.locator('.sheet').count()) === 1, 'a tap on the backdrop during the wait keeps the sheet');
   release();
   await page.waitForSelector('.sheet [data-role=invite-link]');
-  check(tag, /as a player with an account:$/.test((await page.locator(".sheet p").first().innerText()).trim()), "the link says the role it was made for (S433: a guest link is a player with an account)");
+  check(tag, /as a player with an account:$/.test((await page.locator(".sheet p").first().innerText()).trim()), "the link says the role it was made for (a guest link is a player with an account)");
   check(tag, (await page.locator('.sheet [data-role=invite-link]').innerText()).trim() === 'https://www.onlyworlds.com/join#ow_j_walk1234', 'Invite someone makes the link on the phone and shows it');
   check(tag, JSON.stringify(sent) === JSON.stringify([{ reader: 'person', role: 'guest', days: 7, inviter_name: 'Ada' }]), `for a person, as a player, signed with the name typed (${JSON.stringify(sent)})`);
   check(tag, await page.locator('.sheet svg.invite-qr').waitFor({ timeout: 5000 }).then(() => true, () => false), 'with its QR code');
@@ -289,7 +289,7 @@ async function walk(engine, tag) {
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 
-  // S434 (#417's live walk): a friend sends a world file to a phone with nothing on it yet. The
+  // A friend sends a world file to a phone with nothing on it yet. The
   // welcome's "I have a world file" opens it; before, the door was only on Your worlds.
   {
     const fresh = await browser.newContext({ ...base, viewport: { width: 360, height: 780 }, serviceWorkers: 'block' });
@@ -306,7 +306,7 @@ async function walk(engine, tag) {
         { path: 'world.json', data: enc({ id: '0f0f0f0f-0000-4000-8000-00000000f17e', name: 'Sent by a friend' }) },
         { path: 'elements/character/elrod--0000f17e.json', data: enc({ id: 'f17e0000-0000-4000-8000-000000000001', name: 'Elrod' }) },
       ], 'sent-by-a-friend');
-      // S467: sent as the standard names it (.owworld, what the toolkit's carry writes), with no type
+      // Sent as the standard names it (.owworld, what the toolkit's carry writes), with no type
       // a phone knows; the picker must offer it, or a phone's file picker hides it (OW-1).
       const picker = await chooser;
       const accept = await picker.element().getAttribute('accept');

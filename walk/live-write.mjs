@@ -57,7 +57,7 @@ try {
   await page.locator('textarea').tap();
   await page.keyboard.type('Lantern probe, delete me\nA scratch element from the overnight walk.');
   await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
-  // A note stays on Catch now (S404); its page is one tap away.
+  // A note stays on Catch now; its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
   const id = await elementId();
@@ -141,7 +141,7 @@ try {
   await page.waitForSelector('.photo-preview');
   await shot('photo');
   await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
-  // A note stays on Catch now (S404); its page is one tap away.
+  // A note stays on Catch now; its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
   const pid = await elementId();
@@ -155,7 +155,7 @@ try {
   await page.waitForTimeout(1500);
   await shot('photo-element');
 
-  // Delete through the app (S404, the Captain h37 #4292): one warning, then keel no longer has it.
+  // Delete through the app: one warning, then keel no longer has it.
   await page.locator('[data-action="delete"]').tap();
   await page.locator('.sheet [data-action="confirm-delete"]').tap();
   await page.waitForSelector('[data-screen="type"]');

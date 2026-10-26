@@ -1,4 +1,4 @@
-// Sign in with OnlyWorlds read live (Keel #515; contract Forge/Notes/2026-10-25-s470-lantern-sign-in-contract.md):
+// Sign in with OnlyWorlds read live:
 // a crew account signed in on onlyworlds.com (its own form, in the walk's browser) taps the button in
 // Lantern, takes the consent page if it shows, and must land on Your worlds signed in with nothing typed
 // into Lantern. The token Lantern kept is revoked by its own id (only that one), then must answer 401.
@@ -26,7 +26,7 @@ const step = (s) => report.steps.push(s);
 
 // 0. The walk's own token, minted and recorded, to read the account's token ids before the tap: the
 // one revoked after is the one id that was not there before (a delete runs only on ids this walk
-// made and recorded; the S470 code gate's C8).
+// made and recorded; the sign-in code gate's C8).
 const walkToken = await new OwV2Client({ baseUrl: API, client: 'lantern' }).signInWithPassword({ email, password, tokenName: 'Lantern walk S470' });
 const walkAuth = { Authorization: `Bearer ${walkToken.token}` };
 const tokenIds = async () => ((await (await fetch(`${API}/account/tokens`, { headers: walkAuth })).json()).data ?? []);
@@ -48,7 +48,7 @@ const button = p.locator('[data-action="signin-onlyworlds"]');
 report.button = await button.count();
 await p.screenshot({ path: `${out}-1-signin.png` });
 if (!report.button) {
-  // The control's way out: the walk's own token goes too (S470's control run left it live once).
+  // The control's way out: the walk's own token goes too (a control run left it live once).
   const delWalk = await fetch(`${API}/account/tokens/${walkToken.id}`, { method: 'DELETE', headers: walkAuth });
   const walkAfter = await fetch(`${API}/account`, { headers: walkAuth });
   report.walkTokenRevoked = `DELETE ${delWalk.status}, then GET /account ${walkAfter.status}`;

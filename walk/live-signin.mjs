@@ -1,4 +1,4 @@
-// A real sign-in through SDK 4.31 (S426, Boss's flag h11 #6858): a crew account signs in on Lantern
+// A real sign-in through SDK 4.31: a crew account signs in on Lantern
 // with its email, and again with its username; each lands on Your worlds with the phone's own token;
 // every "Lantern on" token is then revoked and read back 401. No question is asked, nothing is written.
 //

@@ -1,13 +1,13 @@
 // The morning after, as a phone taps it, both engines. The demo world, made to look like an
 // owner's account world with a write key and a sign-in; two notes planted in Unsorted; keel cut off
-// (every API call aborted, no PIN), and Skeld's sorting route (h37 #3591) answered by a fake in
+// (every API call aborted, no PIN), and Skeld's sorting route answered by a fake in
 // Simmer's row shape, so nothing reaches the wire and no answer is spent. Checks: the slice holds
 // what the notes name and never the notes; a refusal is said; nothing is ticked at first; a reload
 // keeps the spent sort; the ticked rows land in the outbox (a make with its edited name, an
 // addition, an ask's pick) and the notes are filed as Sorted; an unticked row writes nothing.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/sort.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -142,7 +142,7 @@ async function walk(engine, deviceName, tag) {
   await sortBtn.tap();
   await page.waitForSelector('[data-screen="sort"] .error');
   check(tag, /used up/.test(await page.locator('.error').innerText()), `a refusal is said: ${JSON.stringify(await page.locator('.error').innerText())}`);
-  // Leaving and coming back (no reload) still says why (the S399 merge gate).
+  // Leaving and coming back (no reload) still says why (the merge gate).
   await page.evaluate((id) => (location.hash = `#/w/${id}`), worldId);
   await page.waitForSelector('[data-screen="sort"]', { state: 'detached' });
   await page.evaluate((id) => (location.hash = `#/w/${id}/sort`), worldId);
@@ -225,7 +225,7 @@ async function walk(engine, deviceName, tag) {
     `a reload keeps the ticks, the edited name and the pick (${back.join(', ')})`,
   );
   await shot('ticked');
-  // A second tab on the same sort, opened before the first writes it (the S400 gate).
+  // A second tab on the same sort, opened before the first writes it.
   const tab2 = await page.context().newPage();
   await tab2.goto(`${BASE}/#/w/${worldId}/sort`);
   await tab2.waitForSelector('.sort-card', { timeout: 15000 });
@@ -259,7 +259,7 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.evaluate((id) => localStorage.getItem(`lantern-sort-${id}`), worldId)) === null, 'the kept sort is let go once written');
   await shot('after');
 
-  // 7. A started sort that cannot finish is never stuck (the S399 merge gate): a plan half written
+  // 7. A started sort that cannot finish is never stuck (the merge gate): a plan half written
   // (step 1 of 2, its edit's element gone), reloaded, offers Stop here; stopping lets it go.
   await page.evaluate(
     ([id, a]) =>

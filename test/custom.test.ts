@@ -1,4 +1,4 @@
-// Custom fields (h37 #4050): the world maker's own keys, as Atlas writes them (x_mood), shown,
+// Custom fields: the world maker's own keys, as Atlas writes them (x_mood), shown,
 // found and kept; Atlas's machinery (atlas_) never shown; a null is a deleted one.
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
@@ -80,21 +80,21 @@ describe('custom fields', () => {
     expect([back.x_mood, back.x_height_cm, back.x_tags]).toEqual(['grim', 172, ['a', 'b']]);
   });
 
-  it('an identity key (x_identity_key, Skeld h58 #8890) cannot be named, and is kept apart for read-only', () => {
+  it('an identity key (x_identity_key) cannot be named, and is kept apart for read-only', () => {
     const key = customFieldKey('Identity key');
     expect(key).toBe('x_identity_key');
     expect(customFieldProblem({ id: '1', type: 'character' }, key)).toMatch(/identity key/i);
     expect(customFieldProblem({ id: '1', type: 'character' }, 'x_identity')).toBeNull();
     expect(isProfileField('x_identity_key')).toBe(true);
     expect(isProfileField('x_mood')).toBe(false);
-    // A work packet's keys (dist.36's packet profile, h66 #9663) are kept the same way.
+    // A work packet's keys (dist.36's packet profile) are kept the same way.
     expect(customFieldProblem({ id: '1', type: 'relation' }, customFieldKey('Packet elements'))).toMatch(/work packet/i);
     expect(isProfileField('x_packet_source')).toBe(true);
     expect(isProfileField('x_packets')).toBe(false);
-    // And a review mark's (dist.37's review profile, h58 #9726).
+    // And a review mark's (dist.37's review profile).
     expect(customFieldProblem({ id: '1', type: 'character' }, customFieldKey('Review checked'))).toMatch(/review mark/i);
     expect(isProfileField('x_review_proposed')).toBe(true);
-    // And a work world's checks (dist.47's checks profile, Kael h20 #10532).
+    // And a work world's checks (dist.47's checks profile).
     expect(customFieldProblem({ id: '1', type: 'law' }, customFieldKey('Checks rules'))).toMatch(/checks/i);
     expect(isProfileField('x_checks_rules')).toBe(true);
     expect(isProfileField('x_checks')).toBe(false);

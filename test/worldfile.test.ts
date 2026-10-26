@@ -167,7 +167,7 @@ describe('world files', () => {
         );
       files = walk(dir);
     } catch {
-      return; // the Captain's folder is not on this machine
+      return; // Titus's folder is not on this machine
     }
     const zip = writeWorldFile(files, 'moppetopia-sample-55a9b4d5');
     await db.removeWorld('55a9b4d5-d203-4e80-b9f3-91fff436ff75');
@@ -188,7 +188,7 @@ describe('world files', () => {
         );
       files = walk(dir).filter((f) => !f.path.startsWith('media/'));
     } catch {
-      return; // the Captain's folder is not on this machine
+      return; // Titus's folder is not on this machine
     }
     const count = (t: string) => files.filter((f) => f.path.startsWith(`spatial/${t}/`) && f.path.endsWith('.json')).length;
     expect(count('pin')).toBeGreaterThan(0); // the fixture fields the shape this test is about

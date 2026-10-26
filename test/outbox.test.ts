@@ -110,7 +110,7 @@ class FakeKeel {
         await run(); // the page above was built before this ran: it carries the older state
       }
       // An empty page echoes the caller's own cursor, as keel does (core/changes.py): after a
-      // rewind that cursor sits past the head (the S397 gate).
+      // rewind that cursor sits past the head.
       return this.json(200, { cursor: changes.length || !sinceRaw ? cur(this.seq) : sinceRaw, changes, has_more: false, head: this.seq, epoch: this.epoch });
     }
     const m = path.match(/^\/([a-z]+)\/?([^/]*)\/?$/);
@@ -124,7 +124,7 @@ class FakeKeel {
         this.nextError = null;
         return this.err(e.status, e.code);
       }
-      // keel #587: a create carrying hidden: true from a key that cannot hide (probed live, Atlas S461).
+      // keel #587: a create carrying hidden: true from a key that cannot hide (probed live).
       if (this.cannotHide && method === 'POST' && body.hidden === true) return this.err(403, 'hidden_not_allowed');
     }
     const answer = (r: Response): Response => {
@@ -215,7 +215,7 @@ describe('pull', () => {
     expect(keel.calls.filter((c) => c.startsWith('GET /changes')).length).toBe(2);
   });
 
-  it('a session let go mid-walk writes nothing more: no pages, no cursor (the S402 gate, G2)', async () => {
+  it('a session let go mid-walk writes nothing more: no pages, no cursor', async () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld();
     const walk = s.pull();
@@ -370,7 +370,7 @@ describe('pull', () => {
 });
 
 describe('outbox', () => {
-  it('one PIN for every world of your account; a world opened with a key keeps its own (the Captain, #3660)', async () => {
+  it('one PIN for every world of your account; a world opened with a key keeps its own', async () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const mine = await freshWorld('owner');
     const alsoMine = await freshWorld('collaborator');
@@ -624,7 +624,7 @@ describe('outbox', () => {
     expect(made!.id).not.toBe('a');
   });
 
-  it("a hidden element's maker keeps it as new: it goes hidden, and a key that cannot hide is refused in words, the key still working (the S462 gate, F4)", async () => {
+  it("a hidden element's maker keeps it as new: it goes hidden, and a key that cannot hide is refused in words, the key still working (the hidden-elements gate, F4)", async () => {
     keel.put({ id: 'a', type: 'character', name: 'Wren', hidden: true });
     const s = await freshWorld();
     await s.pull();
@@ -672,7 +672,7 @@ describe('outbox', () => {
     expect(s2.outbox[0].state).toBe('waiting');
   });
 
-  // ---------- the gate's findings (S394), each a case ----------
+  // ---------- the gate's findings, each a case ----------
 
   it('an edit made while its create is in flight follows it, and both land', async () => {
     const s = await freshWorld();
@@ -799,7 +799,7 @@ describe('outbox', () => {
   });
 });
 
-// Delete (the Captain, h37 #4292): anyone who can change the world, after a warning.
+// Delete: anyone who can change the world, after a warning.
 describe('delete', () => {
   const sent = (m: string) => keel.calls.filter((c) => c.startsWith(m));
 
@@ -912,7 +912,7 @@ describe('delete', () => {
   });
 });
 
-describe('a key keel no longer takes (Atlas #198 twin, S418)', () => {
+describe('a key keel no longer takes (as in Atlas)', () => {
   it('a revoked or unknown key on a send keeps the PIN, keeps the change, and never asks for a PIN', async () => {
     for (const code of ['key_revoked', 'invalid_credentials'] as const) {
       keel.put({ id: 'a', type: 'character', name: 'Ada' });

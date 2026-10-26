@@ -1,7 +1,7 @@
 // Catch it: a line, a ramble from the keyboard's microphone, or a photographed page. By default it
 // lands as a Narrative with supertype Unsorted, the photo as its picture: material not yet turned
-// into elements (Skeld's convention, #3409). "What is it?" makes it an element of a type at once
-// instead: the first line its name, the rest its description (the Captain's walk, 2026-10-12).
+// into elements (Skeld's convention, 2026-10-11). "What is it?" makes it an element of a type at once
+// instead: the first line its name, the rest its description (Titus's walk, 2026-10-12).
 import { h } from '../dom';
 import { icon, typeIcon } from '../icons';
 import { errorText, go, pinWhileTyping, tabbar, toast, topbar } from '../ui';
@@ -101,7 +101,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
           style: k === UNSORTED ? null : `--type:${typeColor(k)}`,
           'data-kind': k,
         },
-        // Each kind wears its mark (Seethe h37 #3743): a type's own glyph, Unsorted the Catch tab's tray.
+        // Each kind wears its mark (Seethe, 2026-10-12): a type's own glyph, Unsorted the Catch tab's tray.
         k === UNSORTED ? icon('unsorted', 16, 2) : typeIcon(k, 16),
         k === UNSORTED ? UNSORTED : typeLabel(k),
       );
@@ -123,7 +123,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
           })()
         : null;
     kinds.replaceChildren(...offered.map(chip), more ?? '');
-    // The first line names it either way, so the hint says so before a type is picked (Quillon, h37 #4275).
+    // The first line names it either way, so the hint says so before a type is picked (Quillon, 2026-10-14).
     kindHint.textContent =
       kind === UNSORTED
         ? 'The first line names the note. Sort it into elements later.'
@@ -172,11 +172,11 @@ export function captureView(s: WorldSession, fromShare = false): View {
       else if (kind !== UNSORTED) toast(where);
       if (photoUrl) URL.revokeObjectURL(photoUrl);
       if (kind !== UNSORTED) {
-        // A typed catch opens with its empty fields, to fill in (the Captain, h37 #3555).
+        // A typed catch opens with its empty fields, to fill in (Titus, 2026-10-12).
         go(`#/w/${s.id}/e/${id}?fill`, true);
         return;
       }
-      // A note stays on Catch, the box empty for the next one (Quillon, h37 #4275: three catches took
+      // A note stays on Catch, the box empty for the next one (Quillon, 2026-10-14: three catches took
       // three round trips), and says where it went.
       text.value = '';
       photo = null;
@@ -186,7 +186,7 @@ export function captureView(s: WorldSession, fromShare = false): View {
       saveBtn.disabled = false;
       const open = h('a', { href: `#/w/${s.id}/e/${id}`, 'data-action': 'open-kept' }, 'Open it');
       // Sending waits on the PIN when the phone holds none (the flush's own gate): say so here, where
-      // the note was made, not only on the home (S419's L12).
+      // the note was made, not only on the home.
       if (!s.isLocal && !s.pinKnown()) {
         const enter = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'kept-pin' }, 'Enter your PIN');
         const sent = () => keptLine.replaceChildren(`Added to Unsorted: ${values.name as string}. `, open);

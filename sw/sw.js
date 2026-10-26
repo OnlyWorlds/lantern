@@ -1,6 +1,6 @@
 // Lantern's service worker. The build writes the precache list and build id into this template
 // (vite.config.ts), from the files the build actually emitted: a path the build does not emit is
-// never precached (Boss #3317: that stores the host's fallback page under a URL, a poisoned
+// never precached (Boss, 2026-10-11: that stores the host's fallback page under a URL, a poisoned
 // entry no status code shows). The app lives at "/" only (its routes are in the hash), so the
 // worker serves the cached shell for "/" and "/index.html" and nothing else: any other path goes
 // to the host, which answers 404 for what does not exist.
@@ -25,7 +25,7 @@ self.addEventListener('install', (event) => {
         // Never store a redirect or an error under a precache path.
         if (!res.ok || res.redirected) throw new Error(`precache refused ${path}: ${res.status}`);
         // Nor another build's shell: during a deploy's cutover "/" can still be the previous one
-        // (Boss h37 #3518), and stored under this build it would load scripts this cache lacks.
+        // (Boss, 2026-10-12), and stored under this build it would load scripts this cache lacks.
         if (SHELL.has(path)) {
           const html = await res.clone().text();
           if (!SHELL_SCRIPTS.every((src) => html.includes(src))) throw new Error(`precache refused ${path}: another build's shell`);
@@ -61,9 +61,9 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/version.json' || url.pathname === '/sw.js') return;
 
   if (req.mode === 'navigate') {
-    // Sign in with OnlyWorlds comes back to /signin/callback (Keel #515): the phone's own build
+    // Sign in with OnlyWorlds comes back to /signin/callback: the phone's own build
     // answers it from this cache, as it answers "/", so the sign-in finishes under the build the
-    // phone runs and never the host's newer one (the S470 gate's G2). The address and its code stay
+    // phone runs and never the host's newer one (the sign-in gate's G2). The address and its code stay
     // as they came; nothing is stored under that path.
     if (!SHELL.has(url.pathname) && url.pathname.replace(/\/$/, '') !== '/signin/callback') return;
     event.respondWith(

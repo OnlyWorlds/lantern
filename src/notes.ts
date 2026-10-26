@@ -1,6 +1,6 @@
-// A player's own notes (the Captain h37 #4113, option B): what a player jots down at the table stays
-// on their phone, per world. Since keel #241 one can be shared with the party (the Captain h37
-// #4420, B): it goes to the world as a Narrative, and the note here keeps where it went.
+// A player's own notes (Titus, 2026-10-13): what a player jots down at the table stays
+// on their phone, per world. Since keel #241 one can be shared with the party (Titus,
+// 2026-10-14): it goes to the world as a Narrative, and the note here keeps where it went.
 const key = (worldId: string) => `lantern-notes-${worldId}`;
 
 export interface Note {

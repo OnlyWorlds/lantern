@@ -34,7 +34,7 @@ export const LANTERN_CLIENT_NAME = 'lantern';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
 
-/** Set while the running build is older than the one on the server: the outbox holds (Boss #3391). */
+/** Set while the running build is older than the one on the server: the outbox holds (Boss, 2026-10-11). */
 let buildBehind = false;
 export function setBuildBehind(v: boolean): void {
   buildBehind = v;
@@ -89,7 +89,7 @@ export function openWorld(id: string): Promise<WorldSession> {
 
 // A forgotten session may still have a read or a send in flight. Each forget bumps the world's
 // generation, and a session from an older one writes nothing more: after a world is opened under
-// another key, the old key's walk must not put its pages or its cursor back (the S402 gate, G2).
+// another key, the old key's walk must not put its pages or its cursor back.
 const generations = new Map<string, number>();
 const RETIRED = new Error('retired');
 
@@ -116,7 +116,7 @@ export class WorldSession {
 
   /** A row leaves the outbox with the server's answer, which lands only if it is the newer copy. */
   private async settle(row: OutboxRow, answer: OwElement): Promise<void> {
-    // Every copy keel hands back is the wire too: a stub is kept as a stub here as on the walk (the S444 gate, G2).
+    // Every copy keel hands back is the wire too: a stub is kept as a stub here as on the walk (the stub gate, G2).
     const el = fromWire({ ...answer, type: answer.type || row.type });
     const take = this.isNewer(el);
     await db.settleOutboxRow(this.id, row.seq!, take ? el : null);
@@ -260,7 +260,7 @@ export class WorldSession {
   }
 
   /**
-   * Who this key is in the world (keel's GET /me with the world's own key, Skeld #3457), asked
+   * Who this key is in the world (keel's GET /me with the world's own key, Skeld, 2026-10-12), asked
    * on each launch: a player's own Character (the owner may give one later), and the member role
    * for a world opened with a key.
    */
@@ -284,7 +284,7 @@ export class WorldSession {
     }
   }
 
-  /** A player (a guest of the world, Keel #213), on any key. */
+  /** A player (a guest of the world), on any key. */
   get isPlayer(): boolean {
     return this.rec.memberRole === 'guest' && this.rec.kind === 'online';
   }
@@ -296,8 +296,8 @@ export class WorldSession {
   }
 
   /**
-   * A player's write key for the same membership, taken for their first shared note (the Captain
-   * h37 #4420). The same membership sees the same world, so the copy and the feed's cursor stay.
+   * A player's write key for the same membership, taken for their first shared note (Titus,
+   * 2026-10-14). The same membership sees the same world, so the copy and the feed's cursor stay.
    * The key is the signed-in account's membership, so the PIN asked is that account's (a world
    * opened with a key had no account role until now).
    */
@@ -380,7 +380,7 @@ export class WorldSession {
   /**
    * The index what is handed to keel's AI is written from: without hidden or proposed elements, so a
    * kept element's links to one say only that a linked element is not present, never its name
-   * (folder spec §4.8; Keel #565; Atlas 1.86.0's published page leaves the same names out).
+   * (folder spec §4.8; Atlas 1.86.0's published page leaves the same names out).
    */
   handOnIndex(): OwWorldIndex<OwElement> {
     this.handOnCache ??= buildWorldIndex(handOnElements(this.lore(), (id) => this.view.get(id)));
@@ -508,20 +508,20 @@ export class WorldSession {
 
   /**
    * Who may move the world's now from this phone: keel lets the owner change a world's own settings,
-   * and a co-builder change its now alone (Keel #240, live in 36b3010, Skeld h37 #4214); a
+   * and a co-builder change its now alone (live in keel 36b3010, Skeld, 2026-10-14); a
    * contributor or a guest gets 403 owner_only. A key with no account role may be the owner's own:
    * it is let try, and keel's answer is said.
    */
   get canMoveNow(): boolean {
     if (this.isLocal) return true;
     if (!this.canWrite) return false;
-    // The member role, from the account list or learned from /me for a key (the S402 gate, G4).
+    // The member role, from the account list or learned from /me for a key.
     if (this.rec.memberRole) return this.rec.memberRole === 'co_builder';
     return this.rec.role !== 'collaborator';
   }
 
   /**
-   * Move the world's now (Before now; the Captain h37 #4087). A world setting, not an element: it
+   * Move the world's now (Before now; Titus, 2026-10-13). A world setting, not an element: it
    * goes at once with the PIN, never through the outbox, so it needs signal; a world on this
    * phone only keeps it here. The caller asks for the PIN first when none is held.
    */
@@ -555,7 +555,7 @@ export class WorldSession {
     if (!this.rec.apiKey) throw new Error('This world has no key.');
     // A ten-digit key (not the demo's) needs the PIN to read a private world too (the SDK's
     // OwKeyKind 'legacy'): without it every read came back 401 and the home said "This key no
-    // longer opens the world" (S405, the live write walk on W11). Prefixed keys read without one.
+    // longer opens the world" (a live write walk). Prefixed keys read without one.
     const key = this.rec.apiKey;
     const readsNeedPin = !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
     const pin = withPin || readsNeedPin ? pinFor(this.rec) : undefined;
@@ -598,20 +598,20 @@ export class WorldSession {
             const k = clockFrom(meta as unknown as Record<string, unknown>);
             return { timeNow: k.now, timeUnit: k.unit };
           })(),
-          // The world's own words: keel's are the truth for a world it holds (served from Keel #571).
+          // The world's own words: keel's are the truth for a world it holds.
           names: (meta as unknown as Record<string, unknown>).x_names,
         });
         if (rec) this.rec = rec;
       }
 
       // The quiet poll asks first whether anything moved: keel's head read is an index lookup,
-      // no bodies (Skeld, h29 #3511). Compared with the head this phone last APPLIED, so a missed
+      // no bodies (Skeld, 2026-10-12). Compared with the head this phone last APPLIED, so a missed
       // poll never drops a change; a head behind it (a rewind) walks, and the walk's end reads again.
       if (quiet && !resynced && this.rec.appliedHead !== undefined) {
         const tip = await c.changesHead();
         // A guest's view can change with no change in the world (a Character given or taken, a
         // role, the membership gone): keel moves the view's epoch, not the head, and says it beside
-        // the head (Skeld h29 #3525). A different one, or one not yet known, walks; a stale view's
+        // the head (Skeld, 2026-10-12). A different one, or one not yet known, walks; a stale view's
         // walk meets resync_required.
         const sameView = this.rec.appliedEpoch !== undefined && tip.epoch === this.rec.appliedEpoch;
         if (String(tip.head) === String(this.rec.appliedHead) && sameView) {
@@ -658,7 +658,7 @@ export class WorldSession {
           await flushBatch();
           if (fresh) {
             // A send that settled while this walk ran is newer than the page that carried its element
-            // (the S397 gate). Only those: after a rewind every older copy has the higher change_seq.
+            // Only those: after a rewind every older copy has the higher change_seq.
             for (const id of this.settledDuringWalk ?? []) {
               const held = this.truth.get(id);
               const page = fresh.get(id);
@@ -846,7 +846,7 @@ export class WorldSession {
   }
 
   /**
-   * Delete an element (the Captain, h37 #4292: anyone who can change the world, after a warning).
+   * Delete an element (Titus, 2026-10-14: anyone who can change the world, after a warning).
    * keel removes the links to it in the same transaction; a world on this phone removes them here.
    * Online it is a row like any change: hidden at once, sent in order behind anything already in
    * flight for it. A catch that never left the phone is simply dropped, and nothing is sent.
@@ -980,7 +980,7 @@ export class WorldSession {
       await db.putOutboxRow(this.id, row);
     }
     // A change queued while the element was whole, which keel has since narrowed to a stub (a view
-    // reset): never sent onto it (the S444 gate, G5). A create's own element is never a stub.
+    // reset): never sent onto it (the stub gate, G5). A create's own element is never a stub.
     if (row.op !== 'create' && this.isStub(row.id)) {
       row.state = 'refused';
       row.error = KNOWN_OF_REFUSAL;
@@ -1001,7 +1001,7 @@ export class WorldSession {
           up = await c.uploadImage(row.photo);
         } catch (e) {
           // A refusal about pictures is about the picture alone: it is set aside with its reason and
-          // every other change keeps going (the S398 gate: a full store froze the whole outbox).
+          // every other change keeps going (a full store once froze the whole outbox).
           const why = e instanceof OwApiError ? PICTURE_REFUSED[e.code ?? ''] : undefined;
           if (!why) throw e;
           // The picture alone becomes the refused row (tried again on its own, its base taken then);
@@ -1232,7 +1232,7 @@ export class WorldSession {
     await this.drop(row);
     this.truth.delete(row.id);
     await db.applyElements(this.id, [], [row.id]);
-    // A hidden element's maker keeps it hidden as a new element (the S462 gate's F4): the mark as keel takes it.
+    // A hidden element's maker keeps it hidden as a new element (the hidden-elements gate's F4): the mark as keel takes it.
     await this.create(row.type, withHiddenForCreate(values));
   }
 

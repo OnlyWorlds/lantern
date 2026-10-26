@@ -1,11 +1,11 @@
-// Ask in a sentence (Keel #159), as a phone taps it, both engines. The demo world, made to look
+// Ask in a sentence, as a phone taps it, both engines. The demo world, made to look
 // like an account world on this phone, and keel's proxy routed to a fake that answers as its docs
 // say, so no question is spent: the button shows only when it can be used; the sentence lands
 // above its sources; a redraw keeps it; the allowance and a pause get their own sentences.
 // Workers blocked: with one in control, Playwright's WebKit does not route the page's requests.
 // Run: npm run build && (npx vite preview &) && node walk/ask.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';

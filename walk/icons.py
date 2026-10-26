@@ -1,4 +1,4 @@
-"""Lantern's app icons from the OnlyWorlds globe (the Captain, h37 #3660: the logo for now; a
+"""Lantern's app icons from the OnlyWorlds globe (the logo for now; a
 Lantern mark later is Seethe's). Run: python walk/icons.py art/owlogo.png public preview.png"""
 import sys
 from PIL import Image
@@ -29,7 +29,7 @@ for name, im in sets.items():
     im.save(f'{out}/{name}', optimize=True)
     print(name, im.size)
 
-# The first screen's mark: the globe alone, on no ground, at 3x its 64px place (Seethe h37 #3743:
+# The first screen's mark: the globe alone, on no ground, at 3x its 64px place (Seethe:
 # the old lantern glyph read as a bin).
 mark = logo.resize((192, 192), Image.LANCZOS)
 mark.save(f'{out}/ow-globe.png', optimize=True)

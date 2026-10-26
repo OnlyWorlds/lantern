@@ -2,7 +2,7 @@
 // markers) as a phone taps it, both engines. Read only, so it runs against live keel safely.
 // Run: npm run build && (npx vite preview &) && node walk/map.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -105,7 +105,7 @@ async function walk(engine, deviceName, tag) {
   await shot('map-focus');
 
   // 3. A tap on empty water closes the card: a point clear of every drawn pin and zone by a
-  // finger (zones answer taps since S396, so "empty" is measured, not assumed).
+  // finger (zones answer taps now, so "empty" is measured, not assumed).
   const box = await page.locator('.map-box').boundingBox();
   const empty = await page.evaluate(() => {
     const rects = [...document.querySelectorAll('.leaflet-overlay-pane path')].map((p) => p.getBoundingClientRect());
@@ -192,7 +192,7 @@ async function walk(engine, deviceName, tag) {
   const space = maps.find((m) => m.id !== overview.id && m.image_url);
   // The map just left is still drawn when the new address lands, and the new screen measures its
   // picture before it builds the map: a wait on any layer passed on the old one, then found none
-  // (S406: red at this step on HEAD's build too). The old layer is marked, and only a new one counts.
+  // (red at this step on HEAD's build too). The old layer is marked, and only a new one counts.
   await page.evaluate(() => document.querySelectorAll('.leaflet-image-layer').forEach((i) => (i.dataset.left = '1')));
   await page.goto(`${BASE}/#/w/${worldId}/map/${space.id}`);
   const LAYER = '.leaflet-image-layer:not([data-left])';

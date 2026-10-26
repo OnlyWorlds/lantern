@@ -1,5 +1,5 @@
 // A player's own notes (src/notes.ts): written at the table, kept on this phone, and one at a time
-// shared with the party (the Captain h37 #4420, B; keel #241).
+// shared with the party (Titus, 2026-10-14; keel #241).
 import { typeLabel, typeCount } from '../schema';
 import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { mintPlayerKey } from '../account';
@@ -74,7 +74,7 @@ function noteCard(s: WorldSession, n: Note, refresh: () => void): HTMLElement {
   const actions = h('div', { class: 'row-gap', style: 'flex-wrap:wrap' });
   const line = n.shared ? sharedLine(s, n.shared) : null;
   // Shareable while it is not on its way or in the world: never shared, refused, or no longer there.
-  // Never from a player seat (Keel #353): its key only reads, and no account can make one that writes.
+  // Never from a player seat: its key only reads, and no account can make one that writes.
   if (!s.rec.playerSeat && (!line || line.open)) {
     const share = h('button', { class: 'btn', type: 'button', 'data-action': 'share-note' }, n.shared ? 'Share it again' : 'Share with the party');
     share.addEventListener('click', () => shareNote(s, n, refresh));
@@ -93,7 +93,7 @@ function noteCard(s: WorldSession, n: Note, refresh: () => void): HTMLElement {
 /**
  * Where a shared note stands: waiting to send, in the world, refused (its reason, the row in
  * Waiting to send), or not there (never queued, let go, or removed by the game master). `open`:
- * it may be shared again (the S406 gate, G3).
+ * it may be shared again (the shared-notes gate, G3).
  */
 function sharedLine(s: WorldSession, shared: NonNullable<Note['shared']>): { el: HTMLElement; open: boolean } {
   const line = (...parts: (Node | string)[]) => h('span', { class: 'small', 'data-part': 'share-state' }, ...parts);
@@ -169,7 +169,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
   sheet((close) => {
     const err = h('p', { class: 'error', role: 'alert' });
     // The PIN slot the share will use: the account's, which the world takes with its write key
-    // (a per-world PIN held from before is not the account's; the S406 gate, G6).
+    // (a per-world PIN held from before is not the account's; the shared-notes gate, G6).
     const pin = pinFor({ id: s.id, role: s.playerCanSend ? s.rec.role : (s.rec.role ?? 'collaborator') })
       ? null
       : h('input', { class: 'input', type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: '4', 'aria-label': 'PIN' });
@@ -216,7 +216,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
         return;
       }
       // One share at a time per world: a sheet closed mid-share (Cancel, the backdrop, Back) and
-      // opened again must not send the note twice or mint a second key (the S406 gate, G2).
+      // opened again must not send the note twice or mint a second key (the shared-notes gate, G2).
       if (sharing.has(s.id)) {
         err.textContent = 'The last share is still on its way. Try again in a moment.';
         return;
@@ -240,7 +240,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
           s.needPin = false;
         }
         // Marked first, with the id it will go under: if the app dies before the row is queued,
-        // the card offers it again and nothing was sent (the S406 gate, G7).
+        // the card offers it again and nothing was sent (the shared-notes gate, G7).
         const id = uuid7();
         marked = markShared(s.id, n.id, id, elName(party));
         if (!marked) throw new Error('This phone would not keep the note.');

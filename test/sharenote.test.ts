@@ -1,4 +1,4 @@
-// A player shares a note with the party (the Captain h37 #4420, B), against a fake keel shaped by
+// A player shares a note with the party, against a fake keel shaped by
 // keel #241 (elements/service.py, db48d30): a guest's Narrative is narrated by its own Character
 // (filled in when left out, 422 when another is named), names only Collectives that Character is in
 // (any other answers as a missing link, 400), and a seat with no Character gets 403
@@ -160,7 +160,7 @@ describe('a player shares a note', () => {
     expect(s.refusedRow(id)?.error).toMatch(/no Character/);
   });
 
-  it('a group their Character is not in is refused with a sentence, and the outbox goes on (the S406 gate, G8)', async () => {
+  it('a group their Character is not in is refused with a sentence, and the outbox goes on (the shared-notes gate, G8)', async () => {
     const s = await playerWorld(WRITE);
     setPin(s.rec, '1234');
     const bad = await s.shareNote(sharedNoteValues('To the thieves', 'guild'), 'n-5');
@@ -171,7 +171,7 @@ describe('a player shares a note', () => {
   });
 });
 
-describe("the first share's key (the S406 gate, G1)", () => {
+describe("the first share's key (the shared-notes gate, G1)", () => {
   const signedIn = async (worlds: { id: string; role: string; member_role?: string }[], me: { role: string; character: string | null }) => {
     await db.kvSet('accountToken', 'ow_a_' + 't'.repeat(40));
     const minted: unknown[] = [];

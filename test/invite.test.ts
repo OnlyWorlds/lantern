@@ -1,5 +1,5 @@
-// Invite someone. S407: offered only on a world the account list says you own. Since keel C1
-// (48c10d4, Skeld h29 #5147) the owner makes the link on the phone through SDK 4.24, against a fake
+// Invite someone. Offered only on a world the account list says you own. Since keel C1
+// (48c10d4) the owner makes the link on the phone through SDK 4.24, against a fake
 // keel shaped by C1: POST /account/worlds/{id}/links with the account token, reader required, owner
 // only (anyone else and an unknown world get 404), 201 with the code, the link and the line once.
 import 'fake-indexeddb/auto';
@@ -96,7 +96,7 @@ describe('invite', () => {
     expect(lastInviterName()).toBe('Titus');
   });
 
-  // #416, the Captain's yes on the sharing floor (h50 #7610): "A player" is keel's no-account link.
+  // "A player" is keel's no-account link.
   it('a player link: reader player, no role, a new Character by default or one keel holds', async () => {
     await makeInvite(MINE, 'player', 'Titus');
     await makeInvite(MINE, 'player', '', HELD);

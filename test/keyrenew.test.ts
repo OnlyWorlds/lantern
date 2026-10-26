@@ -1,4 +1,4 @@
-// A world whose key keel refuses takes a new one in place (Atlas #198's twin, S418): made from the
+// A world whose key keel refuses takes a new one in place (Atlas's twin): made from the
 // account, or pasted. The copy on the phone stays (its elements, its cursor, its changes waiting);
 // only the key changes. The fake keel follows keel's accounts/api.py (the mint, pin_required for a
 // member with no PIN) and core/auth.py (a revoked key, an unknown one, since keel #357).

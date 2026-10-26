@@ -1,6 +1,5 @@
-// Ask follows the phone's room switch (SDK 4.72's buildAskContext leaves the room out unless asked,
-// Kael h56 #11977): a room the person chose to show is asked about like the rest; with the switch off
-// it stays out and is counted in leftOut.room.
+// Ask follows the phone's room switch (SDK 4.72's buildAskContext leaves the room out unless asked):
+// a room the person chose to show is asked about like the rest; with the switch off it stays out and is counted in leftOut.room.
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { buildWorldIndex, type OwElement, type OwLookupHit } from '@onlyworlds/sdk';

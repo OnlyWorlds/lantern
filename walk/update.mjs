@@ -37,7 +37,7 @@ async function walk(engine, deviceName, tag) {
   const banner = await page.locator('.banner').innerText();
   check(tag, /new version/.test(banner), `the banner: ${JSON.stringify(banner.split('\n')[0])}`);
   await page.screenshot({ path: `walk/shots/update-${tag}-banner.png` });
-  // What the button said the moment the tap landed (h37 #4050: seconds with no sign the tap took).
+  // What the button said the moment the tap landed (seconds with no sign the tap took).
   // A window listener runs after the button's own; sessionStorage outlives the reload.
   await page.evaluate(() =>
     window.addEventListener('click', (e) => {
@@ -58,7 +58,7 @@ async function walk(engine, deviceName, tag) {
   await browser.close();
 }
 
-// A deploy's cutover (Boss h37 #3518): the new worker and assets are live while "/" is still the
+// A deploy's cutover: the new worker and assets are live while "/" is still the
 // previous shell. The new worker must refuse to install (it would store the old shell under the new
 // build); once "/" is the new shell, it installs.
 const nextWorker = (page) =>

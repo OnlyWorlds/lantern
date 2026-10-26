@@ -1,4 +1,4 @@
-// Signing in: email (or username) and password through the SDK's signInWithPassword (Keel #211),
+// Signing in: email (or username) and password through the SDK's signInWithPassword,
 // which gives this phone an account token of its own; a token pasted from onlyworlds.com still
 // works behind "I have an account token" (ow_a_, sent as a Bearer token). The account lists its
 // worlds and mints a key per world this phone opens, named for the phone and revocable on the portal.
@@ -55,13 +55,13 @@ function dropHandoffRecord(): void {
   }
 }
 
-/** Set when a sign-in is kept, so another window of this browser hears it (a `storage` event; the S470 code gate's C5). */
+/** Set when a sign-in is kept, so another window of this browser hears it (a `storage` event; the sign-in code gate's C5). */
 export const SIGNED_IN_SIGNAL = 'lantern-signed-in';
 
 /**
  * Keep a sign-in, by any door (the password, a pasted token, Sign in with OnlyWorlds). The token is
- * written first (the S470 code gate's C10). Another account than the one this phone last knew holds
- * the old account's role aside on the worlds it opened (the S470 gate's G6): they stay on the phone as
+ * written first (the sign-in code gate's C10). Another account than the one this phone last knew holds
+ * the old account's role aside on the worlds it opened (the sign-in gate's G6): they stay on the phone as
  * worlds opened with a key, each with its own key and PIN, and the role comes back when that account
  * signs in again (the code gate's C1). A world's `memberRole` is its key's and stays (C3); an open
  * session is dropped, so nothing in memory keeps the old role (C2). The account id is written last,
@@ -125,7 +125,7 @@ export function signInRefusal(err: unknown): string {
 }
 
 /**
- * Keel #211, through the SDK (4.31's `signInWithPassword`, Boss's flag h11 #6858; Atlas 1.52 signs
+ * Password sign-in through the SDK (4.31's `signInWithPassword`, Boss's flag; Atlas 1.52 signs
  * in the same way): an email or a username and the password become this phone's own account token,
  * named for the phone and revocable on the portal; the session ends inside the call, and only the
  * token is kept.
@@ -148,7 +148,7 @@ export async function signInWithPassword(login: string, password: string): Promi
   try {
     return await signIn(token, tokenId);
   } catch (err) {
-    // Not awaited: the refusal is said now, not after keel answers (the S476 gate's S2); keepalive carries it.
+    // Not awaited: the refusal is said now, not after keel answers (the revoke gate's S2); keepalive carries it.
     void revokeIfNotKept(token, tokenId);
     throw err;
   }
@@ -165,7 +165,7 @@ export async function revokeIfNotKept(token: string, tokenId: string | null | un
   try {
     held = await accountToken();
   } catch {
-    // The store did not answer: the token may have landed, so it is left alone (the S476 gate's S1).
+    // The store did not answer: the token may have landed, so it is left alone (the revoke gate's S1).
     return;
   }
   if (held === token) return;
@@ -175,7 +175,7 @@ export async function revokeIfNotKept(token: string, tokenId: string | null | un
 /**
  * Sign out: the phone lets go first (the token, its mint record, a waiting invite, the PIN), so the
  * sign-out holds offline; then a token Lantern minted is revoked on onlyworlds.com with the copy
- * held here (S476). `revoking` is the revoke's outcome, to say once it lands (wrapped, so awaiting
+ * held here. `revoking` is the revoke's outcome, to say once it lands (wrapped, so awaiting
  * the sign-out never waits on keel); null when there is nothing Lantern may revoke (a pasted token,
  * or one kept before mint records). The revoke never writes the app database.
  */
@@ -183,7 +183,7 @@ export async function signOut(): Promise<{ revoking: Promise<RevokeOutcome> | nu
   const token = await accountToken();
   const tokenId = mintedTokenId(token, await db.kvGet<TokenMint>('accountTokenMint'));
   await db.kvSet('accountToken', undefined);
-  // Sent the moment the phone has let go, so a later step that fails cannot strand it (the S476 gate's S4).
+  // Sent the moment the phone has let go, so a later step that fails cannot strand it (the revoke gate's S4).
   const revoking = token && tokenId ? revokeToken(token, tokenId) : null;
   await db.kvSet('accountTokenMint', undefined);
   // An invite waiting for this account is not the next account's.
@@ -209,7 +209,7 @@ export async function fetchAccountWorlds(token?: string): Promise<AccountWorld[]
   const res = await accountClient(t).request<{ data: AccountWorld[] }>('GET', '/account/worlds');
   await db.kvSet('accountWorlds', res.data);
   // A phone signed in before accounts were kept by id learns its own, once, so its next switch is
-  // known (the S470 code gate's C7). Quiet: a failure only means asking again next time.
+  // known (the sign-in code gate's C7). Quiet: a failure only means asking again next time.
   if (!token && !(await db.kvGet<string>('accountId'))) {
     void whoAmI(t)
       .then(async (who) => {
@@ -249,13 +249,13 @@ async function takeOver(existing: db.WorldRecord | undefined, key?: string): Pro
     );
   }
   forgetSession(existing.id);
-  // A player's notes are the old key holder's (the S406 gate, G4): they go with the copy, so the
+  // A player's notes are the old key holder's (the shared-notes gate, G4): they go with the copy, so the
   // next holder can neither read nor share them.
   clearNotes(existing.id);
   await db.clearElements(existing.id);
   // Where the old key's walk stood goes with its copy: if what follows fails (the new key's mint),
-  // the world reads again from zero, never from a cursor past pages it no longer holds (the S402
-  // gate, G1). The world's own PIN goes too: it was the old key holder's (G6).
+  // the world reads again from zero, never from a cursor past pages it no longer holds.
+  // The world's own PIN goes too: it was the old key holder's.
   await db.updateWorldRecord(existing.id, { cursor: undefined, appliedHead: undefined, appliedEpoch: undefined, count: undefined, lastSync: undefined });
   if (!existing.role) setPin({ id: existing.id }, undefined);
   return true;
@@ -335,11 +335,11 @@ export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
     throw e;
   }
   // The read key goes only by the id kept at its own mint, beside that very key: never found by its
-  // last four on a list, where another of the member's keys can share them (the S476 gate's note).
+  // last four on a list, where another of the member's keys can share them (the revoke gate's note).
   const oldId = mintedTokenId(rec.apiKey, rec.keyMint);
   await db.updateWorldRecord(rec.id, { apiKey: key.key, keyKind: detectKeyKind(key.key), keyMint: mintOf(key.key, key.id) });
   forgetSession(rec.id);
-  if (!oldId) return; // a key from before S476, or pasted: it stays listed on the keys page, reading no more than the world did
+  if (!oldId) return; // a key from before revoking was kept, or pasted: it stays listed on the keys page, reading no more than the world did
   try {
     await c.request('DELETE', `/account/worlds/${rec.id}/keys/${encodeURIComponent(oldId)}`);
   } catch {
@@ -348,7 +348,7 @@ export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
 }
 
 /**
- * A world whose key keel refuses takes a new one in place (Atlas #198's twin, S418): the copy, its
+ * A world whose key keel refuses takes a new one in place (Atlas's twin): the copy, its
  * cursor and the changes waiting stay; only the key and its kind change, and the session opens
  * again on it. Never "open it again", which drops the copy (`takeOver`).
  *
@@ -410,7 +410,7 @@ export async function putKeyInPlace(rec: db.WorldRecord, apiKey: string, pin?: s
 }
 
 /**
- * A player's write key, minted for their first shared note (the Captain h37 #4420): a player's
+ * A player's write key, minted for their first shared note (Titus, 2026-10-14): a player's
  * phone reads with a read key until then, so it holds a write key only once they share. keel lets
  * a member mint one only with an account PIN set (409 pin_required).
  */
@@ -419,7 +419,7 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
   if (!token) throw new Error('Sign in with the account you play with first: sharing a note goes from it.');
   const other = new Error("This phone is signed in to another account than the one you play this world with, so your note can't go from it. Sign in as yourself first.");
   // keel mints the signed-in account's own key: an owner's key on the game master's phone, another
-  // player's on a friend's (the S406 gate, G1). Only a player's seat of this world is asked for.
+  // player's on a friend's (the shared-notes gate, G1). Only a player's seat of this world is asked for.
   const listed = (await fetchAccountWorlds(token)).find((w) => w.id === worldId);
   if (!listed || listed.member_role !== 'guest') throw other;
   let key: string;
@@ -470,7 +470,7 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
 }
 
 /**
- * Keep a player seat's read key (Keel #353), straight from keel's join answer, with no further
+ * Keep a player seat's read key, straight from keel's join answer, with no further
  * call: the key is shown once and the code is spent, so it reaches the phone before anything that
  * could fail. The world then opens like one opened with a key, as a guest reading as its Character.
  */

@@ -178,7 +178,7 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
       // A world folder's files carry no type: the folder names it.
       const home = folderOf(m[2]) === m[1];
       if (byId.get(body.id)?.home && !home) continue;
-      // A stub from a file is trimmed as one from keel is (another tool may keep more on it; the S444 gate, G4).
+      // A stub from a file is trimmed as one from keel is (another tool may keep more on it; the stub gate, G4).
       byId.set(body.id, { el: fromWire({ ...body, type: m[2] } as OwElement), home });
     } catch {
       /* a file that is not JSON is skipped, as Atlas skips it */

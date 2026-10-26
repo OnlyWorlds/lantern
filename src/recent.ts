@@ -1,4 +1,4 @@
-// Recent on a world's home (the after-v1 note's pocket road; the Captain h37 #4087): the elements
+// Recent on a world's home (the after-v1 note's pocket road; Titus, 2026-10-13): the elements
 // last opened on this phone, newest first. Per phone and per world, like tonight's cast; it never
 // travels and never changes the world.
 const key = (worldId: string) => `lantern-recent-${worldId}`;

@@ -1,4 +1,4 @@
-// S444: keel's "known of" stub (PR 113) on live keel, as a phone taps it. One throwaway world on crew-walk-a: The Kid,
+// keel's "known of" stub (PR 113) on live keel, as a phone taps it. One throwaway world on crew-walk-a: The Kid,
 // whose friend is Ana, so Ana is a stub to The Kid's player. A player link for The Kid opened in Lantern.
 // Checks: Ana's row says known of; her page shows her description, the known-of line, only the fields keel shares (PR 117), no
 // empty-field toggle; The Kid's page has its rows and no line (the control). The control build is the same walk on a

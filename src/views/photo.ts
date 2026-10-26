@@ -1,5 +1,5 @@
 // Camera or gallery: two doors to one photo. An input with `capture` opens the camera at once; one
-// without opens the phone's own picker (the gallery, the files). The Captain's walk, 2026-10-12:
+// without opens the phone's own picker (the gallery, the files). Titus's walk, 2026-10-12:
 // the catch screen offered only the camera.
 import { h } from '../dom';
 import { icon } from '../icons';

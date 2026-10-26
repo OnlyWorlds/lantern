@@ -52,7 +52,7 @@ class FakeAccountKeel {
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : null;
 
     // The live host's connect-src names only https origins: a fetch of a data: address is refused
-    // there in both engines (S409, Forge/tools/atlas/Notes/ui-snapshots/2026-10-15-s409/data-fetch-live.mjs).
+    // there in both engines.
     if (url.protocol !== 'https:') throw new TypeError('Failed to fetch');
     if (url.host === 'edge.test') {
       this.uploads++;
@@ -91,8 +91,8 @@ class FakeAccountKeel {
         if (this.idem.get(k) !== init.body) return this.err(409, 'idempotency_error');
         return this.json(200, { errors: false, items: body.items.map(() => ({ status: 201 })) });
       }
-      // keel refuses a stub's flag as an unknown field (422, param known_of; probed live S443).
-      // keel #587 (probed live, Atlas S461 probe-48.log): `hidden: true` from a key that cannot hide is
+      // keel refuses a stub's flag as an unknown field (422, param known_of; probed live).
+      // keel #587 (probed live): `hidden: true` from a key that cannot hide is
       // a slot's 403 hidden_not_allowed; the slot never echoes the mark.
       const slots = body.items.map((it: { element: { id: string; known_of?: unknown; hidden?: unknown } }) =>
         'known_of' in it.element
@@ -182,7 +182,7 @@ describe('put it online', () => {
     expect(keel.worlds.get(id)!.els.size).toBe(2);
   });
 
-  it("a world holding a stub (a player's view, from a world file) does not go online: nothing made, nothing sent, the copy stays (the S444 gate, G1)", async () => {
+  it("a world holding a stub (a player's view, from a world file) does not go online: nothing made, nothing sent, the copy stays (the stub gate, G1)", async () => {
     keel.accountPin = '4321';
     const stub = { id: 'e1000000-0000-7000-8000-000000000003', type: 'character', name: 'Ana', description: 'Sells mules.', known_of: true };
     const kid = { id: 'e1000000-0000-7000-8000-000000000004', type: 'character', name: 'The Kid', friends: [stub.id] };

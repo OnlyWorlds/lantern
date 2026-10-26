@@ -1,9 +1,9 @@
-// S435: Lantern's Files on live keel, as a Pixel 7 taps it. One throwaway world on crew-walk-b with two
+// Lantern's Files on live keel, as a Pixel 7 taps it. One throwaway world on crew-walk-b with two
 // Characters; a file added to one through the SDK (as Atlas adds it). Lantern opens the world with its
 // key and PIN. Checks: the Character with no file shows no Files (the control); the one with a file
 // lists it (label, name, the line); Download hands the browser the same bytes.
 // Credentials from CREW_FILE, never printed; STATE (session scratch) keeps the world and the token for
-// the teardown (Forge/tools/atlas/Notes/ui-snapshots/2026-10-19-s435/teardown.mjs).
+// the teardown.
 // Run: CREW_FILE=<file> STATE=<json> LANTERN_URL=https://lantern.onlyworlds.com node walk/live-files.mjs
 import './guard.mjs';
 import { chromium, devices } from 'playwright';

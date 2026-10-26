@@ -45,7 +45,7 @@ describe('the reading', () => {
 });
 
 describe('what goes to keel\'s AI', () => {
-  it("a pin placing a hidden place stays back with it, and no kept element's link names either (the S462 gate, F1)", () => {
+  it("a pin placing a hidden place stays back with it, and no kept element's link names either (the hidden-elements gate, F1)", () => {
     const els = [
       { id: 'vault', type: 'location', name: 'The Sunken Vault', hidden: true },
       { id: 'pin1', type: 'pin', name: 'The Sunken Vault', map: 'map1', element_id: 'vault', element_type: 'location', x: 10, y: 20 },
@@ -100,7 +100,7 @@ describe('the sort slice hands the world on', () => {
   });
 });
 
-describe('the words a name carries away from its row (the S462 gate F3)', () => {
+describe('the words a name carries away from its row (the hidden-elements gate, F3)', () => {
   it('proposed first, then hidden, and none for a settled shown element', () => {
     expect(markWords({ hidden: true, x_review_proposed: MARK })).toEqual(['proposed', 'hidden']);
     expect(markWords({ hidden: true })).toEqual(['hidden']);

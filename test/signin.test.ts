@@ -1,4 +1,4 @@
-// Sign in with a password through SDK 4.31's signInWithPassword (Boss's flag h11 #6858; Atlas 1.52
+// Sign in with a password through SDK 4.31's signInWithPassword (as Atlas 1.52
 // does the same), against a fake keel shaped by the app client's answers: login gives a session,
 // POST /account/tokens with that session mints the phone's token, the session is ended either way.
 // Only the token is kept; a refusal is said in Lantern's words, never keel's.
@@ -104,7 +104,7 @@ describe('signing in with a password', () => {
     expect(await accountName()).toBe('ana');
   });
 
-  it('another account than the last holds the old role aside, with its PIN slot and list let go (the S470 gate G6)', async () => {
+  it('another account than the last holds the old role aside, with its PIN slot and list let go (the sign-in gate G6)', async () => {
     await signInWithPassword('ana', 'right');
     await db.putWorldRecord({ id: 'w-ana', name: 'Ana own', kind: 'online', apiKey: 'k', role: 'collaborator', memberRole: 'contributor' } as never);
     store.set('lantern-pin-account', '1234');

@@ -43,7 +43,7 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
   if (!info) return;
   // The server's copy as the sheet opens it: the edit's base. Taken at save instead, a change
   // arriving while the sheet is open (the poll) would become the base and be overwritten
-  // without a conflict (the S396 gate).
+  // without a conflict.
   const base = s.serverCopy(el.id);
   if (info.type === 'single_link' || info.type === 'multi_link') {
     linkSheet(s, el, field, info.type === 'multi_link', info.target ?? '', base);
@@ -126,7 +126,7 @@ export function addFieldSheet(s: WorldSession, el: OwElement): void {
   const base = s.serverCopy(el.id);
   // The names this world already uses come first, so "Mood" here is the same field as "Mood" there.
   // A suggestion is the key it names (shadow_ included): picked, it is that field, never a new x_ one
-  // (the S402 gate, G3). Two keys with one label offer the x_ one.
+  // Two keys with one label offer the x_ one.
   const byLabel = new Map<string, string>();
   for (const f of new Set(s.lore().flatMap((e) => customFields(e as unknown as Record<string, unknown>)))) {
     if (el[f] !== undefined && el[f] !== null) continue;
@@ -249,7 +249,7 @@ export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void
     };
     const picker = photoPicker(
       (photo) => {
-        // Shrinking a big photo takes a moment: a sheet closed meanwhile was a no (the S398 gate).
+        // Shrinking a big photo takes a moment: a sheet closed meanwhile was a no.
         if (!picker.row.isConnected) return;
         s.edit(el.id, {}, base, photo).then(
           () => done('Picture saved.'),
@@ -277,7 +277,7 @@ export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void
 }
 
 /**
- * Delete, after one warning (the Captain, h37 #4292: "a warning is enough to let it be on the users'
+ * Delete, after one warning (Titus, 2026-10-14: "a warning is enough to let it be on the users'
  * head"). Leaves for the list it came from, since the page it was on is gone.
  */
 export function deleteSheet(s: WorldSession, el: OwElement): void {

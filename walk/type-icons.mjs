@@ -1,7 +1,7 @@
 // Writes src/type-icons.ts: one path per element type, the glyph the SDK's ELEMENT_ICONS names
 // (the ecosystem's per-type mark, as Atlas shows it), taken from @material-symbols/svg-400's
 // outlined set (Apache-2.0). Only these 22 paths ship; Atlas's whole icon font is 3.8 MB.
-// Seethe h37 #3743: on Catch's "What is it?" picker and a world's type tiles, not in the chips.
+// Per Seethe: on Catch's "What is it?" picker and a world's type tiles, not in the chips.
 // Run: node walk/type-icons.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { ELEMENT_ICONS } from '@onlyworlds/sdk';

@@ -1,10 +1,10 @@
-// Before now (h37 #4061, #4072): a world file with a clock (now Year 453) and Events opens on this
+// Before now: a world file with a clock (now Year 453) and Events opens on this
 // phone; its home offers "Before now"; the list runs in order, the now line between what has happened
 // and what has not, an Event under way says so, an undated one stays reachable, nothing spills at 320.
 // A world with no Event offers no list.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/time.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -82,7 +82,7 @@ async function walk(engine, tag) {
   await open(noEvents, 'quiet-walk.zip');
   check(tag, (await page.locator('[data-action=before-now]').count()) === 0, 'a world with no Event offers no list');
 
-  // No now set, on a phone that may set it: Set now, and no "Set it in Atlas" over it (the frames' L7, S427).
+  // No now set, on a phone that may set it: Set now, and no "Set it in Atlas" over it.
   await open(noNow, 'unset-walk.zip');
   await page.goto(`${BASE}/#/w/${noNowId}/time`);
   await page.waitForSelector('[data-screen="time"] [data-now]');
@@ -116,7 +116,7 @@ async function walk(engine, tag) {
   await page.waitForFunction(() => /The flood/.test(document.querySelector('.el-head h1')?.textContent ?? ''));
   check(tag, true, 'a row opens its Event');
 
-  // Moving now (h37 #4087): from Before now, and from an Event's page in two taps.
+  // Moving now: from Before now, and from an Event's page in two taps.
   await page.goto(`${BASE}/#/w/${wid}/time`);
   await page.locator('[data-action=change-now]').tap();
   await page.locator('.sheet input[aria-label=Now]').fill('400');
