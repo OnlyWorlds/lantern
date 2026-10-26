@@ -55,6 +55,21 @@ function dropHandoffRecord(): void {
   }
 }
 
+/**
+ * The token held now and its mint id, when Lantern minted it and `next` is another token: what a
+ * sign-in keeping `next` lets go. A pasted token, the same token again, nothing held, or a store
+ * that does not answer: nothing (never a guess at what is held).
+ */
+async function replacedMint(next: string): Promise<{ token: string; id: string } | null> {
+  try {
+    const held = await accountToken();
+    const id = mintedTokenId(held, await db.kvGet<TokenMint>('accountTokenMint'));
+    return held && id && held !== next ? { token: held, id } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Set when a sign-in is kept, so another window of this browser hears it (a `storage` event; the S470 code gate's C5). */
 export const SIGNED_IN_SIGNAL = 'lantern-signed-in';
 
@@ -71,8 +86,12 @@ export const SIGNED_IN_SIGNAL = 'lantern-signed-in';
  * after it; a pasted token has none, and its write clears the old one's.
  */
 export async function keepAccount(token: string, who: AccountWho, tokenId?: string | null): Promise<void> {
+  const replaced = await replacedMint(token);
   await db.kvSet('accountToken', token);
   await db.kvSet('accountTokenMint', mintOf(token, tokenId));
+  // The token this one replaces, if Lantern minted it, is let go by its id once the new one is kept
+  // (2026-10-26): keel keeps a tool's consent while another of its tokens for the person lives.
+  if (replaced) void revokeToken(replaced.token, replaced.id);
   const before = await db.kvGet<string>('accountId');
   if (before && before !== who.id) {
     await db.kvSet('accountWorlds', undefined);

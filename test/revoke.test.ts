@@ -20,6 +20,7 @@ const { signIn, signInWithPassword, signOut, signedOutLine, revokeIfNotKept, TOK
 const settle = () => new Promise((r) => setTimeout(r, 50));
 const { applySignInOutcome } = await import('../src/signin');
 const { mintedTokenId, mintOf, revokeToken } = await import('../src/revoke');
+import type { TokenMint } from '../src/revoke';
 
 const ID_A = '0b6f2a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b';
 const ID_B = '9e8d7c6b-5a49-4382-9716-a5b4c3d2e1f0';
@@ -178,12 +179,14 @@ describe('Sign out', () => {
     await vi.waitFor(() => expect(keel.deletes.map((d) => d.id)).toEqual([ID_A]));
   });
 
-  it('a pasted token is never revoked, and its keep clears the record of the one before', async () => {
+  it('a pasted token is never revoked, and its keep clears the record of the one before (which it lets go)', async () => {
     await signInWithPassword('ana', 'right');
     await signIn(TOKEN_PASTED);
     expect(await db.kvGet('accountTokenMint')).toBeUndefined();
+    // The minted token the paste replaced is taken back (2026-10-26); the paste never is.
+    await vi.waitFor(() => expect(keel.deletes.map((d) => [d.id, d.bearer])).toEqual([[ID_A, TOKEN_A]]));
     expect((await signOut()).revoking).toBeNull();
-    expect(keel.deletes).toEqual([]);
+    expect(keel.deletes).toHaveLength(1);
     expect(keel.live.has(TOKEN_PASTED)).toBe(true);
   });
 
@@ -267,5 +270,85 @@ describe('a token minted and not kept', () => {
     await expect(signInWithPassword('ana', 'right')).rejects.toThrow();
     await settle();
     expect(keel.deletes).toEqual([]);
+  });
+});
+
+describe('a sign-in over a token Lantern minted (2026-10-26)', () => {
+  const TOKEN_C = 'ow_a_minted0000cccc3333';
+  const ID_C = '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f';
+
+  it('lets the old token go by its id, after the new one is kept', async () => {
+    keel.live.set(TOKEN_C, ID_C);
+    await signInWithPassword('ana', 'right');
+    let keptFirst: string | undefined;
+    const send = keel.fetch;
+    keel.fetch = async (input, init = {}) => {
+      if ((init.method ?? 'GET').toUpperCase() === 'DELETE') {
+        const mint = await db.kvGet<TokenMint>('accountTokenMint');
+        // Both writes are done before the old token is sent away (the gate's S3).
+        keptFirst = mint?.id === ID_C ? await db.kvGet<string>('accountToken') : 'mint not written yet';
+      }
+      return send(input, init);
+    };
+    globalThis.fetch = keel.fetch as typeof fetch;
+    await applySignInOutcome({ ok: true, token: TOKEN_C, tokenId: ID_C, account: { id: 'acc-ana', username: 'ana' } });
+    await vi.waitFor(() => expect(keel.deletes.map((d) => [d.id, d.bearer])).toEqual([[ID_A, TOKEN_A]]));
+    expect(keptFirst).toBe(TOKEN_C);
+    expect(keel.live.has(TOKEN_A)).toBe(false);
+    expect(keel.live.has(TOKEN_C)).toBe(true);
+    expect(await db.kvGet('accountTokenMint')).toEqual({ id: ID_C, tail: TOKEN_C.slice(-8) });
+  });
+
+  it('the same token kept again, a pasted token before, or nothing before: nothing is sent', async () => {
+    await signInWithPassword('ana', 'right');
+    // The fake mints the same token again: kept again, never sent away.
+    await signInWithPassword('ana', 'right');
+    await settle();
+    expect(keel.deletes).toEqual([]);
+    expect(keel.live.has(TOKEN_A)).toBe(true);
+    // A paste over it lets the minted one go (the Sign out case above); what follows the paste is the case here.
+    await signIn(TOKEN_PASTED);
+    await settle();
+    keel.deletes = [];
+    keel.live.set(TOKEN_C, ID_C);
+    await applySignInOutcome({ ok: true, token: TOKEN_C, tokenId: ID_C, account: { id: 'acc-ana', username: 'ana' } });
+    await settle();
+    expect(keel.deletes).toEqual([]);
+  });
+
+  it('a token write that fails sends nothing: the old token stays the working one', async () => {
+    await signInWithPassword('ana', 'right');
+    keel.deletes = [];
+    const set = db.kvSet;
+    const spy = vi.spyOn(db, 'kvSet').mockImplementation(async (k: string, v: unknown) => {
+      if (k === 'accountToken' && v === TOKEN_C) throw new Error('store refused');
+      return set(k, v);
+    });
+    keel.live.set(TOKEN_C, ID_C);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await applySignInOutcome({ ok: true, token: TOKEN_C, tokenId: ID_C, account: { id: 'acc-ana', username: 'ana' } }).catch(() => undefined);
+    expect(spy).toHaveBeenCalledWith('accountToken', TOKEN_C);
+    spy.mockRestore();
+    await settle();
+    expect(keel.deletes.filter((d) => d.id === ID_A)).toEqual([]);
+    expect(keel.live.has(TOKEN_A)).toBe(true);
+  });
+
+  it('a store that does not answer what it holds sends nothing (never a guess), and the sign-in still lands', async () => {
+    await signInWithPassword('ana', 'right');
+    keel.deletes = [];
+    const get = db.kvGet;
+    const spy = vi.spyOn(db, 'kvGet').mockImplementation(async (k: string) => {
+      if (k === 'accountTokenMint') throw new Error('store down');
+      return get(k);
+    });
+    keel.live.set(TOKEN_C, ID_C);
+    await applySignInOutcome({ ok: true, token: TOKEN_C, tokenId: ID_C, account: { id: 'acc-ana', username: 'ana' } }).catch(() => undefined);
+    expect(spy).toHaveBeenCalledWith('accountTokenMint');
+    spy.mockRestore();
+    await settle();
+    expect(keel.deletes).toEqual([]);
+    expect(await db.kvGet('accountToken')).toBe(TOKEN_C);
   });
 });

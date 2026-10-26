@@ -183,6 +183,9 @@ export function sortView(s: WorldSession): View {
     refusals.delete(s.id);
     render();
     const job = (async () => {
+      // The token the sort goes out with: a refusal is filed under it, never under one a sign-in in
+      // another window kept meanwhile (2026-10-26's gate, S1).
+      const sentWith = await accountToken();
       try {
         const heldBack = { hidden: new Set<string>(), proposed: new Set<string>() };
         const slice = buildSlice(fit, s.lookupIndex(), (id) => s.get(id), heldBack);
@@ -203,7 +206,7 @@ export function sortView(s: WorldSession): View {
         state.clear();
         phase = 'review';
       } catch (e) {
-        refusals.set(s.id, { text: e instanceof SortRefused ? e.message : errorText(e), token: await accountToken() });
+        refusals.set(s.id, { text: e instanceof SortRefused ? e.message : errorText(e), token: sentWith });
         phase = 'choose';
       }
     })();

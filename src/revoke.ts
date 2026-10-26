@@ -6,8 +6,8 @@
 //
 // keel's answers (probed on a crew account in S475): 204 revoked; 401 the token works no more
 // (revoked already); 404 the bearer works and the id is not its account's, so the token is still
-// LIVE. Revoking a token minted by Sign in with OnlyWorlds also withdraws the person's consent for
-// Lantern: the next sign-in asks again.
+// LIVE. Revoking a token minted by Sign in with OnlyWorlds ends the person's consent for Lantern
+// only when it was Lantern's last live token for them.
 //
 // This never writes the app database: the caller has already let the token go, and a sign-in that
 // lands meanwhile must not be undone by an old answer.
