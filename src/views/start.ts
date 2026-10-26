@@ -694,7 +694,7 @@ export function settingsView(): HTMLElement {
         : fields === 'own'
           ? "Only the fields you added show. The type's own fields are a tap away."
           : 'The filled fields show. The empty ones are a tap away.';
-    const keep = h('button', { class: 'btn', type: 'button' }, 'Ask the phone to keep your worlds');
+    const keep = h('button', { class: 'btn', type: 'button' }, 'Ask it to keep them');
     keep.addEventListener('click', async () => {
       const ok = await db.persistStorage();
       toast(ok ? 'The phone will keep your worlds.' : 'The phone did not agree yet. Adding Lantern to the home screen helps.');

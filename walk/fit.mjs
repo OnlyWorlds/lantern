@@ -34,8 +34,10 @@ function wrapped(page) {
       }
       // A pick row (a note to sort, an ask's candidate) carries content, not a label: its title and
       // the words under it may wrap (cutting a candidate's anchor would hide which one it is). It
-      // still may not run out of its box, checked below.
-      for (const [leaf, texts] of c.classList.contains('note-pick') ? [] : leaves) {
+      // still may not run out of its box, checked below. A choice card's title is its label; the line
+      // under it describes, and may wrap the same way (one is a date in the world's own calendar).
+      const isHint = (leaf) => c.classList.contains('choice') && leaf !== c && !leaf.matches('b');
+      for (const [leaf, texts] of c.classList.contains('note-pick') ? [] : [...leaves].filter(([leaf]) => !isHint(leaf))) {
         const tops = new Set();
         for (const t of texts) {
           const range = document.createRange();
@@ -61,6 +63,14 @@ async function walk(engine, tag) {
   const base = engine === webkit ? devices['iPhone 13'] : devices['Pixel 7'];
   const ctx = await browser.newContext({ ...base, viewport: { width: 360, height: 780 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
+  // FONT=<family> stands in for the house theme's system-ui, the one font a phone picks itself
+  // (the Linux runner's is DejaVu Sans; Verdana is of its width): FONT=Verdana node walk/fit.mjs
+  if (process.env.FONT) {
+    await page.addInitScript((f) => {
+      const css = `html[data-theme='house'] { --lan-font-body: '${f}', sans-serif !important; --lan-font-display: '${f}', sans-serif !important; }`;
+      document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = css; document.head.append(s); });
+    }, process.env.FONT);
+  }
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 

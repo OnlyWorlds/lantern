@@ -635,9 +635,11 @@ h2 {
   gap: 8px;
 }
 
-/* Three across fits every type's name only from 412 wide: at 360 six were cut to an ellipsis
-   ("Characters" 78px in 73), at 390 "Institutions" by 2px (walk/fit.mjs measures it). Two across below. */
-@media (max-width: 411px) {
+/* Two across below 480 (30em). Three across from 412 fitted every name in Segoe UI and Arial but
+   cut five in a wider system font (the Linux runner's DejaVu; Samsung's own font is wider than
+   Roboto too); Verdana, of DejaVu's width, holds three across from 440. walk/fit.mjs and
+   walk/tile-font.mjs (FONT=Verdana) measure it. */
+@media (max-width: 29.99em) {
   .type-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1027,6 +1029,13 @@ button.wait-pin {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* The pill keeps its label on one line; the words beside it give way (a wider system font wrapped
+   "Tick if true" at 360). */
+.sort-head .btn-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .sort-head .btn-pill.on {
