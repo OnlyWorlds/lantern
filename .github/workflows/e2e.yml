@@ -1,8 +1,7 @@
-# Lantern's suites, off the crew's machine (the cloud-compute route Atlas runs since S460 and Tangle
-# since S481; the Captain's word, h43 #13761). Manual only: it runs when someone dispatches it
-# (`gh workflow run e2e.yml --ref main`), never on a push or a pull request. It reads the
-# repository and nothing else: no secret, so the live walks (live-*, frames*, leftovers), which
-# need the crew's test accounts, stay on the crew's machine.
+# Lantern's suites, run on GitHub's machines (since 2026-10-26). Manual only: it runs when someone
+# dispatches it (`gh workflow run e2e.yml --ref main`), never on a push or a pull request. It reads
+# the repository and nothing else: no secret, so the live walks (live-*, frames*, leftovers), which
+# need test accounts, run elsewhere.
 name: e2e
 
 on:
