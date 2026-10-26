@@ -1,4 +1,4 @@
-// Joining with an invite link (Keel #212), against a fake keel that answers as keel's own tests
+// Joining with an invite link, against a fake keel that answers as keel's own tests
 // say: preview needs no credential and spends nothing; /account/join wants the account token,
 // 201 with the membership (world_id, role, roster_character), 404 for every bad code (one
 // message), 409 already_member with the code left unused. Accepting asks no PIN for any role
@@ -54,7 +54,7 @@ class FakeKeel {
       if (!c || c.used) return this.notFound();
       return this.json(200, { reader: c.reader, world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: c.role, with_character: false, expires_at: '2026-10-19T00:00:00+00:00' });
     }
-    // Keel #353 (keel PR 55, accounts/join_api.py): a player code redeems with no credential, 201
+    // keel PR 55 (accounts/join_api.py): a player code redeems with no credential, 201
     // PlayerJoined; the code is spent; a person's code here is the one 404.
     if (path === '/join' && method === 'POST') {
       this.redeemed.push({ body, credential: headers.has('Authorization') || headers.has('API-Key') });
@@ -163,7 +163,7 @@ describe('an invite link', () => {
     expect([rec.cursor, rec.appliedHead, rec.apiKey.startsWith('ow_r_')]).toEqual([undefined, undefined, true]);
   });
 
-  it("a key that fails to mint after the copy went leaves a world that reads again from zero (the S402 gate, G1)", async () => {
+  it("a key that fails to mint after the copy went leaves a world that reads again from zero", async () => {
     await db.putWorldRecord({ id: WORLD, name: 'The Reach', kind: 'online', apiKey: `ow_w_${'g'.repeat(30)}`, keyKind: 'write', role: 'owner', cursor: 'c-gm', appliedHead: 90, addedAt: '' } as db.WorldRecord);
     await db.applyElements(WORLD, [{ id: '0eee0000-0000-4000-8000-000000000001', type: 'object', name: 'The drowned crown' }]);
     keel.members.add(WORLD);
@@ -202,7 +202,7 @@ describe('an invite link', () => {
   });
 });
 
-describe('a player link, no account (Keel #353)', () => {
+describe('a player link, no account', () => {
   beforeEach(async () => {
     await db.kvSet('accountToken', undefined);
   });

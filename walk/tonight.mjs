@@ -1,9 +1,9 @@
-// Tonight's cast (h37 #4061, #4072): keep a handful of a world's elements for a session from their
+// Tonight's cast: keep a handful of a world's elements for a session from their
 // pages; they lead the world's home in the order kept; let one go from its page, clear the list from
 // the home; another world on the phone keeps its own list.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/tonight.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -81,7 +81,7 @@ async function walk(engine, tag) {
   await page.locator('[data-action=clear-tonight]').tap();
   await page.waitForFunction(() => !document.querySelector('[data-part=tonight]'));
   check(tag, true, 'Clear the list empties it');
-  // Recent (h37 #4087): the pages opened on this phone, newest first; one on Tonight is left out.
+  // Recent: the pages opened on this phone, newest first; one on Tonight is left out.
   const lately = await page.$$eval('[data-part=recent] .el-row b', (bs) => bs.map((b) => b.textContent));
   check(tag, JSON.stringify(lately) === JSON.stringify(['Ada', 'The Gull Inn']), `Recent, newest first (${JSON.stringify(lately)})`);
   await page.goto(`${BASE}/#/w/${W1}/e/${INN}`);

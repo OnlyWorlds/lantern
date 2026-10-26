@@ -31,7 +31,7 @@ import { applySignInOutcome, isSignInCallback, NOT_KEPT_LINE, setSignInNotice, S
 // Back from onlyworlds.com (Sign in with OnlyWorlds): the exchange starts before anything else asks
 // onlyworlds.com, and the address is /#/signing-in before the router or the share target reads it.
 const signInReturn: Promise<SignInOutcome> | null = isSignInCallback() ? startSignInCallback() : null;
-// Applied once, whatever redraws the screen (a page brought back by Back routes again: the S470
+// Applied once, whatever redraws the screen (a page brought back by Back routes again: the sign-in
 // code gate's C11). A failure keeping the token is said, never a screen left on Signing in (G10).
 const signInLanding: Promise<string> | null = signInReturn
   ? signInReturn.then(applySignInOutcome).catch((e: unknown) => {
@@ -124,7 +124,7 @@ async function route(): Promise<void> {
       mount(signingInView());
       const to = await signInLanding;
       if (location.hash === SIGNING_IN_HASH) go(to, true);
-      // Who the phone is signed in as, said where the return lands (the S470 gate's G1).
+      // Who the phone is signed in as, said where the return lands (the sign-in gate's G1).
       const said = takeSignedInLine();
       if (said) toast(said);
       return;
@@ -145,7 +145,7 @@ async function route(): Promise<void> {
       mount(await shareView(true));
       return;
     case 'join': {
-      // keel's join page hands the code on as #/join/<code> (Keel #294). It leaves the address bar
+      // keel's join page hands the code on as #/join/<code>. It leaves the address bar
       // at once, as Atlas's door clears it, so a spent code never sits in history; replaceState
       // fires no hashchange, so this screen is the one that opens.
       const fromLink = joinCode(parts[1] ?? '');
@@ -161,13 +161,13 @@ async function route(): Promise<void> {
 
 window.addEventListener('hashchange', () => void route());
 // A page the browser kept and brought back (Back from onlyworlds.com) is drawn again, so a screen
-// left mid-tap with its buttons off, or signed out in memory, is never what shows (the S470 gate's G3).
+// left mid-tap with its buttons off, or signed out in memory, is never what shows (the sign-in gate's G3).
 window.addEventListener('pageshow', (e) => {
   if (e.persisted) void route();
 });
 // Signed in from another window of this browser (a sign-in that came back in a browser tab while the
-// home-screen app waited): a screen that only asks to sign in moves on (the S470 gate's G4).
-// Only the welcome and sign-in screens move: Your worlds is left as it is (the S470 code gate's C6).
+// home-screen app waited): a screen that only asks to sign in moves on (the sign-in gate's G4).
+// Only the welcome and sign-in screens move: Your worlds is left as it is (the sign-in code gate's C6).
 async function signedInElsewhere(): Promise<void> {
   if (!app.querySelector('[data-screen="welcome"], [data-screen="signin"]')) return;
   if (!(await accountToken())) return;

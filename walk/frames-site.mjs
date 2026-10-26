@@ -1,5 +1,5 @@
 // The journey's storyboard frames on onlyworlds.com (#388): the owner's Access pane, where a member
-// is taken out (L13's setup, L18). The owner's phone (crew-walk-b, standing in for the Captain) as a
+// is taken out (L13's setup, L18). The owner's phone (crew-walk-b, standing in for Titus) as a
 // persistent profile beside frames.mjs's two.
 //
 //   CREW_FILE=<crew accounts file> FRAMES_STATE=<scratch dir> node walk/frames-site.mjs <stage> [frame id]

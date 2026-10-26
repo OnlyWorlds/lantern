@@ -1,6 +1,6 @@
 // The morning after, the pure part: the world's slice a sort sends with its notes, and the rows a
-// person ticked turned into writes. The rows' shape is Simmer's contract (h37 #3571,
-// Fold/magelet/work/2026-10-12-lantern-row-shape-reply.md); the route is Skeld's (h37 #3591,
+// person ticked turned into writes. The rows' shape is Simmer's contract (2026-10-12); the
+// route is Skeld's (2026-10-12,
 // POST /account/sort). Nothing here writes: the screen hands the plan to the outbox.
 import { isKnownOf, lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
 import { BASE_FIELDS, fieldInfo, isType } from './schema';
@@ -48,8 +48,8 @@ export interface AskRow {
 }
 export type SortRow = MakeRow | AddToRow | LinkRow | AskRow;
 
-export const SLICE_MAX = 100; // Skeld h37 #3597, on Simmer's word: 40 dropped real candidates on a big world
-/** Pictures a sort may carry (h37 #3594), each on keel's media host. */
+export const SLICE_MAX = 100; // Skeld, on Simmer's word: 40 dropped real candidates on a big world
+/** Pictures a sort may carry, each on keel's media host. */
 export const PICTURES_MAX = 4;
 const MEDIA = 'https://media.onlyworlds.com/';
 
@@ -57,7 +57,7 @@ const MEDIA = 'https://media.onlyworlds.com/';
  * keel's own test (accounts/sort.py `_image_url_ok`): on the media host, no query or fragment, the
  * object key under this world's `u/<world id>/` with a name after it, no empty or dot segment, at
  * most 512 characters of key. keel refuses the whole sort for one picture that fails it, so such a
- * picture is held back here (the S399 merge gate: a picture from another world).
+ * picture is held back here (the merge gate: a picture from another world).
  */
 export function pictureOk(url: string, worldId: string): boolean {
   if (!url.startsWith(MEDIA) || /[?#\s]/.test(url) || [...url].length > MEDIA.length + 512) return false;
@@ -95,7 +95,7 @@ export function notesPayload(notes: OwElement[], worldId: string): { notes: (str
   });
   return { notes: out, held };
 }
-/** The route's limits (h37 #3591): 1 to 8 notes, each up to 4,000 characters, 16,000 in all. */
+/** The route's limits: 1 to 8 notes, each up to 4,000 characters, 16,000 in all. */
 export const NOTES_MAX = 8;
 export const NOTE_CHARS = 4000;
 export const NOTES_CHARS = 16000;
@@ -176,11 +176,11 @@ export function buildSlice(
     for (const line of lines.length ? lines : [noteText(n)]) {
       for (const hit of lookupWorld(index, line, { limit: 12 })) {
         const el = hit.element;
-        // A stub (keel's known of) is never written, so no row may be planned onto it (the S444 gate, G3).
+        // A stub (keel's known of) is never written, so no row may be planned onto it (the stub gate, G3).
         if (noteIds.has(el.id) || NOT_IN_SLICE.has(el.type) || isKnownOf(el)) continue;
         // The slice hands the world to keel's AI: a hidden element stays with its holder (src/hidden.ts,
         // folder spec §4.8), and a proposed one is not canon until a keeper accepts it, so neither is
-        // offered as what the world has (src/review.ts, Keel #565). The review says how many of each.
+        // offered as what the world has (src/review.ts). The review says how many of each.
         if (isHidden(el)) {
           heldBack?.hidden.add(el.id);
           continue;
@@ -212,7 +212,7 @@ export function buildSlice(
 }
 
 // Trimmed as keel's Python strips: JS trim() keeps \x1c-\x1f and \x85, which Python counts as
-// whitespace, so a name of only those passed here and was refused there (the S399 merge gate).
+// whitespace, so a name of only those passed here and was refused there (the merge gate).
 const PY_EDGES = /^[\s\x1c-\x1f\x85]+|[\s\x1c-\x1f\x85]+$/g;
 const sliceName = (el: OwElement): string => (typeof el.name === 'string' ? el.name.replace(PY_EDGES, '') : '');
 
@@ -220,10 +220,10 @@ const sliceName = (el: OwElement): string => (typeof el.name === 'string' ? el.n
 
 export type Write =
   /** `id` and `idempotencyKey`: minted when the plan is fixed (`fixPlan`), so a step run twice after a
-   * crash meets its own outbox row or keel's copy, and makes nothing twice (the S399 merge gate). */
+   * crash meets its own outbox row or keel's copy, and makes nothing twice (the merge gate). */
   | { op: 'create'; key: string; type: string; values: Record<string, unknown>; id?: string; idempotencyKey?: string }
   /** `base`: keel's copy when the plan was fixed. The edit is judged against it, so a change made
-   * elsewhere before a late Finish writing is a conflict, never overwritten (the S399 merge gate). */
+   * elsewhere before a late Finish writing is a conflict, never overwritten (the merge gate). */
   | { op: 'edit'; id: string; values: Record<string, unknown>; base?: OwElement };
 
 /** What the plan reads beside the view: keel's copy now, and whether a change to an element waits on the person. */
@@ -252,7 +252,7 @@ export interface Ticked {
 const IDENTITY = new Set(['name', 'type', 'id']);
 /** A kind word: set when empty, never appended to ("Brewer\n\nSmuggler" is not a kind). */
 const KIND_FIELDS = new Set(['supertype', 'subtype']);
-/** Text fields that hold a setting, not prose: a map's colour Atlas paints, a pin's element type (the S399 merge gate). */
+/** Text fields that hold a setting, not prose: a map's colour Atlas paints, a pin's element type (the merge gate). */
 const NOT_PROSE = new Set(['background_color', 'element_type']);
 
 function lower(t: string): string {
@@ -261,7 +261,7 @@ function lower(t: string): string {
 
 /**
  * The fields a row may add to: the description, the kind words, and the type's own text fields.
- * Never a base field the person sets by hand: image_url above all (the S398 sort gate: the model
+ * Never a base field the person sets by hand: image_url above all (the sort gate: the model
  * could have set any address as a picture every viewer's phone then loads).
  */
 function addable(type: string, field: string): boolean {
@@ -337,7 +337,7 @@ export function planWrites(
     const target = get(row.target.id);
     if (!target) return skipped.push({ row: t.row, reason: 'It is not in this world on this phone.' });
     // The view holds the person's own change waiting on a conflict: adding to it would carry that
-    // text back even if they then take theirs (the S399 merge gate). Settle it first.
+    // text back even if they then take theirs (the merge gate). Settle it first.
     if (ctx.waitsOnYou?.(target.id))
       return skipped.push({ row: t.row, reason: `A change to ${target.name} waits for you: settle it in Waiting to send, then write this.` });
     if (IDENTITY.has(row.field)) return skipped.push({ row: t.row, reason: 'A name is changed by hand, on its page.' });

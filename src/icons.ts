@@ -2,7 +2,7 @@ import { TYPE_ICON_PATHS } from './type-icons';
 
 // Our own icons (constant SVG, the one innerHTML in the app). currentColor throughout.
 const PATHS: Record<string, string> = {
-  // A world, for the World tab: the tab lands on the world's own screen (Seethe h37 #3743).
+  // A world, for the World tab: the tab lands on the world's own screen (Seethe, 2026-10-12).
   world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 3.9 5.4 3.9 9s-1.3 6.6-3.9 9c-2.6-2.4-3.9-5.4-3.9-9s1.3-6.6 3.9-9z"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
@@ -19,7 +19,7 @@ const PATHS: Record<string, string> = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
   pin: '<path d="M9 4h6l-1 6 3 3H7l3-3-1-6z"/><path d="M12 13v7"/>',
-  // Seethe's two marks (h37 #3716, the Captain's yes #3717): a card handed out, a tray of notes to sort.
+  // Seethe's two marks (Titus's yes, 2026-10-12): a card handed out, a tray of notes to sort.
   reveal: '<rect x="3" y="5" width="10" height="13" rx="1.5"/><path d="M7 9.5h2.5M7 13h3.5"/><path d="M15 11h6M18 8l3 3-3 3"/>',
   unsorted: '<path d="M4 13l2.5-8h11L20 13"/><path d="M4 13v5h16v-5"/><path d="M4 13h4l1.5 2.5h5L16 13h4"/>',
   install: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',

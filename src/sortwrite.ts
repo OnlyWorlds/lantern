@@ -1,6 +1,6 @@
 // The morning after's write run: a fixed plan done step by step, the step kept after each, so a
-// retry resumes where it stopped and nothing is made or appended twice (the S398 sort gate). Its
-// own module so the tests drive the loop the screen runs, not a copy of it (the S399 merge gate).
+// retry resumes where it stopped and nothing is made or appended twice (the sort gate). Its
+// own module so the tests drive the loop the screen runs, not a copy of it (the merge gate).
 import { SORTED, type Write } from './sortplan';
 import type { WorldSession } from './world';
 import { uuid7 } from './uuid7';

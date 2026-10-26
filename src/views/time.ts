@@ -95,7 +95,7 @@ export function beforeNowView(s: WorldSession): View {
         h(
           'p',
           { class: 'dim', style: 'margin:0', 'data-now': now === undefined ? '' : String(now) },
-          // Set now follows when this phone may move it (the frames' L7, S427: "Set it in Atlas" sat over it).
+          // Set now follows when this phone may move it ("Set it in Atlas" once sat over it).
           now !== undefined
             ? `Now is ${dateText(now, unit, cal)}.`
             : `This world has no now set, so every dated Event is listed.${s.canMoveNow ? '' : ' Set it in Atlas.'}`,
@@ -120,7 +120,7 @@ export function beforeNowView(s: WorldSession): View {
       b.addEventListener('click', () => changeNowSheet(s));
       parts.splice(1, 0, b);
     }
-    // Several calendars: which one the dates are in is this phone's choice (Kael h37 #4287).
+    // Several calendars: which one the dates are in is this phone's choice (Kael, 2026-10-14).
     const cals = worldCalendars(s.elements());
     if (cals.length > 1) {
       const chosen = cals.find((c) => c.id === chosenCalendar(s.id));

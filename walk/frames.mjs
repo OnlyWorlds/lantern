@@ -1,6 +1,6 @@
-// The journey's storyboard frames (#388, Seethe's contract h57 #6785, #6788): one PNG per step of
-// Forge/Notes/2026-10-15-journey-lantern.md, shot on the live lantern.onlyworlds.com with the crew
-// accounts, b standing in for the Captain (the owner) and a for the friend. Each phone is a
+// The journey's storyboard frames: one PNG per step of the journey
+// storyboard (2026-10-15), shot on the live lantern.onlyworlds.com with the crew
+// accounts, b standing in for Titus (the owner) and a for the friend. Each phone is a
 // persistent profile, so a stage can be run again without the ones before it.
 //
 // Run from tools/lantern, one stage at a time:
@@ -233,7 +233,7 @@ const stages = {
     await extra(page, 'l5-sent');
     await ctx.close();
   },
-  // L8 (and L13's second link): the owner's Invite someone. The name typed is the Captain's, since
+  // L8 (and L13's second link): the owner's Invite someone. The name typed is Titus's, since
   // the frames stand in for his walk; the caption says so.
   async invite() {
     const role = process.argv[3] === 'player' ? 'guest' : 'contributor';

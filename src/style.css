@@ -94,7 +94,7 @@ h2 {
   margin: 0;
 }
 
-/* hidden means hidden: a class that sets display (.stack is flex) would otherwise show it (S397). */
+/* hidden means hidden: a class that sets display (.stack is flex) would otherwise show it. */
 [hidden] {
   display: none !important;
 }
@@ -130,7 +130,7 @@ h2 {
 }
 
 /* Equal halves while both labels fit on one line; a label that would wrap moves the pair onto two
-   rows instead (the Captain's walk: buttons on two lines; walk/fit.mjs measures it at 360 wide). */
+   rows instead (Titus's walk: buttons on two lines; walk/fit.mjs measures it at 360 wide). */
 .row-gap {
   display: flex;
   flex-wrap: wrap;
@@ -163,7 +163,7 @@ h2 {
   opacity: 0.5;
 }
 
-/* OW Style's ladder (Studio style/RULES.md section 8, the Captain's "looks good", h63 #8314):
+/* The button ladder (Titus's "looks good", 2026-10-20):
    Entry .btn-primary, the fill, a screen's one main act (Sign in, Catch's Add to Unsorted, Start
    the world, Join); Standard .btn-standard, the wash and edge, a sheet's or a banner's commit;
    Quiet the plain .btn (a neutral edge) and .btn-quiet (bare text). A phone keeps its 48 high
@@ -381,7 +381,7 @@ h2 {
   margin: 0;
 }
 
-/* Delete: the error colour, quiet until its sheet asks (the Captain, h37 #4292). A token is Seethe's call. */
+/* Delete: the error colour, quiet until its sheet asks (Titus, 2026-10-14). A token is Seethe's call. */
 .btn-delete {
   color: #ff8a7a;
   align-self: flex-start;
@@ -625,7 +625,7 @@ h2 {
   justify-content: center;
   font-size: 0.72rem;
   font-weight: 700;
-  color: color-mix(in srgb, var(--type) 70%, var(--lan-ink)); /* the family hue, readable: >= 4.7:1 on its chip in both themes (S397) */
+  color: color-mix(in srgb, var(--type) 70%, var(--lan-ink)); /* the family hue, readable: >= 4.7:1 on its chip in both themes */
   background: color-mix(in srgb, var(--type) 22%, var(--lan-bg));
 }
 
@@ -636,7 +636,7 @@ h2 {
 }
 
 /* Three across fits every type's name only from 412 wide: at 360 six were cut to an ellipsis
-   ("Characters" 78px in 73), at 390 "Institutions" by 2px (S399, walk/fit.mjs measures it). Two across below. */
+   ("Characters" 78px in 73), at 390 "Institutions" by 2px (walk/fit.mjs measures it). Two across below. */
 @media (max-width: 411px) {
   .type-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -657,7 +657,7 @@ h2 {
   min-width: 0;
 }
 
-/* A type's mark beside its count, in the family hue made readable (the S397 chip mix). */
+/* A type's mark beside its count, in the family hue made readable (the chip mix). */
 .tile-count {
   display: flex;
   align-items: center;
@@ -748,7 +748,7 @@ h2 {
 
 /* While the keyboard is up the bar would ride on it: typing hides it. It comes back a moment after
    the field lets go, never at once: the tap that took the focus away was aimed at what lay under the
-   bar (Catch's save button, S399: the bar returned under the finger and the tap hit Catch). Hidden,
+   bar (Catch's save button: the bar returned under the finger and the tap hit Catch). Hidden,
    it takes no taps. */
 .tabbar {
   transition: visibility 0s linear 350ms;
@@ -777,7 +777,7 @@ body:has(main textarea:focus, main input:focus) .tabbar {
   font-family: var(--lan-font-display);
   font-size: 1.5rem;
   font-weight: 700;
-  color: color-mix(in srgb, var(--type) 70%, var(--lan-ink)); /* the family hue, readable: >= 4.7:1 on its chip in both themes (S397) */
+  color: color-mix(in srgb, var(--type) 70%, var(--lan-ink)); /* the family hue, readable: >= 4.7:1 on its chip in both themes */
   background: color-mix(in srgb, var(--type) 22%, var(--lan-bg)) center / cover no-repeat;
 }
 
@@ -926,7 +926,7 @@ button.wait-pin {
   border-radius: 18px;
   font-size: 0.85rem;
   text-decoration: none;
-  color: color-mix(in srgb, var(--type) 70%, var(--lan-ink)); /* the family hue, readable: >= 4.7:1 on its chip in both themes (S397) */
+  color: color-mix(in srgb, var(--type) 70%, var(--lan-ink)); /* the family hue, readable: >= 4.7:1 on its chip in both themes */
   background: color-mix(in srgb, var(--type) 18%, var(--lan-bg));
   border: 0;
 }
@@ -942,7 +942,7 @@ button.wait-pin {
   border: 1px dashed var(--lan-border);
 }
 
-/* The pencil on a linked field's label line, at its far right (the Captain, h37 #4050): a finger-sized
+/* The pencil on a linked field's label line, at its far right (Titus, 2026-10-13): a finger-sized
    target around a small mark, its glyph's right edge on the row's edge. */
 .frow .k {
   display: inline-flex;
@@ -1284,7 +1284,7 @@ select.input {
 }
 
 /* The label wraps: a word after the type (hidden, proposed) is what the card is for, never cut to an ellipsis
-   (the S462 gate's F3, S477). The card sits on the bottom edge and grows upward. */
+   (the hidden-elements gate's F3). The card sits on the bottom edge and grows upward. */
 .map-card .label {
   flex: 1 1 auto;
   min-width: 0;
@@ -1386,5 +1386,5 @@ select.input {
 .file-name { display: block; overflow-wrap: anywhere; }
 .file-line { display: block; margin: 2px 0 8px; }
 
-/* A line that carries an account name (S470): a long one-word username breaks rather than push the page sideways. */
+/* A line that carries an account name: a long one-word username breaks rather than push the page sideways. */
 .wrap-name { overflow-wrap: anywhere; }

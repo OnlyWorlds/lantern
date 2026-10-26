@@ -1,11 +1,11 @@
-// Keel #565's reader rule on the phone (src/review.ts; schema-dist dist.52 `profiles/review.md`; Atlas
+// The reader rule on the phone (src/review.ts; schema-dist dist.52 `profiles/review.md`; Atlas
 // 1.84.0's twin, conv. 168): the two readings, the row's word, the sort slice leaving a proposed element out.
 import { describe, expect, it } from 'vitest';
 import { buildWorldIndex, type OwElement } from '@onlyworlds/sdk';
 import { handsOnAsProposed, isProposed, proposedWord, todayDay } from '../src/review';
 import { buildSlice } from '../src/sortplan';
 
-// keel's own shape, as served live (Atlas S459 setup-565.mjs).
+// keel's own shape, as served live (as Atlas probed it).
 const MARK = { by: '19e1c2e5-5e8e-4d46-8382-e5ad445d13a0', evidence: 'seat', expires: '2026-11-22' };
 
 describe('the readings', () => {

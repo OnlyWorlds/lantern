@@ -24,7 +24,7 @@ export interface WorldRecord {
   keyKind?: OwKeyKind;
   /** keel's id for a key Lantern minted from the account, beside the key's last eight characters:
    * the id counts only while `apiKey` ends in `tail` (`mintedTokenId`, src/revoke.ts). Absent on a
-   * pasted key and on records from before S476. */
+   * pasted key and on records from before revoking was kept. */
   keyMint?: { id: string; tail: string };
   /** From the account list: owner, or collaborator with a member role. */
   role?: 'owner' | 'collaborator';
@@ -33,9 +33,9 @@ export interface WorldRecord {
    * whose it was, and the role, given back when that account signs in again. */
   heldBy?: string;
   heldRole?: 'owner' | 'collaborator';
-  /** A player's own Character, from keel's /me (Skeld #3457); null once asked and there is none. */
+  /** A player's own Character, from keel's /me (Skeld, 2026-10-12); null once asked and there is none. */
   characterId?: string | null;
-  /** Joined with a player link, no account (Keel #353): a read key only, so nothing is ever shared from it. */
+  /** Joined with a player link, no account: a read key only, so nothing is ever shared from it. */
   playerSeat?: boolean;
   /** The game master's choice of which Collective is the party (Give it to the party), kept per world. */
   partyId?: string;
@@ -45,7 +45,7 @@ export interface WorldRecord {
   /** The feed's head when the last walk finished: the quiet poll's "anything new?" compares with it. */
   appliedHead?: number | string;
   /** keel's view epoch (a guest's; null for everyone else) the last walk ran under (SDK changesAll's return);
-   * unknown on a copy from before S397, which costs its next poll one walk. */
+   * unknown on an older copy, which costs its next poll one walk. */
   appliedEpoch?: number | null;
   lastSync?: string;
   /** Put it online, under way: the account world already made, and the bulk's key, so a retry repeats nothing. */

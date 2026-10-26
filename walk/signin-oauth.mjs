@@ -1,10 +1,10 @@
-// Sign in with OnlyWorlds (Keel #515; contract Forge/Notes/2026-10-25-s470-lantern-sign-in-contract.md),
+// Sign in with OnlyWorlds,
 // on the built app with real taps: Playwright serves https://lantern.onlyworlds.com from the preview
 // build (as Pages would, /signin/callback answered by / per public/_redirects) and plays keel's
 // /signin/authorize (a 302 back with a code and the state the SDK sent, or keel's Cancel) and
 // /api/v2/auth/token (the verifier's S256 must equal the challenge). Workers blocked (WebKit routes
 // nothing under a worker). What it cannot see: Pages' own rules and headers (Boss's preview read),
-// real keel (the live walk), an installed app's round trip (the Captain's phone).
+// real keel (the live walk), an installed app's round trip (Titus's phone).
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/signin-oauth.mjs [webkit|chromium]
 import './guard.mjs';
 import { createHash } from 'node:crypto';
@@ -162,7 +162,7 @@ async function walk(engine, tag) {
   await browser.close();
 }
 
-// The S470 gate's G2: a phone whose worker is installed comes back to /signin/callback, and its own
+// The sign-in gate's G2: a phone whose worker is installed comes back to /signin/callback, and its own
 // worker answers from the cache (the build the phone runs), never the host. Chromium only: Playwright
 // routes a worker's own requests there, and WebKit routes nothing under a worker.
 async function workerWalk() {

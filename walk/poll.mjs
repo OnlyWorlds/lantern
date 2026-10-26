@@ -4,7 +4,7 @@
 // in front, quiet (no banner); a reveal arrives on the player's home without a tap; hidden, no poll.
 // Run: npm run build && (npx vite preview &) && node walk/poll.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 
@@ -53,7 +53,7 @@ async function walk(engine, deviceName, tag) {
     if (path.startsWith('/changes')) {
       const url = new URL(r.request().url());
       const head = reveal ? 101 : 100;
-      // keel's head read (Skeld, h29 #3511): only the tip, no bodies.
+      // keel's head read: only the tip, no bodies.
       if (url.searchParams.get('head') === 'true') {
         heads++;
         return r.fulfill(json({ head, cursor: String(head) }));

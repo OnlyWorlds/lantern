@@ -1,4 +1,4 @@
-// Add to the home screen, as a button that does something (the Captain's walk, 2026-10-12: it was a
+// Add to the home screen, as a button that does something (Titus's walk, 2026-10-12: it was a
 // sentence that looked like one). Where the browser offers its own install dialog (Chrome and Edge
 // on Android, beforeinstallprompt), the button opens it; elsewhere it says the steps (an iPhone has
 // no dialog a page can open: Share, then Add to Home Screen).

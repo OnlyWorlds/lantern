@@ -1,5 +1,5 @@
 // Ask follows the phone's room switch (SDK 4.72's buildAskContext leaves the room out unless asked,
-// Kael h56 #11977; src/ask.ts askContext): the room walk's world, made to look like an account world on
+// see src/ask.ts askContext): the room walk's world, made to look like an account world on
 // this phone, the room shown by its card's tap, then a question whose answer is a room element: the
 // routed proxy (no question spent) must get it. Before 4.72 the SDK sent the room anyway, so a build on
 // 4.70 passes too: this walk proves the behaviour held across the SDK's move, not a change a person sees.

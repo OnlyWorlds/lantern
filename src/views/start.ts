@@ -96,7 +96,7 @@ export function welcomeView(): HTMLElement {
       ),
       h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'I have an invite link'),
       h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'I have a world key'),
-      // A world file sent by a friend, on a phone with nothing on it yet (S434: the door was only on Your worlds).
+      // A world file sent by a friend, on a phone with nothing on it yet (the door was once only on Your worlds).
       openFileButton('I have a world file', { class: 'btn btn-quiet', style: 'align-self:center' }),
     ),
   );
@@ -107,7 +107,7 @@ export function signInView(): HTMLElement {
   const email = h('input', { class: 'input', type: 'text', inputmode: 'email', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Email or username' });
   const password = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', 'aria-label': 'Password' });
   const err = h('p', { class: 'error', role: 'alert' });
-  // Sign in with OnlyWorlds (Keel #515): the screen's main act where it is offered, so the
+  // Sign in with OnlyWorlds: the screen's main act where it is offered, so the
   // password form's Sign in steps down to a Standard button beside it (the house ladder).
   const handoff = canSignInWithOnlyWorlds();
   const btn = h('button', { class: handoff ? 'btn btn-standard' : 'btn btn-primary', type: 'submit' }, 'Sign in');
@@ -123,7 +123,7 @@ export function signInView(): HTMLElement {
   say(takeSignInNotice() ?? '');
   const owBtn = handoff ? h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'signin-onlyworlds' }, 'Sign in with OnlyWorlds') : null;
   // Whose account it is: the browser's onlyworlds.com sign-in decides, with no page after the first
-  // (the S470 gate's G1), so the screen says so before the tap. Shown once the phone is read as
+  // (the sign-in gate's G1), so the screen says so before the tap. Shown once the phone is read as
   // signed out (L9), never for a moment on a signed-in one (G11).
   const handoffPart = owBtn
     ? h(
@@ -230,7 +230,7 @@ export function signInView(): HTMLElement {
     form,
     reveal,
     tokenForm,
-    // No account yet (S407): an invited friend lands here, and only the website makes one.
+    // No account yet: an invited friend lands here, and only the website makes one.
     h(
       'p',
       { class: 'dim', 'data-part': 'no-account', style: 'margin:0' },
@@ -246,7 +246,7 @@ export function signingInView(): HTMLElement {
   return h(
     'main',
     { class: 'screen', 'data-screen': 'signing-in' },
-    // No way back from here: the outcome lands where this screen goes (the S470 gate's G9).
+    // No way back from here: the outcome lands where this screen goes (the sign-in gate's G9).
     topbar('Sign in'),
     h('p', { class: 'dim', role: 'status', style: 'margin:0' }, 'Signing in…'),
   );
@@ -553,7 +553,7 @@ export function worldsView(): HTMLElement {
     main.replaceChildren(
       topbar('Your worlds', undefined, h('a', { class: 'btn btn-round', href: '#/settings', 'aria-label': 'Settings' }, icon('settings', 20))),
     );
-    // Pinned worlds lead the list, in the order pinned, whatever kind they are (the Captain, #3660).
+    // Pinned worlds lead the list, in the order pinned, whatever kind they are (Titus, 2026-10-12).
     // Each card is built once, then placed: under Pinned, or in its own section.
     const pinned = readPinned();
     const pinnedCards = new Map<string, HTMLElement>();
@@ -702,14 +702,14 @@ export function settingsView(): HTMLElement {
     });
     const out = h('button', { class: 'btn', type: 'button' }, 'Sign out');
     out.addEventListener('click', async () => {
-      // One sign-out per tap: a second tap would say the line twice (the S476 gate's notes).
+      // One sign-out per tap: a second tap would say the line twice (the revoke gate's notes).
       out.setAttribute('disabled', '');
       const { revoking } = await signOut();
       void render();
       void saySignedOut(revoking, 'Worlds already on this phone stay.');
     });
-    // On a shared phone the next person can read what stays (the security pass, F2; the Captain
-    // h37 #4072: offered, not the default). The account's worlds are the ones with a role, as the PIN's are.
+    // On a shared phone the next person can read what stays (the security pass, F2; Titus,
+    // 2026-10-13: offered, not the default). The account's worlds are the ones with a role, as the PIN's are.
     const mine = token ? (await db.listWorlds()).filter((w) => w.role) : [];
     const who = await accountName();
     let unsent = 0;
@@ -777,7 +777,7 @@ export async function removeWorldFromPhone(id: string): Promise<void> {
   forgetSession(id);
   // A world opened with a key takes its own PIN with it; your account's PIN stays for your other worlds.
   setPin({ id }, undefined);
-  // The phone's own lists for it go too (the S402 gate): a shared phone keeps nothing of a removed world.
+  // The phone's own lists for it go too: a shared phone keeps nothing of a removed world.
   for (const k of [`lantern-tonight-${id}`, `lantern-recent-${id}`, `lantern-given-${id}`, `lantern-notes-${id}`]) {
     try {
       localStorage.removeItem(k);

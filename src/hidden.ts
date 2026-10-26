@@ -27,7 +27,7 @@ export function hiddenWord(el: unknown): string {
 }
 
 /**
- * The words a name carries wherever it shows without its row (the S462 gate's F3): a link chip,
+ * The words a name carries wherever it shows without its row (the hidden-elements gate's F3): a link chip,
  * Linked from, the map's card, Waiting to send, the party pickers. Proposed first, as a row says it.
  */
 export function markWords(el: unknown): string[] {
@@ -56,7 +56,7 @@ export function withHiddenForCreate(body: Record<string, unknown>): Record<strin
 
 /**
  * Why an element stays back from keel's AI, or null: hidden or proposed itself, or a pin or marker
- * placing one (a pin is named for what it places, the S462 gate's F1).
+ * placing one (a pin is named for what it places, the hidden-elements gate's F1).
  */
 export function handOnHold(el: unknown, get: (id: string) => unknown): 'hidden' | 'proposed' | null {
   if (isHidden(el)) return 'hidden';

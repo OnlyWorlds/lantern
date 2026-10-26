@@ -1,5 +1,5 @@
-// Moving the world's now (h37 #4087) against a fake keel shaped by Skeld's read of keel's
-// patch_world (h37 #4085) and Keel #240 (h37 #4214): the owner's key with the PIN moves it and gets
+// Moving the world's now against a fake keel shaped by Skeld's read of keel's
+// patch_world: the owner's key with the PIN moves it and gets
 // the world back; a co-builder's key may send time_range_current alone (anything beside it is
 // owner_only); any other member's key is refused with owner_only; a wrong PIN is a 401.
 import 'fake-indexeddb/auto';
@@ -65,7 +65,7 @@ describe('moving now', () => {
     expect((await db.getWorldRecord(s.id))?.timeNow).toBe(460);
   });
 
-  it("a co-builder is offered it and moves the now alone (Keel #240)", async () => {
+  it("a co-builder is offered it and moves the now alone", async () => {
     // From the account list: a collaborator whose member role is co_builder.
     const listed = await session(CO_BUILDER, 'collaborator');
     listed.rec = { ...listed.rec, memberRole: 'co_builder' };
@@ -88,7 +88,7 @@ describe('moving now', () => {
       m.rec = { ...m.rec, memberRole };
       expect(m.canMoveNow).toBe(false);
     }
-    // A key whose member role keel's /me named (the S402 gate, G4): not offered either.
+    // A key whose member role keel's /me named: not offered either.
     const c = await session(MEMBER);
     c.rec = { ...c.rec, memberRole: 'contributor' };
     expect(c.canMoveNow).toBe(false);

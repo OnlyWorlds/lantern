@@ -10,7 +10,7 @@ for (const q of ['Lantern probe', 'Mine: the phone', 'Theirs: another hand', 'A 
   const page = await api.list('narrative', { filter: { name__icontains: q } });
   left.push(...page.data.map((e) => `${e.name} (${e.id})`));
 }
-// The agent mark's probes (walk/live-agentmark.mjs, Atlas's S415 live walk) are Characters.
+// The agent mark's probes (walk/live-agentmark.mjs, Atlas's live walk) are Characters.
 const probes = await api.list('character', { filter: { name__icontains: 'Agent mark probe' } });
 left.push(...probes.data.map((e) => `${e.name} (${e.id})`));
 const unsorted = await api.list('narrative', { filter: { supertype: 'Unsorted' } });

@@ -1,13 +1,13 @@
-// The morning after's call: keel's sorting route (Skeld, h37 #3591, POST /account/sort), on the
+// The morning after's call: keel's sorting route (Skeld, 2026-10-12, POST /account/sort), on the
 // same account check, model and allowance as Ask. The notes and the world's slice go in; rows in
 // Simmer's shape come back (src/sortplan.ts). The key and the meter are keel's. The call is the
-// SDK's `sort()` (4.18, Kael h37 #3664); its rows are checked again on arrival (`sanitizeRows`).
+// SDK's `sort()` (4.18, Kael, 2026-10-12); its rows are checked again on arrival (`sanitizeRows`).
 import { OwApiError, OwNetworkError, OwV2Client } from '@onlyworlds/sdk';
 import { accountToken } from './account';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import type { SliceItem, SortRow } from './sortplan';
 
-/** A note as the route takes it (h37 #3594): its words, or its words and its picture on keel's media host. */
+/** A note as the route takes it: its words, or its words and its picture on keel's media host. */
 export type SortNote = string | { text: string; image_url: string };
 
 export interface Sorted {

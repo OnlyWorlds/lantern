@@ -18,7 +18,7 @@ function show(s: WorldSession, type: string, field: string, v: unknown): string 
 }
 
 // The choices made on a conflict, kept outside its card: a redraw (a change arriving from the
-// poll) rebuilds the cards and must not put a choice back (the S396 gate).
+// poll) rebuilds the cards and must not put a choice back.
 const choices = new Map<string, Set<string>>();
 
 function conflictCard(s: WorldSession, row: OutboxRow): HTMLElement {
@@ -109,7 +109,7 @@ export function outboxView(s: WorldSession): View {
     const pinBtn = askPin(s) ? h('button', { class: 'btn btn-standard', type: 'button' }, 'Enter your PIN') : null;
     pinBtn?.addEventListener('click', () => pinSheet(s));
     // Changes send by themselves the moment there is signal and a PIN; Send now is for the doubt
-    // (the Captain's walk: "can we force send?").
+    // (Titus's walk: "can we force send?").
     const sendNow = !pinBtn && waiting.some((r) => r.state === 'waiting') ? h('button', { class: 'btn', type: 'button', 'data-action': 'send-now' }, 'Send now') : null;
     sendNow?.addEventListener('click', () => {
       if (!navigator.onLine) return toast('No signal. Your changes send by themselves when the phone has it.');

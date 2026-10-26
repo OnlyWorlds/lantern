@@ -1,4 +1,4 @@
-// A player's own notes (h37 #4113, option B): on a world whose key only reads (a player's), the
+// A player's own notes: on a world whose key only reads (a player's), the
 // tab bar's Catch is Note; a note is kept on this phone, listed newest first, shown on the home, and
 // removed in two taps; a world that writes keeps Catch. keel is cut off: no write ever goes out.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/notes.mjs [webkit|chromium]

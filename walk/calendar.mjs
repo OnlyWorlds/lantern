@@ -5,7 +5,7 @@
 // leap rule with exceptions) names 2000's leap day and not 1900's. Keel is cut off.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/calendar.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -103,7 +103,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('[data-screen=element]');
   check(tag, (await page.locator('[data-part=calendar-date]').count()) === 0, 'and the date fields stay numbers');
 
-  // This phone's choice (Kael h37 #4287): one of them, kept; then the numbers again.
+  // This phone's choice: one of them, kept; then the numbers again.
   await page.goto(`${BASE}/#/w/${id(2, 0)}/time`);
   await page.locator('[data-action=pick-calendar]').tap();
   await page.getByRole('button', { name: /Calendar 1/ }).tap();

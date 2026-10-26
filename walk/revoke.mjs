@@ -1,5 +1,4 @@
-// Sign out revokes the token Lantern made (S476, Atlas 1.93.0's twin; contract
-// `Forge/Notes/2026-10-25-s476-lantern-token-revoke-contract.md`), keel played as S475 probed it:
+// Sign out revokes the token Lantern made (Atlas 1.93.0's twin), keel played as it was probed:
 // a password sign-in mints a token with its id; Sign out sends DELETE /account/tokens/{that id} with
 // that token as the bearer and says it is revoked; with keel unreachable it says it could not
 // confirm; a pasted token is never revoked and keeps today's line.

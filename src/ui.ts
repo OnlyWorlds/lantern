@@ -23,10 +23,10 @@ export function elName(el: OwElement | undefined): string {
 }
 
 export function elRow(worldId: string, el: OwElement, extra?: string): HTMLElement {
-  // A caught note reads as one in every list, as on its own page (Quillon, h37 #4275).
+  // A caught note reads as one in every list, as on its own page (Quillon, 2026-10-14).
   const note = el.type === 'narrative' && el.supertype === 'Unsorted';
   // keel's stub says so before the tap: a player knows of it, not its details.
-  // A proposed element says so too (src/review.ts, Keel #565's reader rule), and a hidden one
+  // A proposed element says so too (src/review.ts, keel's reader rule), and a hidden one
   // (src/hidden.ts, folder spec §4.8).
   const hint = [...(note ? ['unsorted note'] : [typeName(el.type, { supertype: el.supertype }), supertypeWord(el.type, el.supertype) ? '' : el.supertype]), isKnownOf(el) ? 'known of' : '', proposedWord(el), hiddenWord(el), extra].filter(Boolean).join(' · ');
   return h(
@@ -58,7 +58,7 @@ export function topbar(title: string | Node, backHref?: string, ...actions: Node
 /**
  * The world's places, on every screen inside it: its home (find, the types), Catch (a world you can
  * write) and Ask. World is the way home from anywhere: mobile apps keep a tab bar, not breadcrumbs
- * (the Captain's walk, 2026-10-12). `on` is null on a screen that is none of the three (an element).
+ * (Titus's walk, 2026-10-12). `on` is null on a screen that is none of the three (an element).
  */
 export function tabbar(s: { id: string; canWrite: boolean; takesNotes?: boolean }, on: 'world' | 'catch' | 'ask' | null): HTMLElement {
   const tab = (id: 'world' | 'catch' | 'ask', label: string, href: string, ic: string) =>
@@ -77,7 +77,7 @@ export function tabbar(s: { id: string; canWrite: boolean; takesNotes?: boolean 
   return h(
     'nav',
     { class: 'tabbar', 'aria-label': 'World' },
-    // On the world's own home, World goes up a level to Your worlds, and says so (the Captain, #3675).
+    // On the world's own home, World goes up a level to Your worlds, and says so (Titus, 2026-10-12).
     on === 'world' ? tab('world', 'Worlds', '#/worlds', 'world') : tab('world', 'World', `#/w/${s.id}`, 'world'),
     // A player's key only reads: their Catch is a note kept on this phone (src/notes.ts).
     s.canWrite ? tab('catch', 'Catch', `#/w/${s.id}/capture`, 'unsorted') : s.takesNotes ? tab('catch', 'Note', `#/w/${s.id}/notes`, 'edit') : null,
@@ -97,17 +97,17 @@ export function toast(text: string, ms = 2600): void {
 
 /**
  * A bottom sheet. Returns a close function; closes on the backdrop and on navigation. One at a
- * time: a second tap on what opened it opens nothing (stacked sheets wrote twice, the S396 gate).
+ * time: a second tap on what opened it opens nothing (stacked sheets wrote twice).
  */
 /**
  * `hold(true)` keeps a backdrop tap from closing the sheet while its work is in flight (Invite while
- * keel makes the link: closed then, the link it made was shown to no one; S414's left gap, S477).
+ * keel makes the link: closed then, the link it made was shown to no one).
  */
 export function sheet(build: (close: () => void, hold: (on: boolean) => void) => Node[], label: string): () => void {
   if (document.querySelector('.backdrop')) return () => undefined;
   const panel = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label });
   const back = h('div', { class: 'backdrop' }, panel);
-  // The keyboard covered Save (the Captain's phone, h43 #4293). Chrome on Android shrinks the page for
+  // The keyboard covered Save (Titus's phone, 2026-10-14). Chrome on Android shrinks the page for
   // it (`interactive-widget` in index.html); Safari shrinks only the visible part, so the backdrop
   // follows that part, and the sheet's bottom, Save with it, sits above the keyboard.
   const vv = window.visualViewport;
@@ -139,8 +139,8 @@ export function sheet(build: (close: () => void, hold: (on: boolean) => void) =>
 }
 
 /**
- * A screen's main button kept in sight while its text box is typed in (the Captain's smoke, h37
- * #4359: on Catch the keyboard hid it). While the box has focus the button sits at the bottom of what
+ * A screen's main button kept in sight while its text box is typed in (Titus's smoke test,
+ * 2026-10-14: on Catch the keyboard hid it). While the box has focus the button sits at the bottom of what
  * is visible: above the keyboard where Chrome shrinks the page, and where Safari shrinks only the
  * visible part, as far up as that part ends. It goes back into the page 350 ms after the box lets go,
  * as the tab bar returns: the tap that takes the focus away is aimed at the button where it was.

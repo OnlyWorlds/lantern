@@ -89,7 +89,7 @@ export interface View {
 
 let behindReload: (() => void) | null = null;
 // Kept outside the banner: a redraw while the new build takes over (the poll, a sync) must not
-// hand back a live Reload button (the Captain's walk: seconds with no sign the tap took).
+// hand back a live Reload button (Titus's walk: seconds with no sign the tap took).
 let reloading = false;
 export function setBehindReload(fn: (() => void) | null): void {
   behindReload = fn;
@@ -147,7 +147,7 @@ function statusBanner(s: WorldSession): HTMLElement | null {
   return null;
 }
 
-/** onTaken: the screen that asked says so once the PIN is kept (Catch's line, the frames' L12, S427). */
+/** onTaken: the screen that asked says so once the PIN is kept (Catch's line). */
 export function pinSheet(s: WorldSession, onTaken?: () => void): void {
   sheet((close) => {
     const pin = h('input', {
@@ -342,7 +342,7 @@ export function homeView(s: WorldSession): View {
     const furniture = (t: string) => (t === 'pin' || t === 'marker' ? 1 : 0);
     const present = TYPES.filter((t) => counts.get(t) || proposedByType.get(t)).sort((a, b) => furniture(a) - furniture(b) || (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
     // A world you can write offers every type but the map ones, the empty last: "New" lives on a type's list,
-    // so a type with no tile could never get its first element (S397).
+    // so a type with no tile could never get its first element.
     const all = s.canWrite ? [...present, ...TYPES.filter((t) => !counts.get(t) && !MAP_TYPES.has(t))] : present;
     if (!present.length && (!s.canWrite || s.status === 'syncing' || !showAll)) {
       const empty = h(
@@ -361,7 +361,7 @@ export function homeView(s: WorldSession): View {
               return b;
             })()
           : '';
-      // An empty world can still be shared: a game master may invite before adding anything (S419's L8).
+      // An empty world can still be shared: a game master may invite before adding anything.
       const invite = canInvite(s.rec) && s.status !== 'syncing' ? [inviteRow(s)] : [];
       body.replaceChildren(empty, h('div', { style: 'text-align:center' }, types), ...invite);
       return;
@@ -424,12 +424,12 @@ export function homeView(s: WorldSession): View {
             'a',
             { class: 'choice', href: `#/w/${s.id}/t/narrative?unsorted` },
             h('b', null, `Unsorted · ${unsorted.length}`),
-            // They are Narratives underneath and counted there too, so the card says so (Quillon, h37 #4275).
+            // They are Narratives underneath and counted there too, so the card says so (Quillon, 2026-10-14).
             h('span', null, 'Your caught notes, kept as Narratives until you sort them'),
           )
         : '',
       // Before now (src/views/time.ts): only once the world has an Event with a date to put in order
-      // (the Captain, h37 #4359: with none it opened onto nothing).
+      // (Titus, 2026-10-14: with none it opened onto nothing).
       hasDatedEvent(s.lore())
         ? h(
             'a',
@@ -446,7 +446,7 @@ export function homeView(s: WorldSession): View {
         : '',
       more ?? '',
       roomChoice(s, renderBody),
-      // Invite someone: the owner makes the link here (keel C1, SDK 4.24; S407 sent them to the website).
+      // Invite someone: the owner makes the link here (SDK 4.24; it once sent them to the website).
       canInvite(s.rec) ? inviteRow(s) : '',
     );
   };
@@ -532,7 +532,7 @@ export function typeView(s: WorldSession, type: string, onlyUnsorted: boolean): 
   input.addEventListener('input', refresh);
   // Unsorted: the notes can be sorted into the world (the morning after, src/views/sort.ts), which
   // needs an online world. A world on this phone says so here, before any tap, and points at the
-  // by-hand way (Quillon, h37 #4275: the Sort link led to a disabled button and a grey line).
+  // by-hand way (Quillon, 2026-10-14: the Sort link led to a disabled button and a grey line).
   const sortable = s.canWrite && s.rec.kind === 'online';
   const byHand =
     onlyUnsorted && s.canWrite
@@ -598,7 +598,7 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
   return document.createTextNode(String(v));
 }
 
-/** `fill`: just made from Catch, so its empty fields show at once, ready to fill in (the Captain, h37 #3555). */
+/** `fill`: just made from Catch, so its empty fields show at once, ready to fill in (Titus, 2026-10-12). */
 export function elementView(s: WorldSession, id: string, fill = false): View {
   const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'element' });
   // Only a page that exists counts as opened (a dead link is not Recent).
@@ -629,12 +629,12 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     // show and nothing on the page changes it.
     const stub = s.isStub(id);
     const editable = s.canWrite && !stub;
-    // An element not yet made on keel is said once, at its name; per-field marks are for edits (S397).
+    // An element not yet made on keel is said once, at its name; per-field marks are for edits.
     const create = pending.get('*');
     const wait = (f: string) => {
       const row = pending.get(f) ?? (f === 'name' ? create : undefined);
       if (!row || (row === create && f !== 'name')) return null;
-      // Waiting on the PIN: the mark says so and asks for it (the Captain's walk: a picture sat
+      // Waiting on the PIN: the mark says so and asks for it (Titus's walk: a picture sat
       // "waiting to send" with nothing saying why).
       if (row.state === 'waiting' && askPin(s)) {
         const b = h('button', { class: 'wait wait-pin', type: 'button' }, 'Needs your PIN');
@@ -665,7 +665,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       return row;
     };
     // A linked field's chips open what they name, so changing the links has its own pencil
-    // (the Captain's walk: the only way in was the empty space beside the chips).
+    // (Titus's walk: the only way in was the empty space beside the chips).
     const pencil = (f: string) => {
       if (!editable) return null;
       const b = h('button', { class: 'edit-btn', type: 'button', 'aria-label': `Change ${fieldLabel(f).toLowerCase()}` }, icon('edit', 18));
@@ -677,7 +677,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     };
 
     const hasPicture = typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url);
-    // No picture yet: the placeholder itself opens Camera or Gallery (the Captain, #3660).
+    // No picture yet: the placeholder itself opens Camera or Gallery (Titus, 2026-10-12).
     const tapToAdd = !hasPicture && editable && !MAP_TYPES.has(el.type);
     const avatar = tapToAdd
       ? h('button', { class: 'avatar avatar-add', type: 'button', style: `--type:${typeColor(el.type)}`, 'aria-label': 'Add a picture', 'data-action': 'avatar-picture' })
@@ -691,7 +691,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     if (tapToAdd) avatar.addEventListener('click', () => pictureSheet(s, el, false));
 
     // A caught note is a Narrative underneath (Skeld's convention), but it reads as what it is to the
-    // one who caught it (Quillon, h37 #4275: "Narrative · Unsorted" beside a card that said "not elements").
+    // one who caught it (Quillon, 2026-10-14: "Narrative · Unsorted" beside a card that said "not elements").
     const kind = isUnsortedNote(el) ? 'Unsorted note' : [typeLabel(el.type, el.supertype), supertypeWord(el.type, el.supertype) ? '' : el.supertype, el.subtype].filter(Boolean).join(' · ');
     // A caught line can be a sentence long: the title steps down so it does not fill the screen.
     const len = [...elName(el)].length;
@@ -704,7 +704,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         return c && c.type === 'character' ? elName(c) : undefined;
       })
       : null;
-    // Proposed, not yet reviewed (src/review.ts, Keel #565's reader rule): a word, since a keeper has to see it.
+    // Proposed, not yet reviewed (src/review.ts, keel's reader rule): a word, since a keeper has to see it.
     const proposed = proposedWord(el);
     // Hidden (src/hidden.ts, folder spec §4.8): shown to its holder with the word, and who else can see it.
     const hidden = hiddenLine(el, !s.isLocal);
@@ -738,7 +738,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         if (!stub) empty.push(field);
         continue;
       }
-      // A single link takes the multi link's layout: label, its marks and the pencil on one line, the chip under it (the Captain's walk, #3660).
+      // A single link takes the multi link's layout: label, its marks and the pencil on one line, the chip under it (Titus's walk, 2026-10-12).
       const isBlock = info.type === 'multi_link' || info.type === 'single_link' || (info.type === 'text' && String(v).length > 28);
       const isLink = info.type === 'single_link' || info.type === 'multi_link';
       rows.push(
@@ -780,19 +780,19 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
       );
       customRows.push(customEditable(v) && !locked ? tapRow(field, row) : row);
     }
-    // Before the empty rows are built: a description is an empty field too (the S398 gate).
+    // Before the empty rows are built: a description is an empty field too.
     if (!desc && editable) empty.unshift('description');
     const dot = (f: string) => tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f)), h('span', { class: 'v muted' }, '·')));
-    // The phone's choice (Settings, h37 #4061). Only your own: the type's fields, filled or not, wait
+    // The phone's choice (Settings). Only your own: the type's fields, filled or not, wait
     // behind the toggle and your empty ones show. Otherwise the toggle holds every empty field.
     const own = shown === 'own';
     if (own || showEmpty) customRows.push(...customEmpty.map(dot));
-    // Under Yours a type field with a change waiting, or one that needs you, still shows (the S402 gate, G5).
+    // Under Yours a type field with a change waiting, or one that needs you, still shows.
     const schemaRows = own && !showEmpty ? rows.filter((r) => pending.has(r.getAttribute('data-field') ?? '')) : [...rows, ...(showEmpty ? empty.map(dot) : [])];
     const behindToggle = own ? rows.length + empty.length : empty.length + customEmpty.length;
 
     // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,
-    // and the first eight shown must not change with it (S397).
+    // and the first eight shown must not change with it.
     const links = [...s.backlinks(id)].sort((a, b) => {
       const ea = s.get(a);
       const eb = s.get(b);
@@ -877,7 +877,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
 }
 
 /**
- * A player's home (a guest, Keel #213): the world as their Character knows it is small, so it is
+ * A player's home (a guest): the world as their Character knows it is small, so it is
  * one list, newest first at the top, where what the game master gives the party appears.
  */
 function playerHome(s: WorldSession): (Node | string)[] {
@@ -965,7 +965,7 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
     b.addEventListener('click', () => giveToParty(s, el));
     acts.push(b);
   }
-  // A picture any time after the element is made (the Captain's walk). A map's picture is its
+  // A picture any time after the element is made (Titus's walk). A map's picture is its
   // map, set where the map is drawn (Atlas), not here.
   if (canWrite && !MAP_TYPES.has(el.type)) {
     const has = typeof el.image_url === 'string' && SHOWN_PICTURE.test(el.image_url);

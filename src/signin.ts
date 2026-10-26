@@ -1,5 +1,4 @@
-// Sign in with OnlyWorlds (Keel #515, D139; the handoff sheet, Orrery `keel/signin-handoff.md` §4;
-// contract `Forge/Notes/2026-10-25-s470-lantern-sign-in-contract.md`, Atlas 1.87.0's twin). The
+// Sign in with OnlyWorlds (Atlas 1.87.0's twin). The
 // SDK's two calls: `signInWithOnlyWorlds` sends the phone to onlyworlds.com with a PKCE challenge,
 // `completeSignIn` trades the code on `/signin/callback`. Lantern keeps no resume of its own: where
 // the person goes after is what the store holds (an invitation waiting, else Your worlds).
@@ -37,7 +36,7 @@ type RecordStore = { get(k: string): string | null; set(k: string, v: string): v
 /**
  * The record lives in localStorage, not the tab (L5): an installed phone app can come back from
  * onlyworlds.com in another browsing context of the same browser (a mail link's tab, a hand-off to
- * the browser), where a tab's own storage is empty. The trade (the S470 gate's G5): every Lantern
+ * the browser), where a tab's own storage is empty. The trade (the sign-in gate's G5): every Lantern
  * window on this browser shares it, the last tap wins, and it stays until a completion, a sign-in by
  * any door or a sign-out clears it.
  */
@@ -81,7 +80,7 @@ function fetchWithin(limitMs: number): typeof fetch {
 /** Where the callback page goes while the exchange runs: the router shows "Signing in…" there. */
 export const SIGNING_IN_HASH = '#/signing-in';
 
-/** This browser kept no storage for Lantern, so no record could be read (the S470 gate's G8). */
+/** This browser kept no storage for Lantern, so no record could be read (the sign-in gate's G8). */
 class NoStorage extends Error {}
 
 /**
@@ -142,7 +141,7 @@ export function setSignInNotice(line: string): void {
   notice = line;
 }
 
-/** Said once on the screen the return lands on: who this phone is now signed in as (the S470 gate's G1). */
+/** Said once on the screen the return lands on: who this phone is now signed in as (the sign-in gate's G1). */
 let welcome: string | null = null;
 export function takeSignedInLine(): string | null {
   const w = welcome;
@@ -152,7 +151,7 @@ export function takeSignedInLine(): string | null {
 
 /**
  * After the exchange: the hash to land on. The token is kept before anything else is asked (L4); a
- * return that is no sign-in to a phone already signed in is silent (L7, the S470 gate's G5: a
+ * return that is no sign-in to a phone already signed in is silent (L7, the sign-in gate's G5: a
  * signed-in phone shows no button, so it started nothing it still wants); a refusal goes to the
  * sign-in screen with its sentence (L6).
  */
@@ -165,7 +164,7 @@ export async function applySignInOutcome(outcome: SignInOutcome): Promise<string
     try {
       await keepAccount(outcome.token, outcome.account, outcome.tokenId);
     } catch (e) {
-      // Only a failure to keep is "not kept" (the S470 code gate's C12); a token nobody kept is revoked (S476).
+      // Only a failure to keep is "not kept" (the sign-in code gate's C12); a token nobody kept is revoked.
       console.warn('[sign-in] not kept:', e);
       void revokeIfNotKept(outcome.token, outcome.tokenId).catch(() => undefined);
       notice = NOT_KEPT_LINE;

@@ -1,9 +1,9 @@
-// Custom fields (h37 #4050): a world file whose Character carries Atlas's custom fields (x_mood and
+// Custom fields: a world file whose Character carries Atlas's custom fields (x_mood and
 // the rest) opens on this phone; they read under "Your fields", Atlas's machinery (atlas_) never shows,
 // text and numbers change from their row, a list reads only, find finds them, nothing spills at 320.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/custom.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -76,7 +76,7 @@ async function walk(engine, tag) {
     `the five with a value, by label (${JSON.stringify(got)})`,
   );
 
-  // An identity key (Skeld h58 #8890) reads, and its row opens nothing: changing it would merge or split a being.
+  // An identity key reads, and its row opens nothing: changing it would merge or split a being.
   await page.locator('.frow[data-field=x_identity_key]').tap();
   await page.waitForTimeout(400);
   check(tag, (await page.locator('.sheet').count()) === 0, 'an identity key reads only: its row opens no sheet');
@@ -145,7 +145,7 @@ async function walk(engine, tag) {
   const hit = await page.locator('.results').innerText();
   check(tag, /Ada/.test(hit) && /in your fields/.test(hit), `find reaches a custom field (${JSON.stringify(hit)})`);
 
-  // Step 2 (h37 #4061): add a field of your own, remove one, and the setting for which fields show.
+  // Step 2: add a field of your own, remove one, and the setting for which fields show.
   const storedOf = (field) =>
     page.evaluate(
       ([w, id, f]) =>
@@ -179,7 +179,7 @@ async function walk(engine, tag) {
   await page.waitForSelector('.frow[data-field=x_eye_colour]');
   check(tag, (await page.locator('.frow[data-field=x_eye_colour] .v').innerText()) === 'grey' && (await storedOf('x_eye_colour')) === '"grey"', 'a new field is stored as Atlas would name it (x_eye_colour)');
   await page.locator('[data-section=custom]').screenshot({ path: `${OUT}/custom-${tag}-03-added.png` });
-  // A suggestion is the field it names (the S402 gate, G3): Secret is Bo's shadow_secret, not a new x_secret.
+  // A suggestion is the field it names: Secret is Bo's shadow_secret, not a new x_secret.
   await page.locator('[data-action=add-field]').tap();
   await page.locator('.sheet input[aria-label="Field name"]').fill('Secret');
   await page.locator('.sheet textarea[aria-label="Value"]').fill('Fears the river');

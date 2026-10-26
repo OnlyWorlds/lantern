@@ -1,4 +1,4 @@
-// Before now (the old Flutter app's timeline, reframed; the Captain h37 #4061, #4072): a world's
+// Before now (the old Flutter app's timeline, reframed; Titus, 2026-10-13): a world's
 // Events in the order they happened, with the world's now between what has happened and what has
 // not. Pure: the screen is src/views/time.ts.
 //
@@ -84,7 +84,7 @@ export function timeline(elements: Iterable<OwElement>, now?: number): Timeline 
 
 /**
  * Whether Before now has anything to put in order: an Event with a start date. Events with none
- * would make it a screen of the now line and nothing around it (the Captain, h37 #4359).
+ * would make it a screen of the now line and nothing around it (Titus, 2026-10-14).
  */
 export function hasDatedEvent(elements: Iterable<OwElement>): boolean {
   for (const e of elements) if (e.type === 'event' && num(e.start_date) !== undefined) return true;

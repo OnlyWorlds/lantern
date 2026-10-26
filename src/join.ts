@@ -1,4 +1,4 @@
-// Joining a world with an invite link (Keel #212): https://www.onlyworlds.com/join#ow_j_…, the
+// Joining a world with an invite link: https://www.onlyworlds.com/join#ow_j_…, the
 // code after the #. Preview says who invites, to which world and as what (no account needed, the
 // code stays unused); joining needs this phone's account token and makes the membership, then the
 // world opens like any account world. A guest's Character comes back with the join.
@@ -52,7 +52,7 @@ export async function previewJoin(code: string): Promise<JoinPreview> {
   }
 }
 
-/** A player link (Keel #353): the preview's third reader, a friend with no account. */
+/** A player link: the preview's third reader, a friend with no account. */
 export function isPlayerLink(p: JoinPreview): boolean {
   return (p.reader as string) === 'player';
 }
@@ -79,9 +79,9 @@ export class PickRefused extends Error {}
 const LOST = 'The answer did not reach this phone. Try once more; if the link says it was used, ask for a new one: each link works once.';
 
 /**
- * Redeem a player link with no account (Keel #353): POST /join answers 201 with a read key shown
+ * Redeem a player link with no account: POST /join answers 201 with a read key shown
  * once (`kind: player`). The code is spent by keel's answer, so the key is kept before anything
- * else runs. SDK 4.30's keyless client sends no credential (Kael, h29 #6169). On a table the
+ * else runs. SDK 4.30's keyless client sends no credential (Kael, 2026-10-16). On a table the
  * player's pick goes as `character` (keel #422 PR 2); a refusal spends nothing.
  */
 export async function redeemPlayer(code: string, name?: string, table?: { character?: string }): Promise<{ worldId: string }> {

@@ -85,7 +85,7 @@ describe('notesPayload', () => {
     expect(held).toBe(3);
   });
 
-  it("a picture keel would refuse is held back, never sent to refuse the sort (keel's own test, the S399 merge gate)", () => {
+  it("a picture keel would refuse is held back, never sent to refuse the sort (keel's own test, the merge gate)", () => {
     const base = `https://media.onlyworlds.com/u/${W}/`;
     expect(pictureOk(base + 'a.webp', W)).toBe(true);
     expect(pictureOk(base + 'sub/a.webp', W)).toBe(true);
@@ -200,7 +200,7 @@ describe('planWrites', () => {
     expect(skipped.every((s) => s.reason.length > 5)).toBe(true);
   });
 
-  it('never a picture address, a kind word added onto another, or a target the phone did not send (the S398 sort gate)', () => {
+  it('never a picture address, a kind word added onto another, or a target the phone did not send (the sort gate)', () => {
     const { writes, skipped } = planWrites(
       [
         tick({ kind: 'add_to', source_line: 'pic', target: t('pipit'), field: 'image_url', op: 'set', value: 'https://evil.example/x.png' }),

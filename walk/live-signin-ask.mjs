@@ -1,6 +1,6 @@
-// Keel #159 and #211's live receipts (S425, the journey day): on the live lantern.onlyworlds.com,
-// a crew account signs in with email and password (keel's app login, #211), opens a scratch world
-// of its own, and asks it one question through keel's /account/ask (#159). The scratch world and
+// Live receipts for Ask in a sentence and the password sign-in: on the live lantern.onlyworlds.com,
+// a crew account signs in with email and password (keel's app login), opens a scratch world
+// of its own, and asks it one question through keel's /account/ask. The scratch world and
 // its two elements are made over the API first; every token and key made here is listed at the end
 // for the cleanup step (`--cleanup <worldId>`), which revokes them.
 //

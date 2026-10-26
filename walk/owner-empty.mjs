@@ -1,4 +1,4 @@
-// Two pinches from the crew's live walk of the friend rows (S419, Forge/Notes/ui-snapshots/2026-10-16-s419/lwalk):
+// Two pinches from a live walk of the friend rows:
 // an owner's empty online world offers Invite someone (L8 before anything is in it), and Catch says a
 // note waits on the PIN, with a way to give it, when the phone holds none (L12). Both engines; keel cut
 // off, so nothing is sent.
@@ -65,7 +65,7 @@ async function walk(engine, deviceName, tag) {
   await page.screenshot({ path: `${OUT}/owner-empty-${tag}-kept.png` });
   await page.locator('[data-action=kept-pin]').tap();
   check(tag, await page.locator('input[aria-label="PIN"]').waitFor({ timeout: 5000 }).then(() => true, () => false), 'Enter your PIN opens the PIN sheet');
-  // The PIN taken (keel's read with it answers), the line stops saying it waits (the frames' L12, S427).
+  // The PIN taken (keel's read with it answers), the line stops saying it waits.
   await page.route('**/api/v2/world/', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: worldId, name: 'Empty table' }) }));
   await page.locator('input[aria-label="PIN"]').fill('1234');
   await page.locator('.sheet').getByRole('button', { name: 'Send my changes' }).tap();

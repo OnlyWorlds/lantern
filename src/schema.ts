@@ -111,7 +111,7 @@ export function typeName(type: string, opts: TypeNameOptions = {}): string {
 /**
  * The open world's own word for a supertype ("AI agent" for a Character's Agent), or null when
  * the world names only the type: a line that prints it has said the supertype, so the data's
- * value is not printed beside it (Atlas 1.82.2, Seethe h20 #11028).
+ * value is not printed beside it (Atlas 1.82.2, Seethe, 2026-10-23).
  */
 export function supertypeWord(type: string, supertype: unknown, opts: Pick<TypeNameOptions, 'names'> = {}): string | null {
   if (typeof supertype !== 'string' || !supertype.trim()) return null;
@@ -161,11 +161,11 @@ export function isCustomField(field: string): boolean {
 }
 
 // A published extension profile's key (schema-dist profiles/): other tools read it the same way.
-// x_identity_key says two elements are one being (Skeld h58 #8890), so a typed "Identity key" would
-// merge two beings and a removed one would split one (Kael #8886). Shown, never named, changed or
+// x_identity_key says two elements are one being (Skeld, 2026-10-20), so a typed "Identity key" would
+// merge two beings and a removed one would split one (Kael). Shown, never named, changed or
 // removed here, as Atlas does (constants.ts PROFILE_FIELD_PREFIXES).
-// x_packet_ (schema-dist profiles/packet.md, dist.36; Skeld h66 #9663) is a work packet's list of
-// elements and where it came from; x_review_ (profiles/review.md, dist.37; Skeld h58 #9726) a new
+// x_packet_ (schema-dist profiles/packet.md, dist.36; Skeld, 2026-10-21) is a work packet's list of
+// elements and where it came from; x_review_ (profiles/review.md, dist.37; Skeld, 2026-10-22) a new
 // element's proposed mark and its last check; x_room_ (profiles/room.md, dist.45) the parlor's mark on
 // what its room makes; x_checks_ (profiles/checks.md, dist.47) a work world's rules on its Charter:
 // the same rule, as Atlas reserves them.
@@ -224,7 +224,7 @@ export function customEditable(v: unknown): boolean {
 /**
  * "birth_date" to "Birth date", "image_url" to "Image URL", "x_eye_colour" to "Eye colour", "x_STR" to
  * "STR": the SDK's one copy of the house rule (4.34; a word in capitals kept as written since 4.36,
- * Kael h63 #8201), after Lantern's own step: the custom prefix goes.
+ * Kael, 2026-10-20), after Lantern's own step: the custom prefix goes.
  */
 export function fieldLabel(field: string): string {
   const bare = CUSTOM_PREFIXES.reduce((f, p) => (isCustomField(f) && f.startsWith(p) ? f.slice(p.length) : f), field);

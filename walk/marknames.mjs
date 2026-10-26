@@ -1,11 +1,11 @@
-// A name says proposed or hidden wherever it shows without its row (the S462 gate's F3), both engines.
+// A name says proposed or hidden wherever it shows without its row (the hidden-elements gate's F3), both engines.
 // The demo world on this phone: the element a MoppetopiaMap pin places marked hidden, an element that
 // links to it marked proposed, a Collective marked hidden, as keel serves the marks to a keeper.
 // 1. The linking element's page: the link chip to the hidden one says "· hidden".
 // 2. The hidden one's page: Linked from's chip for the proposed one says "· proposed".
 // 3. Show on map: the pin's card says hidden.
 // 4. Give it to the party (an owner's world, keel unreachable): the hidden Collective's choice says hidden.
-// Then a world file made to look like an account world (keel cut off), S478:
+// Then a world file made to look like an account world (keel cut off):
 // 5. The edit picker on a link field: the chosen chip says "· hidden"; the rows offered say hidden
 //    or known of (a stub keel served a player, carried in a file).
 // 6. Waiting to send: an edit to the hidden one waits with its word, an edit to an unmarked one without.
@@ -150,7 +150,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForTimeout(600);
   const card = await page.evaluate(() => document.querySelector('.map-card:not([hidden])')?.textContent ?? '');
   check(tag, card.includes(target.name) && /· [^·]+· hidden/.test(card), `the pin's card: ${JSON.stringify(card)}`);
-  // Seen, not only present: the label shows all of its text (S477's first frame cut it to "· location ·…").
+  // Seen, not only present: the label shows all of its text (a first frame cut it to "· location ·…").
   const fit = await page.evaluate(() => {
     const l = document.querySelector('.map-card:not([hidden]) .label');
     const c = l?.closest('.map-card')?.getBoundingClientRect();

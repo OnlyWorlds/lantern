@@ -2,7 +2,7 @@
 // production build (vite preview on :5181, so the worker is real), airplane mode included.
 // Run: npm run build && (npx vite preview &) && node walk/walk.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
@@ -43,10 +43,10 @@ async function walk(engine, deviceName, tag) {
   const first = await page.locator('.choice').first().innerText();
   check(tag, /Sign in/.test(first), `Sign in is the first choice (${JSON.stringify(first.split('\n')[0])})`);
 
-  // 1b. Sign in against live keel (Keel #211, through SDK 4.31) with a wrong password: said in Lantern's words
+  // 1b. Sign in against live keel (through SDK 4.31) with a wrong password: said in Lantern's words
   await page.locator('a.choice.primary').tap();
   await page.waitForSelector('[data-screen="signin"]');
-  // The token door stays shut until asked for (S397: a flex class once showed it open).
+  // The token door stays shut until asked for (a flex class once showed it open).
   check(tag, !(await page.locator('input[aria-label="Account token"]').isVisible()), 'the account token field waits behind "I have an account token"');
   await page.locator('input[aria-label="Email or username"]').fill('nobody-lantern-walk@example.com');
   await page.locator('input[aria-label="Password"]').fill('not-the-password-1');
@@ -126,9 +126,9 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('[data-answer="none"]').count()) === 1, 'a question the world cannot answer gets "Your world does not say."');
   await shot('ask-none');
 
-  // 4c. A player's home: the demo marked as a guest's world (no guest key here; Keel #213's live walk is the first invite)
+  // 4c. A player's home: the demo marked as a guest's world (no guest key here; a live walk is the first invite)
   const demoId = await page.evaluate(() => location.hash.split('/')[2]);
-  // The guest's own Character, as keel's /me would name it (Skeld #3457): one the demo holds.
+  // The guest's own Character, as keel's /me would name it: one the demo holds.
   const chars = (await (await fetch('https://www.onlyworlds.com/api/v2/character/?limit=200', { headers: { 'API-Key': '0000000001' } })).json()).data;
   const mine = chars.find((c) => c.name === 'Admiral Fluffington');
   await page.evaluate(
@@ -200,7 +200,7 @@ async function walk(engine, deviceName, tag) {
   const offTiles = await page.locator('.type-tile').count();
   check(tag, offTiles === tiles, `offline, the world opens from the phone (${offTiles} tiles)`);
   await page.waitForTimeout(800);
-  // Playwright's WebKit on Windows fails every subresource offline, worker or not (probed S395: a
+  // Playwright's WebKit on Windows fails every subresource offline, worker or not (probed: a
   // precached font and script both "Load failed" with the worker in control and the cache holding
   // them), so a screenshot waits for fonts forever. The worker serving offline is Chromium's proof.
   if (engine === webkit) console.log(`[${tag}] (no offline screenshot: this WebKit cannot load anything offline)`);
@@ -219,7 +219,7 @@ async function walk(engine, deviceName, tag) {
   await page.getByRole('button', { name: 'Start the world' }).tap();
   await page.waitForSelector('[data-screen="home"]');
   await shot('local-home');
-  // An empty world's first Character (S397: a type with no tile had no "New" anywhere).
+  // An empty world's first Character (a type with no tile had no "New" anywhere).
   await page.getByRole('button', { name: 'Or choose a type to start with' }).tap();
   const offered = await page.locator('.type-tile b').allInnerTexts();
   check(tag, offered.includes('Characters') && !offered.includes('Pins') && !offered.includes('Maps'), `an empty world offers ${offered.length} types, none of the map ones`);
@@ -237,7 +237,7 @@ async function walk(engine, deviceName, tag) {
   await page.keyboard.type('The ferryman owes the bell-founder three years of crossings.\nHe pays in fish.');
   await shot('capture');
   await page.getByRole('button', { name: /Add to Unsorted/ }).tap();
-  // A note stays on Catch now (S404); its page is one tap away.
+  // A note stays on Catch now; its page is one tap away.
   await page.locator('[data-action="open-kept"]').tap();
   await page.waitForSelector('[data-screen="element"] h1');
   const caught = await page.locator('[data-screen="element"] h1').innerText();
@@ -250,7 +250,7 @@ async function walk(engine, deviceName, tag) {
   await page.getByRole('button', { name: 'Save' }).tap();
   await page.waitForFunction(() => document.querySelector('[data-screen="element"] h1')?.textContent?.startsWith("The ferryman's debt"));
   check(tag, true, 'renaming through the sheet shows at once');
-  // Back returns to Catch, where "Open it" came from (S404); the World tab goes home.
+  // Back returns to Catch, where "Open it" came from; the World tab goes home.
   await page.locator('[aria-label="Back"]').tap();
   await page.waitForSelector('[data-screen="capture"]');
   await page.locator('.tabbar [data-tab=world]').tap();

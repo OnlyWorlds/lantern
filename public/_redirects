@@ -1,4 +1,4 @@
-# Sign in with OnlyWorlds returns here (Keel #515): the app answers, not the 404 page.
+# Sign in with OnlyWorlds returns here: the app answers, not the 404 page.
 # The target is / and never /index.html: Pages 308s /index.html to /, which
-# left the path and its headers behind on Atlas (Boss, h11 #12069).
+# left the path and its headers behind on Atlas (Boss, 2026-10-24).
 /signin/callback / 200

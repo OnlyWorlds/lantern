@@ -1,10 +1,9 @@
-// Take back an account token Lantern minted, when Lantern lets it go (S476, Atlas 1.93.0's twin;
-// contract `Forge/Notes/2026-10-25-s476-lantern-token-revoke-contract.md`): `DELETE
+// Take back an account token Lantern minted, when Lantern lets it go (Atlas 1.93.0's twin): `DELETE
 // /account/tokens/{id}` by the id kept at the mint, with the token itself as the bearer (keel asks
 // no PIN here). Never a lookup by last four or name: a delete runs only on an id Lantern made and
 // kept.
 //
-// keel's answers (probed on a crew account in S475): 204 revoked; 401 the token works no more
+// keel's answers (probed on a test account): 204 revoked; 401 the token works no more
 // (revoked already); 404 the bearer works and the id is not its account's, so the token is still
 // LIVE. Revoking a token minted by Sign in with OnlyWorlds ends the person's consent for Lantern
 // only when it was Lantern's last live token for them.

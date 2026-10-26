@@ -1,5 +1,5 @@
 // Give it to the party: the game master's one tap that shows the players a thing they found.
-// The reveal is a Narrative of its own (Skeld's ruling, h37 #3432): it carries the thing's picture
+// The reveal is a Narrative of its own (Skeld's ruling, 2026-10-11): it carries the thing's picture
 // and the game master's line, and the party's Collective in `collectives`, so every Character in
 // that Collective knows it (the Who-knows convention, keel D95). The thing itself stays hidden:
 // the Narrative links it for the game master, and keel strips that link for a player.

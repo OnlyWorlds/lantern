@@ -1,7 +1,7 @@
-// The parlor's room inside a world (OW Parlor, the design sheet §1, `Orrery/parlor/design-sheet.md`):
+// The parlor's room inside a world (the parlor's design sheet §1):
 // its lines, board entries, work items, specs, hearts, votes, sittings and member cards are elements of
 // the world itself, each a type with its own supertype. A worldbuilder's lists read the world without
-// them (the Captain, the sheet's note 2026-10-22: someone's lore must not read as polluted by meta), and
+// them (Titus, the sheet's note 2026-10-22: someone's lore must not read as polluted by meta), and
 // one choice on the world's home shows them again. Atlas's twin: `core/parlor-room.ts` (1.70.0), the
 // same pairs; since SDK 4.55.0 both read the SDK's rule and pairs, generated from schema-dist's room profile.
 //

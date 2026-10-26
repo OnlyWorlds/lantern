@@ -1,6 +1,6 @@
 /**
- * Why keel refused a world's key (Atlas #198's twin, S418): the cause keel named, so the phone
- * never asks for a PIN when the key is what died. keel since #357 (Skeld h16 #6018): a revoked key
+ * Why keel refused a world's key (Atlas's twin): the cause keel named, so the phone
+ * never asks for a PIN when the key is what died. keel since #357 (Skeld, 2026-10-16): a revoked key
  * is 401 `key_revoked`; a key it does not know (a removed member's, a deleted world's) is 401
  * `invalid_credentials` with no param; a wrong or missing PIN is the same code with param
  * `API-Pin`. A read key on a write is 403 `permission_error`.

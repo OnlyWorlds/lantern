@@ -1,6 +1,5 @@
 // keel's "known of" stubs (keel PR 113, B16; the folder spec §4.4) against a fake keel shaped by
-// the live probes (Forge/tools/atlas/Notes/ui-snapshots/2026-10-20-s443/probe-stub.log, and after
-// keel PR 117 Forge/Notes/ui-snapshots/2026-10-20-s444/probe-stub.log): a stub keeps id, type, name,
+// the live probes (before and after keel PR 117): a stub keeps id, type, name,
 // description, supertype, subtype, image_url and the stamps, and a Character's public fields
 // (physicality, height, weight, species, reputation); every other field is served unset; its stamp does not move with its shape; a stub arriving or leaving answers
 // the old cursor 409 resync_required, reason view.
@@ -218,7 +217,7 @@ describe('a stub is never changed, deleted or sent from here (rules 3 and 5)', (
   });
 });
 
-describe('the S444 gate', () => {
+describe('the stub gate', () => {
   it('G5: a change queued while the element was whole is refused once keel narrows it to a stub, never sent', async () => {
     const s = await playerWorld({ apiKey: 'ow_w_' + 'w'.repeat(40), keyKind: 'write', memberRole: undefined, role: 'owner', characterId: null });
     setPin(s.rec, '1234');

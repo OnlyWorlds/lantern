@@ -43,7 +43,7 @@ describe('before now', () => {
     expect(ongoing(ev('a', 'a', 440), 453)).toBe(false);
   });
 
-  it('is offered only once an Event has a date (the Captain, h37 #4359)', () => {
+  it('is offered only once an Event has a date', () => {
     expect(hasDatedEvent([])).toBe(false);
     expect(hasDatedEvent([ev('6', 'A rumour'), { id: '7', type: 'character', name: 'Ada', start_date: 1 } as unknown as OwElement])).toBe(false);
     expect(hasDatedEvent([ev('6', 'A rumour'), ev('1', 'The founding', 0)])).toBe(true);
@@ -56,7 +56,7 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
 
   it('names dates only when the world holds exactly one calendar, as Atlas does on a device that never chose', () => {
     expect(calendarOf([ev('1', 'x', 3), calendar('c1', cfg)])).toEqual(cfg);
-    // Moppetopia, the Captain's own world, holds two: numbers, nothing guessed.
+    // Moppetopia, Titus's own world, holds two: numbers, nothing guessed.
     expect(calendarOf([calendar('c1', cfg), calendar('c2', { version: 1, grain: 'Year' })])).toBeNull();
     expect(calendarOf([ev('1', 'x', 3)])).toBeNull();
     // A JSON string is read as Atlas's object (another tool may serialize it); a broken one is no calendar.

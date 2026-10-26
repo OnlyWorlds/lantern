@@ -1,4 +1,4 @@
-// Ask, in a sentence: keel's proxy (Keel #159, POST /account/ask) answers a question from the
+// Ask, in a sentence: keel's proxy (POST /account/ask) answers a question from the
 // elements the phone's own lookup found, sent as text, and from nothing else ("The world doesn't
 // say." otherwise). The key and the meter are keel's: the page never holds a model key. Each
 // account has a daily allowance; an answer costs one, a refusal costs none.
@@ -19,7 +19,7 @@ export class AskRefused extends Error {}
 
 /**
  * What Ask hands keel's AI (the SDK's buildAskContext, keel's limits). Since SDK 4.72 it leaves the
- * parlor's room out unless asked (Kael h56 #11977): Ask follows this phone's room switch, so a room the
+ * parlor's room out unless asked (Kael, 2026-10-24): Ask follows this phone's room switch, so a room the
  * person chose to show is asked about like the rest. Hidden and proposed never reach it (`handOnHold`).
  */
 export function askContext(worldId: string, handed: OwLookupHit<OwElement>[], index: OwWorldIndex<OwElement>): OwAskContext {

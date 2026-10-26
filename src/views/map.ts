@@ -1,5 +1,5 @@
 // A map, read only: the Map's picture with its pins and zones over it, entered from "Show on map".
-// Quillon's measured rules (Armature/Notes/2026-10-12-lantern-maps-report.md): Leaflet CRS.Simple,
+// Quillon's measured rules (2026-10-12): Leaflet CRS.Simple,
 // one image overlay, pins and zones on the SVG renderer, clusters above a thousand pins, the zoom
 // stopped where the picture runs out. Leaflet loads only when a map opens.
 import type * as Leaflet from 'leaflet';
@@ -178,7 +178,7 @@ export function mapView(s: WorldSession, place: Place): View {
     const t = pinType(s, pin);
     card.replaceChildren(
       typeChip(t),
-      // What the pin places says its words, and a hidden pin its own (the S462 gate's F3).
+      // What the pin places says its words, and a hidden pin its own (the hidden-elements gate's F3).
       h('span', { class: 'label' }, h('b', null, pinName(s, pin)), ' ', h('span', { class: 'muted' }, `· ${[typeName(t), ...new Set([...markWords(target), ...markWords(pin)])].join(' · ')}`)),
       h('a', { class: 'btn btn-pill', href: `#/w/${s.id}/e/${target.id}` }, 'Open'),
     );
@@ -194,7 +194,7 @@ export function mapView(s: WorldSession, place: Place): View {
     const key = [
       ...p.map((e) => {
         const placed = typeof e.element_id === 'string' ? s.get(e.element_id) : undefined;
-        // The names too: a rename redraws the names beside the pins (the S396 gate).
+        // The names too: a rename redraws the names beside the pins.
         return `${e.id},${e.x},${e.y},${e.element_id ?? ''},${e.element_type ?? ''},${placed?.type ?? ''},${e.name ?? ''},${placed?.name ?? ''}`;
       }),
       ...m.map((e) => `${e.id},${e.x},${e.y},${e.zone ?? ''},${e.order ?? ''},${e.created_at ?? ''}`),
@@ -348,7 +348,7 @@ export function mapView(s: WorldSession, place: Place): View {
       });
       map.fitBounds(bounds);
       // Before the first draw and its setView: a jump of more than four zoom steps is not
-      // animated, and fires moveend at once (the S396 gate).
+      // animated, and fires moveend at once.
       map.on('moveend', drawLabels);
       const shown = await draw();
       if (destroyed || !map) return;

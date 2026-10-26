@@ -1,4 +1,4 @@
-// Which calendar a world's dates are in, on this phone (Kael h37 #4287: with several, the phone
+// Which calendar a world's dates are in, on this phone (Kael, 2026-10-14: with several, the phone
 // shows a choice). Atlas's meaning: never chosen (undefined) uses the world's only calendar; a
 // calendar's id uses that one; 'none' (Atlas's null) is the numbers. Per phone and per world, like
 // Atlas's own choice, which it keeps in its registry and never in the world.

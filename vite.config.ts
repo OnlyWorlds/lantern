@@ -45,11 +45,11 @@ function lanternWorker(): Plugin {
         .map((p) => (p === 'index.html' ? '/' : '/' + p))
         .sort();
       // The scripts this build's shell loads: the worker refuses a "/" that does not name them (a
-      // deploy's cutover can serve the previous shell for a moment, Boss h37 #3518).
+      // deploy's cutover can serve the previous shell for a moment, Boss, 2026-10-12).
       const shellScripts = [...readFileSync(join(outDir, 'index.html'), 'utf8').matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
       if (!shellScripts.length) throw new Error('lantern-worker: the shell loads no script');
       // The manifest has no hash in its name, so the same cutover can serve the previous one: the
-      // worker checks its digest (the S397 gate's F4). Images are left out on purpose: a zone that
+      // worker checks its digest. Images are left out on purpose: a zone that
       // recompresses pictures would fail every install.
       const digests = Object.fromEntries(
         files.filter((p) => p.endsWith('.webmanifest')).map((p) => [p, createHash('sha256').update(readFileSync(join(outDir, p.slice(1)))).digest('hex')]),

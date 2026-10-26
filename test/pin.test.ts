@@ -1,5 +1,5 @@
 // The PIN: one for every world of your account, its own for a world opened with a key; kept on the
-// phone; the account's cleared on sign-out (the Captain, h37 #3675; Skeld #3674).
+// phone; the account's cleared on sign-out.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 

@@ -6,7 +6,7 @@
 // picture, is told to the party and links the thing; Change keeps what was typed.
 // Run: npm run build && (npx vite preview &) && node walk/party.mjs [webkit|chromium]
 import './guard.mjs';
-// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule, S404) as unknown: harmless.
+// WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -164,7 +164,7 @@ async function walk(engine, deviceName, tag) {
   check(tag, !v.narrator && !v.characters && v.story === undefined, 'nothing else: no narrator, no one it is about, none of the thing\'s words');
   check(tag, rows.every((r) => r.state === 'waiting'), 'nothing sent: no PIN, keel cut off');
 
-  // 7b. Given tonight (h37 #4113): the world's home lists what this phone just gave, with the time.
+  // 7b. Given tonight: the world's home lists what this phone just gave, with the time.
   await page.goto(`${BASE}/?owner#/w/${worldId}`);
   await page.waitForSelector('[data-part=given] .el-row');
   const givenRow = await page.locator('[data-part=given] .el-row').innerText();

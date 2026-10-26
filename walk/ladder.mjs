@@ -1,4 +1,4 @@
-// OW Style's button ladder (S442; Studio style/RULES.md section 8, the Captain's "looks good", h63 #8314):
+// OW Style's button ladder (style/RULES.md section 8):
 // the first screen's Sign in and Start the world are the Entry fill, a sheet's commit (Move now, an
 // element's Save) is the Standard wash and edge, the delete sheet's Delete is the danger wash, never a fill,
 // and every one keeps a finger's 48 high. Both engines, both themes; keel cut off, so nothing is sent.
@@ -70,7 +70,7 @@ async function walk(engine, deviceName, tag, theme) {
   }
   await page.waitForTimeout(600);
   const del = page.locator('button', { hasText: /^Delete this/ });
-  // A frame of the state before the delete, kept when the step fails (S444: a red here, 3 in 9).
+  // A frame of the state before the delete, kept when the step fails (a red here, 3 in 9).
   await del.first().waitFor({ timeout: 15000 }).catch(async () => {
     await page.screenshot({ path: `${OUT}/ladder-${tag.replace(' ', '-')}-no-delete.png`, fullPage: true });
     console.log(`[${tag}] at the delete step: ${page.url().replace(/^.*#/, '#')}`);

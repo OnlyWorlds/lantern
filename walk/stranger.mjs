@@ -1,4 +1,4 @@
-// Quillon's stranger walk (h37 #4275), walked as fixed: a world on this phone from nothing, a note
+// Quillon's stranger walk, walked as fixed: a world on this phone from nothing, a note
 // caught into Unsorted that stays on Catch, the note made into a Character by hand (no AI, no
 // account), the note filed out of Unsorted, and what each screen says on the way. keel is cut off:
 // a world on this phone sends nothing.
@@ -91,7 +91,7 @@ async function walk(engine, tag) {
   const left = await page.locator('.results a').allInnerTexts();
   check(tag, left.length === 1 && /A bell/.test(left[0]), `Unsorted holds only the other note (${JSON.stringify(left)})`);
 
-  // 3: delete (the Captain, h37 #4292), after one warning, back to the list it came from.
+  // 3: delete, after one warning, back to the list it came from.
   await page.goto(`${BASE}/#/w/${wid}/t/character`);
   await page.locator('.results a', { hasText: 'Old Marta' }).tap();
   await page.waitForSelector('[data-screen="element"] h1');

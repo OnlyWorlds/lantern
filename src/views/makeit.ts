@@ -1,7 +1,7 @@
 // Make it an element, by hand: an Unsorted note becomes an element of a type you pick, the way a
 // typed catch does (the first line its name, the rest its description), and the note is filed as
 // Sorted, as a sort files it. No AI, no account: it works in a world on this phone only too
-// (Quillon's walk, h37 #4275: in a local world the notes had no way out of Unsorted).
+// (Quillon's walk, 2026-10-14: in a local world the notes had no way out of Unsorted).
 import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';
 import { icon, typeIcon } from '../icons';

@@ -1,4 +1,4 @@
-// The keyboard over a sheet (the Captain's phone, h43 #4293: Save was hidden). Emulation opens no
+// The keyboard over a sheet (Titus's phone: Save was hidden). Emulation opens no
 // keyboard, so this plays Safari's: the visible part of the screen (visualViewport) shrinks and the
 // page does not. The check: every sheet's buttons stay inside what is visible. Chrome on Android
 // shrinks the page itself (`interactive-widget` in index.html): that is a real phone's check.
@@ -50,7 +50,7 @@ async function walk(engine, tag) {
   await page.goto(`${BASE}/#/w/${WID}/e/b0a70000-0000-4000-8000-000000000001`);
   await page.waitForSelector('[data-screen="element"] h1');
 
-  // The description's sheet: a text box with Save under it, the Captain's case.
+  // The description's sheet: a text box with Save under it, Titus's case.
   await page.locator('[data-field="description"], .prose').first().tap();
   await page.waitForSelector('.sheet');
   await page.evaluate(() => window.__keyboard(340));
@@ -70,7 +70,7 @@ async function walk(engine, tag) {
   check(tag, back === (await page.evaluate(() => window.innerHeight)), `with the keyboard gone the sheet's ground is the whole screen again (${back})`);
   await page.locator('.backdrop').click({ position: { x: 5, y: 5 } });
 
-  // Catch (the Captain's smoke, h37 #4359): the keyboard hid its button. While the box is typed in,
+  // Catch (Titus's smoke test): the keyboard hid its button. While the box is typed in,
   // the button sits above the keyboard, a tap on it still lands, and the note is added.
   await page.goto(`${BASE}/#/w/${WID}/capture`);
   await page.waitForSelector('[data-screen="capture"] textarea');

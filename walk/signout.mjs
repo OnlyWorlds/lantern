@@ -1,4 +1,4 @@
-// Signing out on a shared phone (the security pass, F2; the Captain h37 #4072): Sign out keeps the
+// Signing out on a shared phone (the security pass, F2): Sign out keeps the
 // worlds as before; "Sign out and remove your worlds" removes the account's (the records with a role)
 // after a second tap that says what goes with them, and keeps a world opened with someone's key.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/signout.mjs [webkit|chromium]

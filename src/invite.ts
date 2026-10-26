@@ -1,6 +1,6 @@
 /**
- * The onlyworlds.com pages Lantern sends people to (S407, the journey floor h37 #4597): making an
- * account, and a world's Access pane. Since keel C1 (48c10d4, Skeld h29 #5147) the owner also makes
+ * The onlyworlds.com pages Lantern sends people to: making an
+ * account, and a world's Access pane. Since keel 48c10d4 (Skeld, 2026-10-15) the owner also makes
  * an invite link here, through the SDK (4.24, `createWorldLink`): the link is shown once and never
  * kept; seeing and taking back links stays on the website's Access pane.
  */
@@ -13,7 +13,7 @@ const SITE = new URL(API_BASE).origin;
 
 export const SIGNUP_URL = `${SITE}/accounts/signup/`;
 
-/** A world's page on onlyworlds.com, opened at Access: its own path, kept through the site's sign-in (keel PR 90, Skeld h29 #7711). */
+/** A world's page on onlyworlds.com, opened at Access: its own path, kept through the site's sign-in (keel PR 90). */
 export function accessUrl(worldId: string): string {
   return `${SITE}/account/worlds/${encodeURIComponent(worldId)}/access`;
 }
@@ -24,7 +24,7 @@ export function canInvite(rec: Pick<WorldRecord, 'kind' | 'role'>): boolean {
 }
 
 /**
- * Who a link is for (the sharing floor's Q1, the Captain's yes, h50 #7610): `player` is keel's
+ * Who a link is for (Titus's call, 2026-10-19): `player` is keel's
  * no-account player link (#353), a friend reading as one Character; `guest` is a person's link with
  * role guest, the same reading signed in to an account of their own; `contributor` a person's link.
  */
@@ -106,7 +106,7 @@ export async function makeInvite(
     // keel refuses a Character it does not hold in this world (agents.py `_clean_link_character`).
     if (e instanceof OwApiError && e.status === 422 && e.param === 'character') throw new Error(CHARACTER_GONE);
     // keel's cap on a world's open invites (player links count too) is a 422 naming no field; a
-    // retry never helps (Atlas's INVITE_CAP_LINE, the S414 gate's M1; S433 gate S2).
+    // retry never helps (Atlas's INVITE_CAP_LINE).
     if (e instanceof OwApiError && e.status === 422 && !e.param) throw new Error(INVITE_CAP);
     throw new Error('The link was not made. Try again in a moment.');
   }

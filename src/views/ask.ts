@@ -53,7 +53,7 @@ export function askView(s: WorldSession): View {
   // A sentence needs an account world (keel checks the account owns or is in it) and a sign-in.
   let signedIn = false;
   // A world first opened with a key has no role on this phone; signed in later, the account's own
-  // list says whether it is one of yours (the Captain's walk: Ask stayed a search after sign-in).
+  // list says whether it is one of yours (Titus's walk: Ask stayed a search after sign-in).
   let accountWorld = s.rec.kind === 'online' && !!s.rec.role;
   let known = false; // until the sign-in is read, no reason is given (it would flash "Sign in")
   void Promise.all([accountToken(), cachedAccountWorlds()]).then(([t, mine]) => {
@@ -63,7 +63,7 @@ export function askView(s: WorldSession): View {
     run();
   });
   const aiReady = () => signedIn && accountWorld && navigator.onLine;
-  // Why there is no sentence, said once under the question (the Captain's walk: Ask read as a
+  // Why there is no sentence, said once under the question (Titus's walk: Ask read as a
   // search bar, because a world opened with a key never shows the AI half).
   const whyNot = (): HTMLElement | '' => {
     if (!known || aiReady()) return '';
@@ -82,7 +82,7 @@ export function askView(s: WorldSession): View {
     // Ask hands the world to keel's AI, so a proposed element stays on the phone (src/review.ts, Keel
     // #565's reader rule), and so does a hidden one (src/hidden.ts, folder spec §4.8): shown in the
     // list with its word, never sent, and said how many.
-    // A pin or marker placing one stays back with it (handOnHold, the S462 gate's F1).
+    // A pin or marker placing one stays back with it (handOnHold, the hidden-elements gate's F1).
     const why = hits.map((x) => handOnHold(x.element, (id) => s.get(id)));
     const hiddenOut = why.filter((w) => w === 'hidden').length;
     const proposedOut = why.filter((w) => w === 'proposed').length;

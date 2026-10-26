@@ -47,7 +47,7 @@ describe("the open world's words", () => {
     expect(typeCount(2, 'family')).toBe('2 families');
   });
 
-  it("name a supertype only when the world has a word for it (Seethe h20 #11028)", () => {
+  it("name a supertype only when the world has a word for it", () => {
     setTypeWordsSource(() => ({ names }));
     expect(supertypeWord('character', 'Agent')).toBe('AI agent');
     expect(supertypeWord('character', 'Hero')).toBeNull(); // the type's word, not the supertype's

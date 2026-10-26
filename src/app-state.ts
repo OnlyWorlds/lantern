@@ -24,7 +24,7 @@ export function applyTheme(t: Theme): void {
 }
 
 /**
- * Which fields a page shows (the Captain, h37 #4061), per phone: the filled ones (empty ones a tap
+ * Which fields a page shows (Titus, 2026-10-13), per phone: the filled ones (empty ones a tap
  * away), all of them, or only the world maker's own (the type's fields a tap away).
  */
 export type FieldsShown = 'filled' | 'all' | 'own';
@@ -49,7 +49,7 @@ export function setFieldsShown(v: FieldsShown): void {
 /**
  * A pinned phone can run an old build for days. On open (and when the app comes back to the
  * front), ask the server which build is current, bypassing every cache; while this build is
- * behind, the outbox holds and the screen offers the reload (Boss #3391).
+ * behind, the outbox holds and the screen offers the reload (Boss, 2026-10-11).
  */
 export async function checkForUpdate(onBehind: () => void): Promise<void> {
   if (BUILD_ID === 'dev' || !navigator.onLine) return;

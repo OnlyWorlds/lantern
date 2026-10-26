@@ -1,4 +1,4 @@
-// Sign in with OnlyWorlds (Keel #515; contract Forge/Notes/2026-10-25-s470-lantern-sign-in-contract.md):
+// Sign in with OnlyWorlds:
 // the SDK's real round trip against a fake keel shaped by the handoff sheet (§2: the authorize page
 // sends back a code and the state; POST /auth/token checks the verifier against the challenge and
 // answers the token and the account, or 400 invalid_grant). Each rule's guard is here.
@@ -165,7 +165,7 @@ describe('L4: the token kept first', () => {
     expect(keel.calls.indexOf('POST /auth/token')).toBe(0);
   });
 
-  it('keeps and says which account (the S470 gate G1)', async () => {
+  it('keeps and says which account (the sign-in gate G1)', async () => {
     const out = await signin.startSignInCallback(await tapAndReturn(), keel.fetch as typeof fetch);
     await signin.applySignInOutcome(out);
     expect(await db.kvGet('accountId')).toBe('acc-1');
@@ -248,7 +248,7 @@ describe('L6: a refusal is a sentence on the sign-in screen', () => {
 });
 
 describe('L7: a return this phone did not start, while signed in, is silent', () => {
-  it('silent too when a stale record from an abandoned tap is still here (the S470 gate G5)', async () => {
+  it('silent too when a stale record from an abandoned tap is still here (the sign-in gate G5)', async () => {
     await db.kvSet('accountToken', 'ow_a_kept');
     store.set(signin.SIGN_IN_RECORD_KEY, JSON.stringify({ state: 'other', verifier: 'v', redirectUri: 'https://lantern.onlyworlds.com/signin/callback' }));
     const out = await signin.startSignInCallback('https://lantern.onlyworlds.com/signin/callback?code=x&state=y', keel.fetch as typeof fetch);

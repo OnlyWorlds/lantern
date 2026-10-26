@@ -1,4 +1,4 @@
-// Ask in a sentence (Keel #159): how each of keel's answers is said. What is sent is the SDK's
+// Ask in a sentence: how each of keel's answers is said. What is sent is the SDK's
 // buildAskContext (Kael's tests hold its limits); the walk checks it reaches the proxy.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';

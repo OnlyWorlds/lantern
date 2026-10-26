@@ -1,5 +1,5 @@
 // Give it to the party: the sheet a game master fills at the table, and the one question it asks
-// the first time (which Collective is the party; the Captain's board, h37 B28, lean A: kept per world).
+// the first time (which Collective is the party; Titus's call: kept per world).
 import { typeLabel, typePlural, typeCount } from '../schema';
 import type { OwElement } from '@onlyworlds/sdk';
 import { h } from '../dom';

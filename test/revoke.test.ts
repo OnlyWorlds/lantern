@@ -1,6 +1,5 @@
-// Sign out revokes the token Lantern made (S476, Atlas 1.93.0's twin; contract
-// `Forge/Notes/2026-10-25-s476-lantern-token-revoke-contract.md`), against a fake keel shaped by
-// what S475 probed on a crew account: DELETE /account/tokens/{id} with the token as its own bearer
+// Sign out revokes the token Lantern made (Atlas 1.93.0's twin),
+// against a fake keel shaped by what was probed on a real account: DELETE /account/tokens/{id} with the token as its own bearer
 // answers 204, then 401 to that token; 404 when the id is not the bearer's account's (still live).
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -167,7 +166,7 @@ describe('Sign out', () => {
     expect(await (out as { revoking: Promise<string> | null }).revoking).toBe('revoked');
   });
 
-  it('a step after the token is let go that fails still leaves the revoke sent (the S476 gate S4)', async () => {
+  it('a step after the token is let go that fails still leaves the revoke sent (the revoke gate S4)', async () => {
     await signInWithPassword('ana', 'right');
     const kvSet = db.kvSet;
     const spy = vi.spyOn(db, 'kvSet').mockImplementation(async (k: string, v: unknown) => {
@@ -210,7 +209,7 @@ describe('Sign out', () => {
   it('says each outcome in its own words', () => {
     expect(signedOutLine('revoked', 'Worlds already on this phone stay.')).toBe("Signed out. Lantern's token is revoked on OnlyWorlds. Worlds already on this phone stay.");
     expect(signedOutLine('kept', 'Worlds already on this phone stay.')).toBe(`Signed out here. Worlds already on this phone stay. ${TOKEN_MAY_WORK}`);
-    // The remove button's news survives a revoke that did not answer (the S476 gate's S3).
+    // The remove button's news survives a revoke that did not answer (the revoke gate's S3).
     expect(signedOutLine('kept', '2 worlds removed from this phone.')).toContain('2 worlds removed from this phone.');
     expect(signedOutLine(null, '2 worlds removed from this phone.')).toBe('Signed out. 2 worlds removed from this phone.');
     for (const o of ['revoked', 'kept', null] as const) expect(signedOutLine(o, 'x')).not.toMatch(/—/);
@@ -221,7 +220,7 @@ describe('a token minted and not kept', () => {
   it('the password door: the profile fails after the mint, so the minted token is revoked at once', async () => {
     keel.profileDown = true;
     await expect(signInWithPassword('ana', 'right')).rejects.toThrow();
-    // The refusal came first; the revoke follows (the S476 gate's S2).
+    // The refusal came first; the revoke follows (the revoke gate's S2).
     expect(await db.kvGet('accountToken')).toBeUndefined();
     await vi.waitFor(() => expect(keel.deletes).toEqual([{ id: ID_A, bearer: TOKEN_A, keepalive: true }]));
   });
@@ -241,7 +240,7 @@ describe('a token minted and not kept', () => {
     await vi.waitFor(() => expect(keel.deletes).toHaveLength(1));
   });
 
-  it('a store that does not answer leaves the token alone: it may have landed (the S476 gate S1)', async () => {
+  it('a store that does not answer leaves the token alone: it may have landed (the revoke gate S1)', async () => {
     const spy = vi.spyOn(db, 'kvGet').mockRejectedValue(new Error('closed'));
     await revokeIfNotKept(TOKEN_A, ID_A);
     spy.mockRestore();

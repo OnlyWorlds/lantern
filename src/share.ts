@@ -1,7 +1,7 @@
 // Shared to Lantern (Android's share sheet, the manifest's share_target): the text arrives in the
 // start URL's query, becomes one note, and waits for the catch screen of the world it goes to.
 // Only a catch screen opened from the share screen (`?shared`) takes it: a share walked away from
-// before it reached a catch screen never fills a later note (the S395 gate). Once it reached one,
+// before it reached a catch screen never fills a later note. Once it reached one,
 // it is that world's draft (src/draft.ts). iPhone has no share target for web apps.
 
 let pending: string | null = null;

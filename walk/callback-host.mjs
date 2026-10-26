@@ -1,7 +1,7 @@
-// Lantern's /signin/callback read under Pages' own rules on a deployment (the S470 gate's G7),
+// Lantern's /signin/callback read under Pages' own rules on a deployment (the sign-in gate's G7),
 // before production: the headers of the callback with and without a trailing slash, every script and
 // stylesheet the returned shell names, and a browser boot there (workers allowed) that must land on
-// Sign in with "That sign-in was not started here". Run: node walk/callback-host.mjs <origin> (a Pages deployment; vite preview has no _redirects). S470.
+// Sign in with "That sign-in was not started here". Run: node walk/callback-host.mjs <origin> (a Pages deployment; vite preview has no _redirects).
 import { chromium } from 'playwright';
 const origin = process.argv[2];
 let failures = 0;
@@ -10,7 +10,7 @@ const check = (ok, what) => {
   if (!ok) failures++;
 };
 // The trailing-slash form is said, not judged: keel's registered address has none and never sends
-// one, and Pages answers it 404 on Atlas's production too (Boss h56 #12794).
+// one, and Pages answers it 404 on Atlas's production too.
 const slash = await fetch(`${origin}/signin/callback/?code=x&state=y`, { redirect: 'manual' });
 console.log(`said /signin/callback/ (a slash keel never sends): ${slash.status}`);
 for (const path of ['/signin/callback?code=x&state=y']) {

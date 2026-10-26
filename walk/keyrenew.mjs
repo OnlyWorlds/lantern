@@ -1,4 +1,4 @@
-// Atlas #198's twin (S418): a world whose key keel no longer knows, as a phone taps it, both engines.
+// Atlas's twin: a world whose key keel no longer knows, as a phone taps it, both engines.
 // An owner's account world on a write key keel answers as core/auth.py does for a deleted key since
 // keel #357: 401 invalid_credentials, param null. Checks: the home names the cause, never asks for a
 // PIN, and offers a new key; Put in a new key refuses a key for another world in the sheet; Make a
@@ -137,7 +137,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('[data-screen="home"]', { timeout: 15000 });
   await page.waitForTimeout(800);
   check(tag, (await page.locator('.banner', { hasText: 'key' }).count()) === 0, 'the refusal is gone once the world reads on the new key');
-  // The home prints a type's tile and its count, never the names (S418: a first check read "Ada").
+  // The home prints a type's tile and its count, never the names (a first check read "Ada").
   const tile = page.getByRole('button', { name: /Characters/ }).or(page.locator('a', { hasText: 'Characters' }));
   check(tag, (await tile.count()) > 0 && /1/.test(await tile.first().innerText()), 'the copy on the phone is still there (Characters 1)');
   await page.screenshot({ path: `${OUT}/keyrenew-${tag}-03-renewed.png` });

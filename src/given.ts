@@ -1,6 +1,6 @@
-// Given tonight (the Captain h37 #4113): the reveals this phone gave the party, so the game master
+// Given tonight (Titus, 2026-10-13): the reveals this phone gave the party, so the game master
 // sees the night's handouts in one place, and the morning after has them at hand. A reveal is an
-// ordinary Narrative with nothing marking it (Skeld's ruling, h37 #3432), so the phone that gave it
+// ordinary Narrative with nothing marking it (Skeld's ruling, 2026-10-11), so the phone that gave it
 // keeps the list: per phone and per world, never sent, nothing added to the world.
 const key = (worldId: string) => `lantern-given-${worldId}`;
 const KEEP = 60;

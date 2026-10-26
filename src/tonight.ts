@@ -1,5 +1,5 @@
-// Tonight's cast (the old Flutter app's key elements, without the game around them; the Captain
-// h37 #4061, #4072): a handful of a world's elements kept at the top of its home for a session.
+// Tonight's cast (the old Flutter app's key elements, without the game around them; Titus,
+// 2026-10-13): a handful of a world's elements kept at the top of its home for a session.
 // Per phone and per world, in the order kept, like a pinned world; it never travels and never
 // changes the world.
 const key = (worldId: string) => `lantern-tonight-${worldId}`;
