@@ -98,5 +98,9 @@ describe('custom fields', () => {
     expect(customFieldProblem({ id: '1', type: 'law' }, customFieldKey('Checks rules'))).toMatch(/checks/i);
     expect(isProfileField('x_checks_rules')).toBe(true);
     expect(isProfileField('x_checks')).toBe(false);
+    // And a spine's rows (dist.55's spine profile).
+    expect(customFieldProblem({ id: '1', type: 'object' }, customFieldKey('Spine status'))).toMatch(/spine/i);
+    expect(isProfileField('x_spine_depends_on')).toBe(true);
+    expect(isProfileField('x_spines')).toBe(false);
   });
 });
