@@ -1,0 +1,21 @@
+name: commit-words
+# A commit message is published text too: the messages this push or pull request adds are read by
+# .github/commit-words.mjs (a copy of OnlyWorlds/tools' commit-words.mjs; no dependencies).
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node .github/commit-words.mjs "$RANGE"
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || (github.event.before && !startsWith(github.event.before, '0000000') && format('{0}..{1}', github.event.before, github.sha)) || github.sha }}
