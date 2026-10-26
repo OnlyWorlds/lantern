@@ -8,7 +8,7 @@
 // Atlas's kernel): a world with exactly one names its dates here as Atlas does on a device that
 // never chose (which one a device chose is Atlas's own, not the world's); otherwise the numbers
 // with the unit. A calendar never changes the order.
-import { formatStep, resolveCalendarLens, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
+import { formatStep, resolveCalendar, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
 
 export interface WorldClock {
   now?: number;
@@ -28,7 +28,7 @@ export function clockFrom(world: Record<string, unknown>): WorldClock {
  * else its only one; with several and no choice, none (nothing guessed).
  */
 export function calendarOf(elements: Iterable<OwElement>, chosen?: string | null): CalendarConfig | null {
-  return resolveCalendarLens(elements, chosen, { fallbackToOnly: true })?.config ?? null;
+  return resolveCalendar(elements, chosen, { fallbackToOnly: true })?.config ?? null;
 }
 
 /** "3 Frost 412 AE" in the world's calendar; else "Year 412", or the bare number when the world names no unit. */
