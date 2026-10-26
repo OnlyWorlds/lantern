@@ -10,19 +10,17 @@
 //
 // Two readings, on purpose. Shown as proposed: an object (the profile's point 4: any other value is
 // ignored). Handed on as proposed: any value but null (Kael's pack: a doubt leaves it out).
+//
+// Both readings are the SDK's since 4.83 (the profile's readers: `proposedMarkOf` shows,
+// `handsOnAsProposed` hands on; the mark's fields trimmed by the profile's white space, so a byte
+// order mark stays, and a day not shaped YYYY-MM-DD is refused).
 
-export const PROPOSED_MARK = 'x_review_proposed';
+import { handsOnAsProposed, proposedMarkOf, PROPOSED_MARK } from '@onlyworlds/sdk';
+
+export { handsOnAsProposed, PROPOSED_MARK };
 
 export function isProposed(el: unknown): boolean {
-  if (!el || typeof el !== 'object') return false;
-  const v = (el as Record<string, unknown>)[PROPOSED_MARK];
-  return !!v && typeof v === 'object' && !Array.isArray(v);
-}
-
-export function handsOnAsProposed(el: unknown): boolean {
-  if (!el || typeof el !== 'object') return false;
-  const v = (el as Record<string, unknown>)[PROPOSED_MARK];
-  return v !== undefined && v !== null;
+  return proposedMarkOf(el) !== null;
 }
 
 /** Today as the profile writes a day, in UTC: keel reads a proposal lapsed from midnight UTC of its day. */
@@ -32,8 +30,7 @@ export function todayDay(now = new Date()): string {
 
 /** The word on a row and a page, or '' for a settled element. */
 export function proposedWord(el: unknown, today = todayDay()): string {
-  if (!isProposed(el)) return '';
-  const exp = ((el as Record<string, unknown>)[PROPOSED_MARK] as Record<string, unknown>).expires;
-  const lapsed = typeof exp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(exp) && exp <= today;
-  return lapsed ? 'proposed, lapsed' : 'proposed';
+  const mark = proposedMarkOf(el, today);
+  if (!mark) return '';
+  return mark.lapsed ? 'proposed, lapsed' : 'proposed';
 }

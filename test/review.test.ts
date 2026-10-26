@@ -24,6 +24,11 @@ describe('the readings', () => {
     expect(proposedWord({}, '2026-11-22')).toBe('');
     expect(todayDay(new Date('2026-11-22T04:30:00.000Z'))).toBe('2026-11-22');
   });
+
+  it("is the SDK's reader: the profile's white space trimmed, a bad day refused", () => {
+    expect(proposedWord({ x_review_proposed: { ...MARK, expires: ' 2026-11-22\t' } }, '2026-11-22')).toBe('proposed, lapsed');
+    expect(() => proposedWord({ x_review_proposed: MARK }, '22 Nov')).toThrow(TypeError);
+  });
 });
 
 describe('the sort slice hands the world on', () => {
