@@ -173,6 +173,11 @@ async function walk(engine, tag) {
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
   const kept = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
   check(tag, /review mark/.test(kept), `a review mark's name is refused (${JSON.stringify(kept)})`);
+  // And the spine profile's (dist.55), the newest reserved.
+  await page.locator('.sheet input[aria-label="Field name"]').fill('Spine status');
+  await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
+  const spine = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
+  check(tag, /spine/.test(spine) && (await page.locator('.frow[data-field=x_spine_status]').count()) === 0, `a spine key's name is refused (${JSON.stringify(spine)})`);
   await page.locator('.sheet input[aria-label="Field name"]').fill('Eye colour');
   await page.locator('.sheet textarea[aria-label="Value"]').fill('grey');
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
