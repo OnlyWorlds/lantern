@@ -1,0 +1,61 @@
+# Lantern's suites, off the crew's machine (the cloud-compute route Atlas runs since S460 and Tangle
+# since S481; the Captain's word, h43 #13761). Manual only: it runs when someone dispatches it
+# (`gh workflow run e2e.yml --ref main`), never on a push or a pull request. It reads the
+# repository and nothing else: no secret, so the live walks (live-*, frames*, leftovers), which
+# need the crew's test accounts, stay on the crew's machine.
+name: e2e
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium webkit
+      # Every walk in walk/ against the build on vite preview (:5181), one at a time, each under its
+      # own time limit (walk/guard.mjs). Left out: the live walks, the generators, callback-host
+      # (it reads a Pages deployment) and update (it rebuilds dist/), which runs last.
+      - name: walks
+        run: |
+          npx vite preview --port 5181 --strictPort > preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:5181/ > /dev/null && break; sleep 1; done
+          mkdir -p walk-logs
+          failed=()
+          for f in walk/*.mjs; do
+            n=$(basename "$f" .mjs)
+            case "$n" in live-*|frames*|leftovers|callback-host|type-icons|guard|update) continue ;; esac
+            echo "::group::$n"
+            if node "$f" > "walk-logs/$n.log" 2>&1; then echo "ok   $n"; else echo "FAIL $n (exit $?)"; failed+=("$n"); fi
+            tail -n 40 "walk-logs/$n.log"
+            echo "::endgroup::"
+          done
+          echo "::group::update"
+          if node walk/update.mjs > walk-logs/update.log 2>&1; then echo "ok   update"; else echo "FAIL update"; failed+=(update); fi
+          tail -n 40 walk-logs/update.log
+          echo "::endgroup::"
+          echo "${#failed[@]} failed: ${failed[*]}"
+          [ ${#failed[@]} -eq 0 ]
+        env:
+          CI: '1'
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walk-logs
+          path: |
+            walk-logs/
+            preview.log
+          retention-days: 3
