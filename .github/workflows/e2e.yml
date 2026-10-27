@@ -24,7 +24,15 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium webkit
+      # The runner's package install hung three runs in a row for 22 to 40 minutes (it takes about
+      # 40 s when it works): each try gets 6 minutes, and a second try after the first times out.
+      - name: Browsers
+        run: |
+          for i in 1 2; do
+            timeout 360 npx playwright install --with-deps chromium webkit && exit 0
+            echo "browser install try $i did not finish"
+          done
+          exit 1
       # Every walk in walk/ against the build on vite preview (:5181), one at a time, each under its
       # own time limit (walk/guard.mjs). Left out: the live walks, the generators, callback-host
       # (it reads a Pages deployment) and update (it rebuilds dist/), which runs last.
