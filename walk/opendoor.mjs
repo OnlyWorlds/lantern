@@ -1,7 +1,8 @@
 // The open door, as a phone taps it, both engines, keel played: a link #/open/<world>/element/<id>
 // followed signed out waits through the sign-in, the door then names the world and asks, one key is
 // made only on Open, and the phone lands on the element. A world already on the phone opens without
-// asking; a world the account does not hold, a link cut short and no signal are each said.
+// asking; a world the account does not hold, a link cut short and no signal are each said. A pasted
+// or shared OnlyWorlds address (the site's link, ow:// text) reaches the same door.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/opendoor.mjs [webkit|chromium]
 // The control: the same walk on the build before the door fails at every door check.
 import './guard.mjs';
@@ -124,6 +125,35 @@ async function walk(engine, deviceName, tag) {
     W2,
   );
   check(tag, mints.length === 1 && kept === 'ow_w_' + 'o'.repeat(40), `no key made, the copy's own key kept (${mints.length} mints)`);
+
+  // 4c. A pasted OnlyWorlds address (the site's link to an element), from Your worlds: the link screen
+  // hands it to the door, which opens the world on the phone at the element, with no new key.
+  const SITE = 'https://www.onlyworlds.com/w/';
+  const pasteLink = async (text) => {
+    await page.goto(`${BASE}/?paste${++n}#/worlds`);
+    await page.waitForSelector('[data-screen="worlds"]');
+    await page.locator('a', { hasText: 'Open a link' }).tap();
+    await page.waitForSelector('[data-screen="join"]');
+    await page.locator('input[aria-label="Link"]').fill(text);
+    await page.getByRole('button', { name: 'Open the link' }).tap();
+  };
+  await pasteLink(`${SITE}${W}/character/${E}`);
+  const pasted = await page.waitForFunction((h) => location.hash === h, `#/w/${W}/e/${E}`, { timeout: 8000 }).then(() => true, () => false);
+  check(tag, pasted, `a pasted site address lands on the element (${await hash()})`);
+  check(tag, mints.length === 1, 'and no new key');
+  await shot('pasted');
+  // The page name in place of the world's id is said in words, and nothing opens.
+  await pasteLink(`${SITE}puddleton/character/${E}`);
+  const joinErr = () => page.locator('[data-screen="join"] .error').innerText().catch(() => '');
+  const slugSaid = await page.waitForFunction(() => /page name/.test(document.querySelector('[data-screen="join"] .error')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false);
+  check(tag, slugSaid && (await hash()) === '#/join', `a world named by its page name is said, nothing opens (${JSON.stringify(await joinErr())})`);
+  // An address to a world the account does not hold goes through the door's own question.
+  await pasteLink(`Here: ${SITE}${OTHER}.`);
+  check(tag, await settle(/not among the worlds of walker/), `a pasted address in a message reaches the door (${JSON.stringify(await screenText())})`);
+  // Shared to Lantern from another app (Android's share sheet): the address opens, it is not caught as a note.
+  await page.goto(`${BASE}/?title=${encodeURIComponent('Ada')}&text=${encodeURIComponent(`Look at her ${SITE}${W}/character/${E}`)}`);
+  const shared = await page.waitForFunction((h) => location.hash === h, `#/w/${W}/e/${E}`, { timeout: 8000 }).then(() => true, () => false);
+  check(tag, shared, `a shared address lands on the element (${await hash()})`);
 
   // 5. A world the account does not hold names the account.
   await page.goto(`${BASE}/?other#/open/${OTHER}`);

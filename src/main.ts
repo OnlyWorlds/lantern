@@ -25,7 +25,7 @@ import { consumeShared, peekShared, takeShared } from './share';
 import { joinCode } from './join';
 import { joinView } from './views/join';
 import { openView } from './views/open';
-import { afterSignInHash, openWantOf, setPendingOpen } from './opendoor';
+import { addressIn, afterSignInHash, openWantOf, setPendingOpen } from './opendoor';
 import { isType, setTypeWordsSource } from './schema';
 import { elName, errorText, go, toast } from './ui';
 import { applySignInOutcome, isSignInCallback, NOT_KEPT_LINE, setSignInNotice, SIGNING_IN_HASH, startSignInCallback, takeSignedInLine, type SignInOutcome } from './signin';
@@ -192,10 +192,12 @@ window.addEventListener('storage', (e) => {
   if (e.key === SIGNED_IN_SIGNAL) void signedInElsewhere();
 });
 // replaceState fires no hashchange: one route, so one catch screen takes the note.
-// A shared invite link goes to the join screen instead of becoming a note.
+// A shared invite link, or a link to a world or an element on OnlyWorlds, goes to the link screen
+// instead of becoming a note (an address goes on from there to the open door).
 let sharedJoin: string | null = null;
 if (takeShared()) {
-  const code = joinCode(peekShared() ?? '');
+  const text = peekShared() ?? '';
+  const code = joinCode(text) ?? addressIn(text);
   if (code) {
     sharedJoin = code;
     consumeShared();

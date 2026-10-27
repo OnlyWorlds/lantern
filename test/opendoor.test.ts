@@ -49,6 +49,44 @@ describe('the link read from the address', () => {
   });
 });
 
+describe('a pasted OnlyWorlds address', () => {
+  const SITE = 'https://www.onlyworlds.com/w/';
+  it('the site link to a world, and to an element, asks for the same as the door', () => {
+    expect(door.openWantOfAddress(`${SITE}${WORLD}`)).toEqual({ want: { world: WORLD } });
+    expect(door.openWantOfAddress(`${SITE}${WORLD}/character/${EL}`)).toEqual({ want: { world: WORLD, element: EL } });
+  });
+  it('the ow:// text form with its world reads the same', () => {
+    expect(door.openWantOfAddress(`ow://${WORLD}/location/${EL}`)).toEqual({ want: { world: WORLD, element: EL } });
+    expect(door.openWantOfAddress(`ow://${WORLD}`)).toEqual({ want: { world: WORLD } });
+  });
+  it('found inside a message, without the punctuation after it', () => {
+    expect(door.openWantOfAddress(`Look at her (${SITE}${WORLD}/character/${EL}).`)).toEqual({ want: { world: WORLD, element: EL } });
+    expect(door.addressIn(`see ${SITE}${WORLD}, then`)).toBe(`${SITE}${WORLD}`);
+  });
+  it('a moment and a lens are set aside: the element opens', () => {
+    expect(door.openWantOfAddress(`${SITE}${WORLD}/character/${EL}@12?lens=${EL}`)).toEqual({ want: { world: WORLD, element: EL } });
+  });
+  it('hex in capitals reads lower case, as keel writes it', () => {
+    expect(door.openWantOfAddress(`${SITE}${WORLD.toUpperCase()}/character/${EL.toUpperCase()}`)).toEqual({ want: { world: WORLD, element: EL } });
+  });
+  it('a world named by its page name is refused in words, never guessed', () => {
+    expect(door.openWantOfAddress(`${SITE}hyperion/character/${EL}`)).toEqual({ refused: door.ADDRESS_SLUG_LINE });
+  });
+  it('an element with no world is refused: the text form inside a world', () => {
+    expect(door.openWantOfAddress(`ow://character/${EL}`)).toEqual({ refused: door.ADDRESS_NO_WORLD_LINE });
+  });
+  it('a link cut short, an unknown type or a type in capitals is refused, never opened as the world', () => {
+    for (const s of [`${SITE}${WORLD}/character`, `${SITE}${WORLD}/`, `${SITE}${WORLD}/hero/${EL}`, `${SITE}${WORLD}/Character/${EL}`, `${SITE}${WORLD.slice(0, 20)}`, `HTTPS://WWW.ONLYWORLDS.COM/w/${WORLD}`]) {
+      expect(door.openWantOfAddress(s), s).toEqual({ refused: door.ADDRESS_BROKEN_LINE });
+    }
+  });
+  it('text with no address is not one: an invite, another site, plain words', () => {
+    for (const s of ['https://www.onlyworlds.com/join#ow_j_abc', `https://example.com/w/${WORLD}`, 'a note about Ada', '']) {
+      expect(door.openWantOfAddress(s), s).toBeNull();
+    }
+  });
+});
+
 describe('what the door does', () => {
   const row: AccountWorld = { id: WORLD, name: 'Puddleton', role: 'owner' };
   let asked: number;

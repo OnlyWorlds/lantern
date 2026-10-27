@@ -95,7 +95,7 @@ export function welcomeView(): HTMLElement {
         h('b', null, 'Start a world on this phone'),
         h('span', null, 'No account needed. Put it online later'),
       ),
-      h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'I have an invite link'),
+      h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'I have a link'),
       h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'I have a world key'),
       // A world file sent by a friend, on a phone with nothing on it yet (the door was once only on Your worlds).
       openFileButton('I have a world file', { class: 'btn btn-quiet', style: 'align-self:center' }),
@@ -640,7 +640,7 @@ export function worldsView(): HTMLElement {
         ? h('a', { class: 'btn btn-quiet', href: '#/key', style: 'align-self:center' }, 'Open with a key')
         : h('a', { class: 'btn btn-quiet', href: '#/signin', style: 'align-self:center' }, 'Sign in to OnlyWorlds'),
     );
-    main.appendChild(h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'Join with an invite link'));
+    main.appendChild(h('a', { class: 'btn btn-quiet', href: '#/join', style: 'align-self:center' }, 'Open a link'));
     if (!recs.some((r) => r.kind === 'demo')) {
       const b = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Explore Moppetopia');
       b.addEventListener('click', async () => {

@@ -35,17 +35,17 @@ async function walk(engine, deviceName, tag) {
   // 1. A bad link, against live keel
   await page.goto(BASE);
   await page.waitForSelector('[data-screen="welcome"]');
-  await page.locator('a', { hasText: 'I have an invite link' }).tap();
+  await page.locator('a', { hasText: 'I have a link' }).tap();
   await page.waitForSelector('[data-screen="join"]');
-  await page.locator('input[aria-label="Invite link"]').fill('https://www.onlyworlds.com/join#ow_j_notarealcode0000');
+  await page.locator('input[aria-label="Link"]').fill('https://www.onlyworlds.com/join#ow_j_notarealcode0000');
   expect4xx = true;
-  await page.getByRole('button', { name: 'Look at the invite' }).tap();
+  await page.getByRole('button', { name: 'Open the link' }).tap();
   await page.waitForFunction(() => document.querySelector('.error')?.textContent, null, { timeout: 15000 });
   const bad = await page.locator('.error').first().innerText();
   check(tag, /does not work/.test(bad), `live keel's 404 is said plainly: ${JSON.stringify(bad)}`);
-  await page.locator('input[aria-label="Invite link"]').fill('hello');
-  await page.getByRole('button', { name: 'Look at the invite' }).tap();
-  check(tag, /not an invite link/.test(await page.locator('.error').first().innerText()), 'text without a code is named as such');
+  await page.locator('input[aria-label="Link"]').fill('hello');
+  await page.getByRole('button', { name: 'Open the link' }).tap();
+  check(tag, /not a link Lantern opens/.test(await page.locator('.error').first().innerText()), 'text without a code is named as such');
 
   // 2. The fake keel from here on
   let joinAnswer = json(409, { error: { code: 'already_member', message: 'already' } });
@@ -64,7 +64,7 @@ async function walk(engine, deviceName, tag) {
   const invite = await page.locator('.invite').innerText();
   check(tag, /Ada invites you to The Reach as a player\./.test(invite), `a shared link opens the invite: ${JSON.stringify(invite.split('\n')[0])}`);
   check(tag, /until 19 October/.test(invite), 'it says until when the link works');
-  check(tag, (await page.locator('input[aria-label="Invite link"]').inputValue()).includes('ow_j_fromachat'), 'the link is in the field');
+  check(tag, (await page.locator('input[aria-label="Link"]').inputValue()).includes('ow_j_fromachat'), 'the link is in the field');
   await shot('invite');
 
   // keel's join page hands the code on in the fragment: a fresh load, then the same
@@ -72,7 +72,7 @@ async function walk(engine, deviceName, tag) {
   // the code leaves the address bar, as Atlas's door clears it (its R2).
   for (const [how, url] of [['a fresh load', `${BASE}/?from=keel#/join/ow_j_fromkeel`], ['inside the app', `${BASE}/?from=keel#/join/ow_j_fromkeel2`]]) {
     await page.goto(url);
-    await page.waitForFunction((c) => document.querySelector('.invite') && document.querySelector('input[aria-label="Invite link"]')?.value.includes(c), url.split('/').pop(), { timeout: 15000 });
+    await page.waitForFunction((c) => document.querySelector('.invite') && document.querySelector('input[aria-label="Link"]')?.value.includes(c), url.split('/').pop(), { timeout: 15000 });
     check(tag, true, `keel's door, ${how}: the invite opens with the code`);
     check(tag, (await page.evaluate(() => location.hash)) === '#/join', `and the code leaves the address bar (${await page.evaluate(() => location.hash)})`);
   }

@@ -258,8 +258,8 @@ const stages = {
   async 'friend-in'() {
     const { ctx, page } = await phone('friend');
     await page.goto(`${SITE}/#/join`);
-    await page.locator('input[aria-label="Invite link"]').fill(state.link_contributor);
-    await page.getByRole('button', { name: 'Look at the invite' }).tap();
+    await page.locator('input[aria-label="Link"]').fill(state.link_contributor);
+    await page.getByRole('button', { name: 'Open the link' }).tap();
     await page.getByRole('button', { name: 'Sign in to join' }).waitFor({ timeout: 20000 });
     await frame(page, 'l10');
     await page.getByRole('button', { name: 'Sign in to join' }).tap();
@@ -313,8 +313,8 @@ const stages = {
   async player() {
     const { ctx, page } = await phone('friend');
     await page.goto(`${SITE}/#/join`);
-    await page.locator('input[aria-label="Invite link"]').fill(state.link_guest);
-    await page.getByRole('button', { name: 'Look at the invite' }).tap();
+    await page.locator('input[aria-label="Link"]').fill(state.link_guest);
+    await page.getByRole('button', { name: 'Open the link' }).tap();
     const join = page.getByRole('button', { name: /^Join / });
     await join.waitFor({ timeout: 20000 });
     await extra(page, 'l13-invite');

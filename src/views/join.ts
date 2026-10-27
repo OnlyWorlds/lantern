@@ -1,6 +1,8 @@
-// Join a world with an invite link: paste it (or share it to Lantern), see the invite, join.
+// Join a world with an invite link: paste it (or share it to Lantern), see the invite, join. A link to a
+// world or an element on OnlyWorlds pasted here goes on to the open door (src/opendoor.ts).
 import { h } from '../dom';
 import { accountName, accountToken } from '../account';
+import { addressIn, openWantOfAddress, setPendingOpen } from '../opendoor';
 import { acceptJoin, isPlayerLink, isTable, joinCode, pendingJoin, PickRefused, previewJoin, redeemPlayer, roleWords, setPendingJoin, tablePicks, type JoinPreview, type TablePick } from '../join';
 import { errorText, go, topbar } from '../ui';
 
@@ -16,15 +18,15 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
     // Text, not url: a bare code is a fine answer, and a url field would refuse it unseen.
     type: 'text',
     inputmode: 'url',
-    'aria-label': 'Invite link',
-    placeholder: 'https://www.onlyworlds.com/join#ow_j_…',
+    'aria-label': 'Link',
+    placeholder: 'https://www.onlyworlds.com/…',
     autocomplete: 'off',
     autocapitalize: 'off',
     spellcheck: 'false',
   });
   input.value = given ?? waiting ?? '';
   const err = h('p', { class: 'error', role: 'alert' });
-  const look = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Look at the invite');
+  const look = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Open the link');
   const card = h('div', { class: 'stack' });
   const form = h('form', { class: 'stack' }, input, err, look);
 
@@ -185,7 +187,16 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
     card.replaceChildren();
     const code = joinCode(input.value);
     if (!code) {
-      err.textContent = 'That is not an invite link. It looks like https://www.onlyworlds.com/join#ow_j_…';
+      // A link to a world or an element on OnlyWorlds goes to the open door, which asks before it makes anything.
+      const opened = openWantOfAddress(input.value);
+      if (opened && 'want' in opened) {
+        await setPendingOpen(opened.want);
+        go('#/open');
+        return;
+      }
+      err.textContent = opened
+        ? opened.refused
+        : 'That is not a link Lantern opens. An invite looks like https://www.onlyworlds.com/join#ow_j_…, a world on OnlyWorlds like https://www.onlyworlds.com/w/…';
       return;
     }
     look.disabled = true;
@@ -201,13 +212,13 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
   const main = h(
     'main',
     { class: 'screen', 'data-screen': 'join' },
-    topbar('Join a world', token ? '#/worlds' : '#/welcome'),
-    h('p', { class: 'dim', style: 'margin:0' }, 'Paste the invite link someone sent you.'),
+    topbar('Open a link', token ? '#/worlds' : '#/welcome'),
+    h('p', { class: 'dim', style: 'margin:0' }, 'Paste an invite someone sent you, or a link to a world or an element on OnlyWorlds.'),
     form,
     card,
   );
   // A link that came with the screen (shared to Lantern, or waiting through a sign-in) is looked at at once.
   // After the screen is in the page: a form outside the document does not submit.
-  if (input.value && joinCode(input.value)) setTimeout(() => form.isConnected && form.requestSubmit(), 0);
+  if (input.value && (joinCode(input.value) || addressIn(input.value))) setTimeout(() => form.isConnected && form.requestSubmit(), 0);
   return main;
 }

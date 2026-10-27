@@ -2,6 +2,7 @@
 // own door spelled the same) opens that world on this phone, and the element when it names one.
 // The ids are no credential: the signed-in account is. A world already on the phone opens at once;
 // one from the account opens only after the person says Open, since that makes a key on keel.
+import { OwAddressError, parseOwLink } from '@onlyworlds/sdk';
 import * as db from './db';
 import type { AccountWorld } from './account';
 
@@ -32,6 +33,45 @@ export function openWantOf(parts: string[]): OpenWant | null {
   if (!UUID_RE.test(world)) return { world: '' };
   const element = parts[2] === 'element' && parts[3] ? decoded(parts[3]) : '';
   return UUID_RE.test(element) ? { world, element } : { world };
+}
+
+// An OnlyWorlds address (the address profile): the site's link to a world or an element, or the
+// ow:// text form. Found in pasted or shared text by its prefix, in any case, so a link in capitals
+// is refused for its case rather than missed; the SDK reads it whole.
+const ADDRESS_RE = /(?:https:\/\/www\.onlyworlds\.com\/w\/|ow:\/\/)\S*/i;
+
+export const ADDRESS_SLUG_LINE =
+  'This link names the world by its page name, which Lantern does not read. On OnlyWorlds, use Copy link: that link names the world by its id.';
+export const ADDRESS_NO_WORLD_LINE = 'This address names an element but not its world. Copy the link from OnlyWorlds, which names both.';
+export const ADDRESS_BROKEN_LINE = 'Lantern cannot read this link: part of it is missing or changed. Copy it again from OnlyWorlds.';
+
+/** The address in a piece of text, the first one; punctuation a sentence puts after a link is not part of it. */
+export function addressIn(text: string): string | null {
+  const found = text.match(ADDRESS_RE)?.[0];
+  return found ? found.replace(/[.,;:!?)\]}>'"]+$/, '') : null;
+}
+
+/**
+ * What a pasted OnlyWorlds address asks the open door for: its world, and its element when it names
+ * one (a lens or a moment is read and set aside: Lantern shows the element). A refusal is in words.
+ * Null when the text holds no address at all.
+ */
+export function openWantOfAddress(text: string): { want: OpenWant } | { refused: string } | null {
+  const address = addressIn(text);
+  if (!address) return null;
+  let r;
+  try {
+    r = parseOwLink(address);
+  } catch (e) {
+    if (e instanceof OwAddressError) return { refused: ADDRESS_BROKEN_LINE };
+    throw e;
+  }
+  // The SDK reads any world that is not an id as a page name; one that starts like an id is a paste cut short.
+  if (r.worldIsSlug) return { refused: /^[0-9a-f]{8}-/i.test(r.world ?? '') ? ADDRESS_BROKEN_LINE : ADDRESS_SLUG_LINE };
+  if (!r.world) return { refused: ADDRESS_NO_WORLD_LINE };
+  // The door's own rule for ids, as for a #/open link (keel's ids are UUIDs).
+  if (!UUID_RE.test(r.world) || (r.id && !UUID_RE.test(r.id))) return { refused: ADDRESS_BROKEN_LINE };
+  return { want: r.id ? { world: r.world, element: r.id } : { world: r.world } };
 }
 
 function decoded(part: string): string {
