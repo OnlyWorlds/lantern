@@ -166,8 +166,9 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
       err.textContent = '';
       btn.disabled = true;
       try {
-        // keel checks a PIN sent on a read too: one read proves it before anything is written.
-        await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).getWorld();
+        // /me proves it before anything is written: since SDK 4.59 a world key's other reads send
+        // no PIN, so a world read let a wrong one through to fail at the write.
+        await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
         setPin(s.rec, pin.value.trim());
         s.needPin = false;
         close();

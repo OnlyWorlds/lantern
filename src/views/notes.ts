@@ -230,9 +230,10 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
         // next does not mint another.
         if (!s.playerCanSend) await s.takePlayerKey(await mintPlayerKey(s.id, s.rec.characterId!));
         if (pin) {
-          // keel checks a PIN sent on a read too: one read proves it before anything is written.
+          // /me proves it before anything is written: since SDK 4.59 a world key's other reads send
+          // no PIN, so a world read let a wrong one through to fail at the write.
           try {
-            await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: typed, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).getWorld();
+            await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: typed, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
           } catch (ex) {
             throw (ex as { status?: number }).status === 401 ? new Error("That PIN is not your account's.") : ex;
           }

@@ -103,7 +103,14 @@ async function walk(engine, deviceName, tag) {
     if (req.method() === 'GET' && path === '/account/worlds') {
       return json(200, { data: [{ id: WID, name: 'The Reach', ...(seat === 'owner' ? { role: 'owner' } : { role: 'collaborator', member_role: 'guest' }) }] });
     }
-    if (req.method() === 'GET' && (path === '/me' || path === '/me/') && auth.includes(WRITE)) return json(200, { role: 'guest', character: meChar, scope: 'write' });
+    // keel checks a PIN sent to /me against the member's account PIN (a wrong one is a 401 here, not
+    // at the first write); since SDK 4.59 /me is the one read a world key sends its PIN on.
+    if (req.method() === 'GET' && (path === '/me' || path === '/me/') && auth.includes(WRITE)) {
+      const pin = req.headers()['api-pin'];
+      if (pin) pinReads.push({ key: auth, pin });
+      if (pin && pin !== '1234') return json(401, { error: { code: 'invalid_credentials', message: 'Incorrect PIN.', type: 'authentication_error', param: 'API-Pin' } });
+      return json(200, { role: 'guest', character: meChar, scope: 'write' });
+    }
     if (req.method() === 'POST' && path === '/narrative' && refuseNext) {
       refuseNext = false;
       notes.push({ refused: true });
@@ -112,10 +119,6 @@ async function walk(engine, deviceName, tag) {
     if (req.method() === 'POST' && path === `/account/worlds/${WID}/keys`) {
       mints.push(req.postDataJSON());
       return json(201, { key: WRITE, scope: 'write' });
-    }
-    if (req.method() === 'GET' && path === '/world' && req.headers()['api-pin']) {
-      pinReads.push({ key: auth, pin: req.headers()['api-pin'] });
-      return req.headers()['api-pin'] === '1234' ? json(200, { id: WID, name: 'The Reach' }) : json(401, { error: { code: 'invalid_credentials', message: 'Incorrect PIN.', type: 'authentication_error' } });
     }
     if (req.method() === 'POST' && path === '/narrative') {
       const body = req.postDataJSON();
@@ -160,7 +163,7 @@ async function walk(engine, deviceName, tag) {
   await page.getByRole('button', { name: 'Share it' }).tap();
   await page.waitForFunction(() => /Shared with The Party/.test(document.querySelector('[data-part=share-state]')?.textContent ?? ''), null, { timeout: 15000 });
   check(tag, mints.length === 1 && mints[0].scope === 'write', `one write key minted for the membership (${JSON.stringify(mints)})`);
-  check(tag, pinReads.length === 2 && pinReads.every((p) => p.key.includes(WRITE)), 'the PIN read with the new key');
+  check(tag, pinReads.slice(0, 2).map((p) => p.pin).join() === '9999,1234' && pinReads.every((p) => p.key.includes(WRITE)), `each typed PIN proven on /me with the new key (${pinReads.map((p) => p.pin).join()})`);
   const sent = notes[0]?.body ?? {};
   check(tag, notes.length === 1 && notes[0].key.includes(WRITE) && notes[0].pin === '1234', 'the Narrative went with the write key and the PIN');
   check(tag, sent.name === 'The innkeeper lied' && /Tor saw fresh tracks/.test(sent.description ?? ''), `first line the name, the rest the description (${JSON.stringify(sent.name)})`);
