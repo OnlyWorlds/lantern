@@ -30,8 +30,10 @@ async function walk(engine, deviceName, tag) {
   const context = await browser.newContext({ ...devices[deviceName], serviceWorkers: 'block' });
   const page = await context.newPage();
   const errors = [];
-  page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push(m.text()));
+  // WebKit on a production origin reports each request this walk aborts as a page error worded "due to access
+  // control checks"; Chromium, which reports an unhandled rejection, shows none on the same run.
+  page.on('pageerror', (e) => !/due to access control checks/.test(e.message) && errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled|due to access control checks/i.test(m.text()) && errors.push(m.text()));
   let n = 0;
   const shot = (name) => page.screenshot({ path: `${OUT}/opendoor-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
   const screenText = async () => (await page.locator('[data-screen="open"]').innerText().catch(() => '')).replace(/\s+/g, ' ');
