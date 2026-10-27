@@ -5,7 +5,7 @@ import './guard.mjs';
 // WebKit logs the viewport's interactive-widget key (Android Chrome's keyboard rule) as unknown: harmless.
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 import { chromium, webkit, devices } from 'playwright';
-import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
 
@@ -276,11 +276,17 @@ async function walk(engine, deviceName, tag) {
     readdirSync(d, { withFileTypes: true }).flatMap((e) =>
       e.isDirectory() ? filesOf(`${d}/${e.name}`, `${rel}${e.name}/`) : [{ path: `${rel}${e.name}`, data: new Uint8Array(readFileSync(`${d}/${e.name}`)) }],
     );
-  const zip = Buffer.from(writeWorldFile(filesOf(sample), 'moppetopia-sample-55a9b4d5'));
-  await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'moppetopia-sample.zip', mimeType: 'application/zip', buffer: zip });
+  // A real Atlas folder where this machine has one; elsewhere (the Actions runner) the standard's own
+  // vendored world file, so the step runs everywhere instead of stopping the walk.
+  const real = existsSync(sample);
+  const zip = real
+    ? Buffer.from(writeWorldFile(filesOf(sample), 'moppetopia-sample-55a9b4d5'))
+    : readFileSync(new URL('../test/fixtures/owworld/pass-OW-8-private-left-out.owworld', import.meta.url));
+  const expected = real ? 'Moppetopia (sample)' : "Watabou's Abbey";
+  await page.locator('input[aria-label="A world file"]').setInputFiles({ name: real ? 'moppetopia-sample.zip' : 'abbey.owworld', mimeType: 'application/zip', buffer: zip });
   await page.waitForSelector('[data-screen="home"] .type-tile', { timeout: 15000 });
   const opened = await page.locator('.world-name span').innerText();
-  check(tag, opened === 'Moppetopia (sample)', `Open a world file opens "${opened}" on this phone`);
+  check(tag, opened === expected, `Open a world file opens "${opened}" on this phone`);
   await shot('opened-file');
 
   // 8. The house look
