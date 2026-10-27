@@ -30,6 +30,8 @@ function said(e: unknown, fallback: string): Error {
 
 /** The code waits here while the person signs in. */
 export async function setPendingJoin(code: string | undefined): Promise<void> {
+  // The newest link is the one the person followed: a world link that waited gives way to it.
+  if (code) await db.kvSet('pendingOpen', undefined);
   await db.kvSet('pendingJoin', code);
 }
 

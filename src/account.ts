@@ -207,6 +207,7 @@ export async function signOut(): Promise<{ revoking: Promise<RevokeOutcome> | nu
   await db.kvSet('accountTokenMint', undefined);
   // An invite waiting for this account is not the next account's.
   await db.kvSet('pendingJoin', undefined);
+  await db.kvSet('pendingOpen', undefined);
   await db.kvSet('accountWorlds', undefined);
   forgetAccountPin();
   // The account id stays, so the next sign-in can tell whether it is the same account.
@@ -280,10 +281,14 @@ async function takeOver(existing: db.WorldRecord | undefined, key?: string): Pro
   return true;
 }
 
-/** Open an account world on this phone: mint its own key, then keep the world record. */
-export async function openAccountWorld(w: AccountWorld): Promise<db.WorldRecord> {
+/**
+ * Open an account world on this phone: mint its own key, then keep the world record. `askedFor`: the
+ * token a question about this world was asked under; another sign-in since refuses before any key.
+ */
+export async function openAccountWorld(w: AccountWorld, askedFor?: string): Promise<db.WorldRecord> {
   const token = await accountToken();
   if (!token) throw new Error('Sign in first.');
+  if (askedFor !== undefined && token !== askedFor) throw new Error('This phone is signed in with another account now. Open the world again from onlyworlds.com.');
   // Before a key is minted: a refusal leaves nothing behind on keel.
   await takeOver(await db.getWorldRecord(w.id));
   const c = accountClient(token);

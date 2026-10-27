@@ -6,7 +6,7 @@ import { OwV2Client, OwSignInError, detectKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import { fetchAccountWorlds, keepAccount, revokeIfNotKept, type AccountWho } from './account';
-import { pendingJoin } from './join';
+import { afterSignInHash } from './opendoor';
 
 /** keel's registry (`GET /api/v2/auth/clients`) lists `lantern` with exactly this address, production only. */
 export const SIGN_IN_CLIENT_ID = 'lantern';
@@ -174,7 +174,7 @@ export async function applySignInOutcome(outcome: SignInOutcome): Promise<string
     // The list of worlds is asked after the token is safe; a failure here leaves the token, and
     // Your worlds asks again.
     await fetchAccountWorlds(outcome.token).catch(() => undefined);
-    return (await pendingJoin().catch(() => undefined)) ? '#/join' : '#/worlds';
+    return afterSignInHash();
   }
   const signedIn = Boolean(await db.kvGet<string>('accountToken'));
   if (signedIn && !outcome.cancelled && outcome.error instanceof OwSignInError && outcome.error.reason === 'state_mismatch') {

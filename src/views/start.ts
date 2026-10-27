@@ -20,7 +20,7 @@ import {
 import type { RevokeOutcome } from '../revoke';
 import { forgetSession } from '../world';
 import { setPin } from '../pin';
-import { pendingJoin } from '../join';
+import { afterSignInHash } from '../opendoor';
 import { SIGNUP_URL } from '../invite';
 import { uuid7 } from '../uuid7';
 import { lanternProducer, openWorldFile, saveFile, worldCopy, type CopyQuestion } from '../worldfile';
@@ -175,7 +175,7 @@ export function signInView(): HTMLElement {
     if (owBtn) owBtn.disabled = true;
     try {
       await signInWithPassword(email.value, password.value);
-      go((await pendingJoin()) ? '#/join' : '#/worlds', true);
+      go(await afterSignInHash(), true);
     } catch (ex) {
       err.textContent = errorText(ex);
     } finally {
@@ -208,7 +208,7 @@ export function signInView(): HTMLElement {
     tokenErr.textContent = '';
     try {
       await signIn(token.value);
-      go((await pendingJoin()) ? '#/join' : '#/worlds', true);
+      go(await afterSignInHash(), true);
     } catch (ex) {
       tokenErr.textContent = errorText(ex);
     }

@@ -22,8 +22,10 @@ import { notesView } from './views/notes';
 import { mapView } from './views/map';
 import { shareView } from './views/share';
 import { consumeShared, peekShared, takeShared } from './share';
-import { joinCode, pendingJoin } from './join';
+import { joinCode } from './join';
 import { joinView } from './views/join';
+import { openView } from './views/open';
+import { afterSignInHash, openWantOf, setPendingOpen } from './opendoor';
 import { isType, setTypeWordsSource } from './schema';
 import { elName, errorText, go, toast } from './ui';
 import { applySignInOutcome, isSignInCallback, NOT_KEPT_LINE, setSignInNotice, SIGNING_IN_HASH, startSignInCallback, takeSignedInLine, type SignInOutcome } from './signin';
@@ -150,8 +152,21 @@ async function route(): Promise<void> {
       // fires no hashchange, so this screen is the one that opens.
       const fromLink = joinCode(parts[1] ?? '');
       if (fromLink) history.replaceState(null, '', '/#/join');
+      // An invite followed is the newest link: a world link that waited before it gives way.
+      if (fromLink || sharedJoin) await setPendingOpen(undefined);
       mount(await joinView(fromLink ?? sharedJoin));
       sharedJoin = null;
+      return;
+    }
+    case 'open': {
+      // A link to a world (Open in Lantern on onlyworlds.com): its ids wait in the app's database,
+      // through a sign-in if one is needed, and leave the address bar at once, as a join code does.
+      const want = openWantOf(parts);
+      if (want) {
+        await setPendingOpen(want);
+        history.replaceState(null, '', '/#/open');
+      }
+      mount(openView());
       return;
     }
     default:
@@ -167,11 +182,11 @@ window.addEventListener('pageshow', (e) => {
 });
 // Signed in from another window of this browser (a sign-in that came back in a browser tab while the
 // home-screen app waited): a screen that only asks to sign in moves on (the sign-in gate's G4).
-// Only the welcome and sign-in screens move: Your worlds is left as it is (the sign-in code gate's C6).
+// Only the welcome, sign-in and open door screens move: Your worlds is left as it is (the sign-in code gate's C6).
 async function signedInElsewhere(): Promise<void> {
-  if (!app.querySelector('[data-screen="welcome"], [data-screen="signin"]')) return;
+  if (!app.querySelector('[data-screen="welcome"], [data-screen="signin"], [data-screen="open"]')) return;
   if (!(await accountToken())) return;
-  go((await pendingJoin()) ? '#/join' : '#/worlds', true);
+  go(await afterSignInHash(), true);
 }
 window.addEventListener('storage', (e) => {
   if (e.key === SIGNED_IN_SIGNAL) void signedInElsewhere();
