@@ -459,7 +459,11 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
   return key;
 }
 
-/** Open a world with a key someone gave you (and its PIN, checked once by a read that sends it). */
+/**
+ * Open a world with a key someone gave you, and its PIN, proven before anything is kept: a legacy
+ * key sends it on the world read, a write key only to /me (since SDK 4.59 its other reads send none,
+ * and keel answers a world read with a wrong PIN 200).
+ */
 export async function openWithKey(apiKey: string, pin?: string): Promise<db.WorldRecord> {
   const key = apiKey.trim();
   const kind: OwKeyKind = detectKeyKind(key);
@@ -467,6 +471,13 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
   if (kind === 'unknown') throw new Error('That does not look like a world key (ow_w_, ow_r_, or ten digits).');
   const c = new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
   const meta = await c.getWorld();
+  if (pin && kind === 'write') {
+    try {
+      await c.me();
+    } catch (ex) {
+      throw (ex as { status?: number }).status === 401 ? new Error("That PIN is not this key's.") : ex;
+    }
+  }
   const existing = await db.getWorldRecord(meta.id);
   const sameKey = existing?.apiKey === key;
   await takeOver(existing, key);

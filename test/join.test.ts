@@ -194,6 +194,34 @@ describe('an invite link', () => {
     expect(await db.allElements(WORLD)).toHaveLength(1);
   });
 
+  it("a write key's PIN is proven on /me before the world is kept: keel answers a world read with a wrong PIN 200", async () => {
+    await db.removeWorld(WORLD);
+    const real = keel.fetch;
+    const meCalls: Array<string | null> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname.replace(/\/+$/, '');
+      const pin = new Headers(init?.headers).get('API-Pin');
+      if (path === '/api/v2/world') return new Response(JSON.stringify({ id: WORLD, name: 'The Reach' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (path === '/api/v2/me') {
+        meCalls.push(pin);
+        return pin === '1234'
+          ? new Response(JSON.stringify({ role: 'owner', membership: null, character: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+          : new Response(JSON.stringify({ error: { code: 'invalid_credentials', message: 'Incorrect PIN.', type: 'authentication_error', param: 'API-Pin' } }), { status: 401, headers: { 'content-type': 'application/json' } });
+      }
+      return real(input, init);
+    }) as typeof fetch;
+    const { openWithKey } = await import('../src/account');
+    const key = `ow_w_${'q'.repeat(30)}`;
+    await expect(openWithKey(key, '9999')).rejects.toThrow(/PIN/);
+    expect(await db.getWorldRecord(WORLD)).toBeFalsy();
+    const rec = await openWithKey(key, '1234');
+    expect(rec.id).toBe(WORLD);
+    expect(meCalls).toEqual(['9999', '1234']);
+    // A read key carries no PIN to prove: no /me.
+    await openWithKey(`ow_r_${'p'.repeat(30)}`, '5555');
+    expect(meCalls).toHaveLength(2);
+  });
+
   it('a used or agent code, and no account: refused before anything is kept', async () => {
     await expect(join.acceptJoin('ow_j_agent')).rejects.toThrow(/does not work/);
     await db.kvSet('accountToken', undefined);
