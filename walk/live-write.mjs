@@ -73,7 +73,7 @@ try {
   await page.getByRole('button', { name: 'Save' }).tap();
   const renamed = await until(async () => (await api.get('narrative', id)).name.includes('renamed') && api.get('narrative', id), 'the rename reaches keel');
   check(renamed.change_seq > created.change_seq, `rename landed (change_seq ${created.change_seq} to ${renamed.change_seq})`);
-  // keel #520: the phone's write names Lantern (EXPECT_CLIENT=lantern; 'none' for a build before SDK 4.56.0).
+  // keel: the phone's write names Lantern (EXPECT_CLIENT=lantern; 'none' for a build before SDK 4.56.0).
   if (process.env.EXPECT_CLIENT) {
     const want = process.env.EXPECT_CLIENT === 'none' ? null : process.env.EXPECT_CLIENT;
     check(created.changed_client === want && renamed.changed_client === want, `keel's changed_client: ${created.changed_client} on the create, ${renamed.changed_client} on the rename (expected ${want})`);

@@ -1,4 +1,4 @@
-// keel #393: the files OnlyWorlds holds on an element, read on its page, as a phone taps it, both
+// keel: the files OnlyWorlds holds on an element, read on its page, as a phone taps it, both
 // engines. A world file made to look like the owner's account world; keel routed: GET .../files
 // answers for one Character (two files, one an agent's) and an empty list for another, the download
 // link answers at the tap, every other call is cut off. Checks: a world on this phone only shows no

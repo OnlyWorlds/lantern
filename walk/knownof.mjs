@@ -1,4 +1,4 @@
-// keel's "known of" stub (keel PR 113, B16) on a player's phone, both engines, on a fake keel
+// keel's "known of" stub (B16) on a player's phone, both engines, on a fake keel
 // shaped by the live probe:
 // a player link opens The Reach as Tor, whose friend Ana comes as a stub. The list says "known of"
 // beside Ana and not beside Tor; Ana's page shows her name, description and the public fields keel
@@ -26,7 +26,7 @@ const KEY = 'ow_r_' + 'q'.repeat(30);
 
 // As keel serves them to Tor's player: Tor whole, Ana a stub (every field but the kept ones unset).
 const TOR_EL = { id: TOR, type: 'character', name: 'Tor', description: 'A ferryman.', supertype: '', subtype: '', image_url: '', physicality: 'Broad', friends: [ANA], species: [], created_at: '2026-10-20T10:00:00Z', updated_at: '2026-10-20T10:00:00Z', change_seq: 2, created_by: null, changed_by: null, changed_via: null };
-// After keel PR 117 (#448) a Character's public fields come with a stub: physicality, height, weight, species, reputation.
+// After keel (#448) a Character's public fields come with a stub: physicality, height, weight, species, reputation.
 const ANA_STUB = { id: ANA, type: 'character', name: 'Ana', description: 'Sells mules.', supertype: '', subtype: '', image_url: '', physicality: 'Tall', mentality: '', reputation: 'Honest', height: null, birth_date: null, location: null, friends: [], species: [], traits: [], created_at: '2026-10-20T10:00:00Z', updated_at: '2026-10-20T10:00:00Z', change_seq: 1, created_by: null, changed_by: null, changed_via: null, known_of: true };
 
 async function walk(engine, deviceName, tag) {

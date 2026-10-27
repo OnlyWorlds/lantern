@@ -1,4 +1,4 @@
-// The party link (keel #422 PR 2, keel PR 110 0cb5871): one player link for a table, each player
+// The party link (keel 0cb5871): one player link for a table, each player
 // picking a Character from the owner's list. The fake answers as PR 110's `_table_pick` and
 // `table_preview` do: the preview adds max_uses, uses_left, name_required and characters (owner's
 // order, taken by any live seat); the door takes `character` (off the list or hidden: 422

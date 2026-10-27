@@ -1,4 +1,4 @@
-// The party link (keel #422 PR 2, keel PR 110; Seethe's frame 5), as a phone taps it, both engines,
+// The party link (Seethe's frame 5), as a phone taps it, both engines,
 // on a fake keel shaped by PR 110's table_preview and _table_pick: "Who are you at this table?"
 // lists the owner's picks with the taken one greyed and last; Open waits for a pick and names it;
 // a pick taken a moment ago brings the list back from keel with a sentence and nothing spent; the

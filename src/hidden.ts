@@ -5,7 +5,7 @@
 //
 // Lantern shows a world to its holder, so a hidden element carries its word on a row and its page and
 // counts like any other. Ask and the sort hand the world to keel's AI, so there it is left out and
-// counted. Put it online sends the mark on the create, the only write keel takes it on (keel #587).
+// counted. Put it online sends the mark on the create, the only write keel takes it on.
 
 import { handsOnAsProposed, proposedWord } from './review';
 

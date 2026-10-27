@@ -92,7 +92,7 @@ class FakeAccountKeel {
         return this.json(200, { errors: false, items: body.items.map(() => ({ status: 201 })) });
       }
       // keel refuses a stub's flag as an unknown field (422, param known_of; probed live).
-      // keel #587 (probed live): `hidden: true` from a key that cannot hide is
+      // keel (probed live): `hidden: true` from a key that cannot hide is
       // a slot's 403 hidden_not_allowed; the slot never echoes the mark.
       const slots = body.items.map((it: { element: { id: string; known_of?: unknown; hidden?: unknown } }) =>
         'known_of' in it.element

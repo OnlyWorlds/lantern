@@ -979,7 +979,7 @@ function actionRow(s: WorldSession, el: OwElement, pictureWait: HTMLElement | nu
 
 /** Delete, last on the page and quiet: the sheet asks once (src/views/edit.ts `deleteSheet`). */
 /**
- * The files OnlyWorlds holds on this element (keel #393), each with Download. Read only on the
+ * The files OnlyWorlds holds on this element, each with Download. Read only on the
  * phone: adding and removing are Atlas's. Shown only once keel has answered with at least one,
  * so a page with none, or with no signal, has no section.
  */

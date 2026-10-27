@@ -1,5 +1,5 @@
-// keel's "known of" stubs (keel PR 113, B16; the folder spec §4.4) against a fake keel shaped by
-// the live probes (before and after keel PR 117): a stub keeps id, type, name,
+// keel's "known of" stubs (B16; the folder spec §4.4) against a fake keel shaped by
+// the live probes (before and after keel shared a Character's public fields): a stub keeps id, type, name,
 // description, supertype, subtype, image_url and the stamps, and a Character's public fields
 // (physicality, height, weight, species, reputation); every other field is served unset; its stamp does not move with its shape; a stub arriving or leaving answers
 // the old cursor 409 resync_required, reason view.

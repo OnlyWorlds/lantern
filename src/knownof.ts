@@ -1,4 +1,4 @@
-// keel's "known of" stubs (keel PR 113, B16; the folder spec §4.4 rules 1 to 5; Atlas's
+// keel's "known of" stubs (B16; the folder spec §4.4 rules 1 to 5; Atlas's
 // twin). A player reads what their own
 // Character points to, one step out; an element reached only that way comes as a stub,
 // `known_of: true`, with what anyone could see of it and every other field served unset. Those
@@ -9,7 +9,7 @@ import { isEmptyValue } from './schema';
 
 export { isKnownOf };
 
-/** The keys every stub keeps, set or not (keel PR 113, probed live; `change_seq` for the pull's newer-copy rule). */
+/** The keys every stub keeps, set or not (probed live; `change_seq` for the pull's newer-copy rule). */
 export const KNOWN_OF_KEPT_KEYS: readonly string[] = [
   'id', 'type', 'name', 'description', 'supertype', 'subtype', 'image_url', 'created_at', 'updated_at', 'change_seq',
 ];
@@ -19,7 +19,7 @@ const AUTHOR_KEYS: readonly string[] = ['created_by', 'changed_by', 'changed_via
 
 /**
  * Rule 1: a stub as it is, `known_of: true`, the kept keys and the fields keel shares on a stub
- * (keel #448, PR 117: a Character's physicality, height, weight, species and reputation, from a
+ * (PR 117: a Character's physicality, height, weight, species and reputation, from a
  * public tag in keel's schema). keel serves every other field unset, so a field with a value is
  * one keel shares: read from the wire, never from a list here that keel's schema can outgrow
  * (a list kept here once dropped PR 117's fields the hour it shipped). The unset fields are left out.

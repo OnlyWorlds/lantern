@@ -1,5 +1,5 @@
 // A player shares a note with the party, against a fake keel shaped by
-// keel #241 (elements/service.py, db48d30): a guest's Narrative is narrated by its own Character
+// keel (elements/service.py, db48d30): a guest's Narrative is narrated by its own Character
 // (filled in when left out, 422 when another is named), names only Collectives that Character is in
 // (any other answers as a missing link, 400), and a seat with no Character gets 403
 // guest_not_supported. A write needs the member's account PIN (401 without it).

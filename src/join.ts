@@ -58,7 +58,7 @@ export function isPlayerLink(p: JoinPreview): boolean {
 }
 
 /**
- * A table (keel #422 PR 2): a player link that seats several players, each picking a Character
+ * A table: a player link that seats several players, each picking a Character
  * from the owner's list. Its preview carries `max_uses`; a link for one has none of the four keys.
  */
 export function isTable(p: JoinPreview): boolean {
@@ -82,7 +82,7 @@ const LOST = 'The answer did not reach this phone. Try once more; if the link sa
  * Redeem a player link with no account: POST /join answers 201 with a read key shown
  * once (`kind: player`). The code is spent by keel's answer, so the key is kept before anything
  * else runs. SDK 4.30's keyless client sends no credential (Kael, 2026-10-16). On a table the
- * player's pick goes as `character` (keel #422 PR 2); a refusal spends nothing.
+ * player's pick goes as `character`; a refusal spends nothing.
  */
 export async function redeemPlayer(code: string, name?: string, table?: { character?: string }): Promise<{ worldId: string }> {
   let a;
@@ -101,7 +101,7 @@ export async function redeemPlayer(code: string, name?: string, table?: { charac
     if (e instanceof OwApiError && e.status === 422 && e.param === 'name') {
       throw new Error(opts.name ? 'That name is too long: keep it under 80 characters.' : 'Type your name: your Character takes it, and the game master sees it.');
     }
-    // The world's cap on players (keel PR 110, 422 world_full), from a table or a link for one.
+    // The world's cap on players (world_full), from a table or a link for one.
     if (e instanceof OwApiError && e.isWorldFull) throw new Error('This world is full: it has as many players as it can seat. Ask the game master to make room.');
     // No answer: the request may have reached keel and spent the code, so say both.
     if (e instanceof OwNetworkError) throw new Error(LOST);
@@ -128,7 +128,7 @@ export async function acceptJoin(code: string): Promise<JoinResult> {
       await fetchAccountWorlds(token).catch(() => undefined);
       return { already: true };
     }
-    // Accepting needs no PIN for any role since keel #297 (ed73c90): no pin_required branch here.
+    // Accepting needs no PIN for any role (keel ed73c90): no pin_required branch here.
     if (e instanceof OwApiError && e.isNotFound) {
       await setPendingJoin(undefined);
       throw new Error(DEAD);

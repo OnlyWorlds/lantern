@@ -97,7 +97,7 @@ describe('zones', () => {
     expect(zoneColor(el({ id: 'a', type: 'zone', atlas_color: '#3b82f6' }))).toBe('#3b82f6');
     expect(zoneColor(el({ id: 'b', type: 'zone', atlas_color: 'red; stroke:url(x)' }))).toBe('#22d3ee');
     // Five or seven digits is no colour at all: the outline would vanish (the gate, P7).
-    expect(zoneColor(el({ id: 'c', type: 'zone', atlas_color: '#12345' }))).toBe('#22d3ee');
+    expect(zoneColor(el({ id: 'c', type: 'zone', atlas_color: '#abcde' }))).toBe('#22d3ee');
     expect(zoneColor(el({ id: 'd', type: 'zone', atlas_color: '#3b82f680' }))).toBe('#3b82f680');
     expect(zoneColor(undefined)).toBe('#22d3ee');
   });

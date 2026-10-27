@@ -29,7 +29,7 @@ import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
-/** Lantern's name on every write (keel #520's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
+/** Lantern's name on every write (keel's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
 export const LANTERN_CLIENT_NAME = 'lantern';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
@@ -212,7 +212,7 @@ export class WorldSession {
   private fileSlots = new Map<string, { rows: OwFileRow[] | null; readAt: number; asking: boolean }>();
 
   /**
-   * The files keel holds on an element (keel #393, the SDK's listFiles on the world's own key),
+   * The files keel holds on an element (the SDK's listFiles on the world's own key),
    * for its page. Files are never in the phone's copy or /changes: asked when the page shows with
    * signal, kept for the session, asked again once a minute old; a redraw only when the list moved.
    * A refusal (an element keel does not hold yet) or no signal stays quiet: no list.
@@ -310,7 +310,7 @@ export class WorldSession {
   }
 
   /**
-   * A player's note shared with the party (keel #241): a Narrative from the player's key, through
+   * A player's note shared with the party: a Narrative from the player's key, through
    * the outbox like any change, so a note shared without signal goes when there is some. keel
    * fills in `narrator` (the player's own Character) and refuses any Collective theirs is not in.
    */
@@ -1132,13 +1132,13 @@ export class WorldSession {
         return true;
       }
       if (e.status === 403 && e.code === 'guest_not_supported') {
-        // A player's note with no Character of theirs to tell it (keel #241): only the owner can
+        // A player's note with no Character of theirs to tell it: only the owner can
         // fix that, so this row is refused and the key keeps working (sending again changes nothing).
         await keep('refused', 'You have no Character in this world to tell it. Ask your game master for one.');
         return false;
       }
       if (e.status === 403 && e.code === 'hidden_not_allowed') {
-        // keel takes a hidden create only from the owner or a co-builder (keel #587): this row is
+        // keel takes a hidden create only from the owner or a co-builder: this row is
         // refused, the key keeps working, and sending again changes nothing.
         await keep('refused', HIDDEN_REFUSAL);
         return false;
@@ -1152,13 +1152,13 @@ export class WorldSession {
       if (e.isBusy || e.status === 429 || e.status >= 500 || (e.status === 409 && e.code === 'upload_pending') || e.isIdempotencyInFlight) {
         // Busy, throttled (a wrong-PIN throttle included) or a server fault: wait, never refuse.
         // A create sent again while keel still runs its first try (a lost answer on bad signal)
-        // is 409 idempotency_in_flight (keel #307, D105; SDK 4.27): the same wait, keel says 1 s.
+        // is 409 idempotency_in_flight (D105; SDK 4.27): the same wait, keel says 1 s.
         await keep('waiting');
         this.retryLater((e.retryAfter ?? (e.status === 429 ? 60 : e.isIdempotencyInFlight ? 1 : 10)) * 1000);
         return true;
       }
       if (this.isPlayer && row.op === 'create' && row.type === 'narrative' && (e.status === 400 || e.status === 422)) {
-        // keel #241: a group the player's Character is not in answers as a missing link.
+        // keel: a group the player's Character is not in answers as a missing link.
         await keep('refused', 'Your Character is not in that group now. Ask your game master.');
         return false;
       }

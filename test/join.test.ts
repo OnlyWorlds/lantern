@@ -2,7 +2,7 @@
 // say: preview needs no credential and spends nothing; /account/join wants the account token,
 // 201 with the membership (world_id, role, roster_character), 404 for every bad code (one
 // message), 409 already_member with the code left unused. Accepting asks no PIN for any role
-// (keel #297, ed73c90), so the fake has no pin_required at the accept.
+// (ed73c90), so the fake has no pin_required at the accept.
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -54,7 +54,7 @@ class FakeKeel {
       if (!c || c.used) return this.notFound();
       return this.json(200, { reader: c.reader, world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: c.role, with_character: false, expires_at: '2026-10-19T00:00:00+00:00' });
     }
-    // keel PR 55 (accounts/join_api.py): a player code redeems with no credential, 201
+    // keel (accounts/join_api.py): a player code redeems with no credential, 201
     // PlayerJoined; the code is spent; a person's code here is the one 404.
     if (path === '/join' && method === 'POST') {
       this.redeemed.push({ body, credential: headers.has('Authorization') || headers.has('API-Key') });

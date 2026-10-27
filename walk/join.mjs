@@ -90,7 +90,7 @@ async function walk(engine, deviceName, tag) {
   const joinBtn = page.getByRole('button', { name: 'Join The Reach as walker', exact: true });
   check(tag, (await joinBtn.count()) === 1, 'signed in, the button says Join The Reach as walker (the account)');
 
-  // Already a member (accepting asks no PIN since keel #297, so there is no PIN step to walk)
+  // Already a member (accepting asks no PIN, so there is no PIN step to walk)
   await joinBtn.tap();
   await page.waitForFunction(() => [...document.querySelectorAll('.error')].some((e) => /already/.test(e.textContent)), null, { timeout: 10000 });
   check(tag, true, 'already in the world: said plainly');

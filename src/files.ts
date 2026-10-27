@@ -1,4 +1,4 @@
-// Files on an element (keel #393): how one reads on the page. Files live on OnlyWorlds only,
+// Files on an element: how one reads on the page. Files live on OnlyWorlds only,
 // never in the phone's copy or /changes; the session asks for them (WorldSession.files).
 import type { OwFileRow } from '@onlyworlds/sdk';
 

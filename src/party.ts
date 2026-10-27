@@ -37,7 +37,7 @@ export function partySize(party: OwElement | undefined): number {
 }
 
 /**
- * The Collectives a player may share a note with: those their Character is in (keel #241 refuses
+ * The Collectives a player may share a note with: those their Character is in (keel refuses
  * any other, as missing), the Party ones first. keel shows a player every Collective theirs is in.
  */
 export function circlesOf(elements: Iterable<OwElement>, characterId: string | null | undefined): OwElement[] {

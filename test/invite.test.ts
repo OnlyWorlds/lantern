@@ -47,7 +47,7 @@ class FakeKeel {
       // keel's cap on open invites (accounts/agents.py MAX_PENDING_INVITES): a 422 naming no field.
       if (this.capped) return this.json(422, { error: { code: 'invalid_request', message: 'Too many open invites.', param: null } });
       if (body.reader !== 'person' && body.reader !== 'agent' && body.reader !== 'player') return this.json(400, { error: { code: 'invalid', message: 'reader' } });
-      // keel #353 (agents.py create_pass): a player link is a guest's and names `new` or a Character keel holds.
+      // keel (agents.py create_pass): a player link is a guest's and names `new` or a Character keel holds.
       if (body.reader !== 'player' && body.character !== undefined) return this.json(422, { error: { code: 'invalid', param: 'character' } });
       if (body.reader === 'player' && body.role !== undefined && body.role !== 'guest') return this.json(422, { error: { code: 'invalid', param: 'role' } });
       if (body.reader === 'player' && body.character !== undefined && body.character !== 'new' && body.character !== HELD) {

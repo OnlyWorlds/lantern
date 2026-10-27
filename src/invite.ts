@@ -13,7 +13,7 @@ const SITE = new URL(API_BASE).origin;
 
 export const SIGNUP_URL = `${SITE}/accounts/signup/`;
 
-/** A world's page on onlyworlds.com, opened at Access: its own path, kept through the site's sign-in (keel PR 90). */
+/** A world's page on onlyworlds.com, opened at Access: its own path, kept through the site's sign-in. */
 export function accessUrl(worldId: string): string {
   return `${SITE}/account/worlds/${encodeURIComponent(worldId)}/access`;
 }

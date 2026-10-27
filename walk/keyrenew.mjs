@@ -1,6 +1,6 @@
 // Atlas's twin: a world whose key keel no longer knows, as a phone taps it, both engines.
 // An owner's account world on a write key keel answers as core/auth.py does for a deleted key since
-// keel #357: 401 invalid_credentials, param null. Checks: the home names the cause, never asks for a
+// keel: 401 invalid_credentials, param null. Checks: the home names the cause, never asks for a
 // PIN, and offers a new key; Put in a new key refuses a key for another world in the sheet; Make a
 // new key mints one from the account and the world reads again on it, the copy kept.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/keyrenew.mjs [webkit|chromium]

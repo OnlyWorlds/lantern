@@ -85,7 +85,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   // 3. Every element in one atomic /bulk: links are checked against the batch, nothing half-lands.
   onStep(`Sending ${elements.length} elements`);
   if (elements.length) {
-    // A hidden element goes up hidden (folder spec §4.8, keel #587): the mark as the boolean keel
+    // A hidden element goes up hidden (folder spec §4.8): the mark as the boolean keel
     // takes, and no key at all on any other, so a file's `false` or `null` is never sent.
     const items = elements.map((el) => ({
       type: el.type,

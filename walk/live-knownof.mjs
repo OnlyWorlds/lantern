@@ -66,7 +66,7 @@ try {
     const line = el.locator('[data-part="known-of"]');
     check((await line.count()) === 1 && (await line.innerText()) === 'Known of: you know only what anyone could see of Ana.', 'Ana says known of');
     check((await el.innerText()).includes('Sells mules at the crossing.'), "Ana's description shows");
-    // keel PR 117: physicality and reputation are public on a Character; mentality is not, so it never shows.
+    // keel: physicality and reputation are public on a Character; mentality is not, so it never shows.
     const fields = await el.locator('.frow[data-field]').evaluateAll((rs) => rs.map((r) => `${r.getAttribute('data-field')}=${r.querySelector('.v')?.textContent}`));
     check(JSON.stringify(fields) === JSON.stringify(['physicality=Tall', 'reputation=Honest']), `only what keel shares: ${JSON.stringify(fields)}`);
     check(!(await el.innerText()).includes('Sly'), 'her mentality (not shared) is nowhere on the page');

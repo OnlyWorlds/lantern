@@ -1,5 +1,5 @@
 // A player's own notes (src/notes.ts): written at the table, kept on this phone, and one at a time
-// shared with the party (Titus, 2026-10-14; keel #241).
+// shared with the party (Titus, 2026-10-14).
 import { typeLabel, typeCount } from '../schema';
 import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { mintPlayerKey } from '../account';

@@ -1,11 +1,11 @@
-// keel #520: every write names the app that made it. Lantern writes through the SDK, whose `client`
+// keel: every write names the app that made it. Lantern writes through the SDK, whose `client`
 // option (4.56.0, default 'sdk') sends X-OW-Client on element writes. A census of the source: every
 // OwV2Client Lantern builds passes LANTERN_CLIENT_NAME, so a new one cannot arrive unnamed.
 import { describe, expect, it } from 'vitest';
 import { globSync, readFileSync } from 'node:fs';
 import { LANTERN_CLIENT_NAME } from '../src/world';
 
-describe('the client name (keel #520)', () => {
+describe('the client name', () => {
   it('is a name keel takes: lower case, digits and hyphens, 1 to 32', () => {
     expect(LANTERN_CLIENT_NAME).toMatch(/^[a-z0-9-]{1,32}$/);
   });

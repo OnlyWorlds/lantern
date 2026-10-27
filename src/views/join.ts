@@ -80,7 +80,7 @@ export async function joinView(given?: string | null): Promise<HTMLElement> {
 
   // A player link: no account and no PIN, a name if they like, then the world opens
   // to read as the Character the game master gave them.
-  // A table (keel #422 PR 2, Seethe's frame 5): one link for several players, each picking who they
+  // A table (Seethe's frame 5): one link for several players, each picking who they
   // are from the owner's list; a table with no list asks each player's name for a fresh Character.
   const showPlayer = (code: string, p: JoinPreview, who: string, until: string, said = '') => {
     const table = isTable(p);

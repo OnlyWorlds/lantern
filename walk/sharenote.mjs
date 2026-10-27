@@ -1,4 +1,4 @@
-// Share with the party (keel #241), as a player taps it, both engines.
+// Share with the party, as a player taps it, both engines.
 // A world file made to look like a player's account world (a read key, a guest with a Character in
 // The Party); keel routed: the key mint, the PIN read and the Narrative's POST are answered as keel
 // answers them, every other call is cut off. Checks: the player's screens stay read only; the first
@@ -123,7 +123,7 @@ async function walk(engine, deviceName, tag) {
     if (req.method() === 'POST' && path === '/narrative') {
       const body = req.postDataJSON();
       notes.push({ body, key: auth, pin: req.headers()['api-pin'] });
-      // keel #241: the narrator filled in with the player's own Character.
+      // keel: the narrator filled in with the player's own Character.
       return json(201, { ...body, narrator: body.narrator ?? MIRA, type: 'narrative', change_seq: ++seq, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     }
     return r.abort();

@@ -38,7 +38,7 @@ class FakeKeel {
   keyGone: 'key_revoked' | 'invalid_credentials' | null = null;
   /** The next write answers this error instead. */
   nextError: { status: number; code: string } | null = null;
-  /** Set: this key may not create an element hidden (a member, keel #587). */
+  /** Set: this key may not create an element hidden (a member). */
   cannotHide = false;
   /** A walk from zero fails (a resync whose walk drops). */
   failZeroWalk = false;
@@ -79,7 +79,7 @@ class FakeKeel {
     // keel resolves the key before the PIN (core/auth.py): a revoked key is key_revoked, a key it
     // no longer knows (a removed member's, a deleted world's) invalid_credentials with no param.
     if (this.keyGone) return this.err(401, this.keyGone);
-    // A PIN refusal names its header since keel #357 (param API-Pin).
+    // A PIN refusal names its header (param API-Pin).
     const sentPin = headers.get('API-Pin');
     if (sentPin && sentPin !== this.pin) return this.err(401, 'invalid_credentials', {}, 'API-Pin');
     if (method !== 'GET' && !sentPin) return this.err(401, 'invalid_credentials', {}, 'API-Pin');
@@ -124,7 +124,7 @@ class FakeKeel {
         this.nextError = null;
         return this.err(e.status, e.code);
       }
-      // keel #587: a create carrying hidden: true from a key that cannot hide (probed live).
+      // keel: a create carrying hidden: true from a key that cannot hide (probed live).
       if (this.cannotHide && method === 'POST' && body.hidden === true) return this.err(403, 'hidden_not_allowed');
     }
     const answer = (r: Response): Response => {
@@ -598,7 +598,7 @@ describe('outbox', () => {
     const id = await s.create('narrative', { name: 'A page' });
     await s.flush(); // the create's own flush, while offline
     keel.offline = false;
-    keel.nextError = { status: 409, code: 'idempotency_in_flight' }; // keel #307, D105
+    keel.nextError = { status: 409, code: 'idempotency_in_flight' }; // keel's answer while the first is still running
     await s.flush();
     expect(s.outbox.length).toBe(1);
     expect(s.outbox[0].state).toBe('waiting');
@@ -936,7 +936,7 @@ describe('a key keel no longer takes (as in Atlas)', () => {
     }
   });
 
-  it('a wrong PIN is still the PIN: cleared and asked again (keel #357 names API-Pin)', async () => {
+  it('a wrong PIN is still the PIN: cleared and asked again (keel names API-Pin)', async () => {
     keel.put({ id: 'a', type: 'character', name: 'Ada' });
     const s = await freshWorld('owner');
     await s.pull();
