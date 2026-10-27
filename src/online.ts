@@ -11,9 +11,12 @@ import { uuid7 } from './uuid7';
 import { moveDraft } from './draft';
 import { isKnownOf } from './knownof';
 import { withHiddenForCreate } from './hidden';
+import { SERVED_TRIMMED } from './schema';
 
 export const BULK_MAX = 1000;
-const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by'];
+// `x_served_trimmed` is keel's word on a body it served in part: kept in a world file, never sent up
+// (keel refuses it with a 422; folder spec §4.4 rule 6).
+const SERVER_OWNED = ['type', 'change_seq', 'created_at', 'updated_at', 'created_by', SERVED_TRIMMED];
 
 /** A data: address as its picture, read in place: the host's connect-src refuses a fetch of one. */
 export function dataUrlBlob(url: string): Blob {

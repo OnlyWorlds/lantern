@@ -9,6 +9,12 @@ import * as db from '../src/db';
 import type { OwElement } from '@onlyworlds/sdk';
 
 describe('custom fields', () => {
+  it("keel's served-trimmed mark is never a person's field: not listed, not offered as a name (folder spec §4.4 rule 6)", () => {
+    const el = { id: 'n', type: 'narrative', name: 'Orders', x_mood: 'grim', x_served_trimmed: ['characters'] };
+    expect(customFields(el)).toEqual(['x_mood']);
+    expect(customFieldProblem(el, 'x_served_trimmed')).toMatch(/OnlyWorlds uses that name/);
+  });
+
   it('are the x_ and shadow_ keys with a value, never atlas_ ones or a bare prefix', () => {
     const el = { id: '1', type: 'character', name: 'Ada', x_mood: 'grim', shadow_true_name: 'Ash', x_gone: null, atlas_aliases: ['A'], x_: 'odd', description: 'd' };
     expect(customFields(el)).toEqual(['x_mood', 'shadow_true_name']);

@@ -94,9 +94,13 @@ class FakeAccountKeel {
       // keel refuses a stub's flag as an unknown field (422, param known_of; probed live).
       // keel (probed live): `hidden: true` from a key that cannot hide is
       // a slot's 403 hidden_not_allowed; the slot never echoes the mark.
+      // keel refuses a body carrying its served-trimmed mark (422 served_trimmed_not_writable; the SDK's
+      // isServedTrimmedNotWritable, folder spec §4.4 rule 6).
       const slots = body.items.map((it: { element: { id: string; known_of?: unknown; hidden?: unknown } }) =>
         'known_of' in it.element
           ? { status: 422, error: { code: 'invalid_request', message: 'Unknown field: known_of' } }
+          : 'x_served_trimmed' in it.element
+            ? { status: 422, error: { code: 'served_trimmed_not_writable', message: 'x_served_trimmed is served only.' } }
           : this.cannotHide && it.element.hidden === true
             ? { status: 403, error: { code: 'hidden_not_allowed', message: 'Only the owner and co-builders can create an element hidden.' } }
             : this.otherWorldIds.has(it.element.id) ? { status: 409, error: { code: 'id_conflict', message: 'id' } } : { status: 201, id: it.element.id },
@@ -209,6 +213,20 @@ describe('put it online', () => {
     expect(sent.get(ids[2])).not.toHaveProperty('hidden');
     expect(sent.get(ids[3])).not.toHaveProperty('hidden');
     expect(keel.worlds.get(id)!.els.size).toBe(4);
+  });
+
+  it('a message served in part goes up without its trimmed mark, the list it names kept (folder spec §4.4 rule 6)', async () => {
+    keel.accountPin = '4321';
+    const ids = ['e1000000-0000-7000-8000-000000000021', 'e1000000-0000-7000-8000-000000000022'];
+    const local = await localWorld([
+      { id: ids[0], type: 'character', name: 'Wren' },
+      { id: ids[1], type: 'narrative', name: 'Orders', supertype: 'Message', characters: [ids[0]], x_served_trimmed: ['characters'] },
+    ]);
+    const id = await putOnline(local, '4321');
+    const sent = new Map(keel.sentBodies.map((b) => [b.id, b]));
+    expect(sent.get(ids[1])).not.toHaveProperty('x_served_trimmed');
+    expect(sent.get(ids[1])?.characters).toEqual([ids[0]]);
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
   });
 
   it("a key keel will not take a hidden element from: said, nothing sent, the phone copy stays", async () => {
