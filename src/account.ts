@@ -282,6 +282,38 @@ async function takeOver(existing: db.WorldRecord | undefined, key?: string): Pro
 }
 
 /**
+ * Every key Lantern mints is one the phone keeps: keel's sweep of a revoked token's keys passes it
+ * by, so Sign out lets go of the account and the worlds on the phone keep working. The key goes
+ * where its world leaves the phone (`takeBackDeviceKey`).
+ */
+export const KEPT = { keep: true } as const;
+
+/**
+ * A world leaving the phone takes back the key Lantern made for it, by the id kept at its mint and
+ * only while it is still that key. Quiet and bounded: offline or refused, the key stays listed on
+ * the account's keys page, where it can be removed.
+ */
+export async function takeBackDeviceKey(rec: db.WorldRecord | undefined): Promise<boolean> {
+  const id = rec ? mintedTokenId(rec.apiKey, rec.keyMint) : undefined;
+  const token = await accountToken();
+  if (!rec || !id || !token) return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      accountClient(token).request('DELETE', `/account/worlds/${rec.id}/keys/${encodeURIComponent(id)}`),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), 8000);
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Open an account world on this phone: mint its own key, then keep the world record. `askedFor`: the
  * token a question about this world was asked under; another sign-in since refuses before any key.
  */
@@ -298,10 +330,10 @@ export async function openAccountWorld(w: AccountWorld, askedFor?: string): Prom
   let key: { key: string; scope: string; id?: string };
   const scope = w.member_role === 'guest' ? 'read' : 'write';
   try {
-    key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope, name } });
+    key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope, name, ...KEPT } });
   } catch (e) {
     if (scope === 'write' && (e as { code?: string }).code === 'pin_required') {
-      key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope: 'read', name } });
+      key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope: 'read', name, ...KEPT } });
     } else throw e;
   }
   const rec: db.WorldRecord = {
@@ -353,7 +385,7 @@ export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
   const c = accountClient(token);
   let key: { key: string; id?: string };
   try {
-    key = await c.request('POST', `/account/worlds/${rec.id}/keys`, { body: { scope: 'write', name: `Lantern on ${deviceName()}` } });
+    key = await c.request('POST', `/account/worlds/${rec.id}/keys`, { body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT } });
   } catch (e) {
     if ((e as { code?: string }).code === 'pin_required') throw new Error(NO_PIN_YET);
     throw e;
@@ -390,7 +422,7 @@ export async function renewWorldKey(rec: db.WorldRecord, cause: 'key_revoked' | 
       : `${rec.name} is not on the account this phone is signed in to, so Lantern can't make its key. Put in a key from the world's page on onlyworlds.com.`);
   }
   const c = accountClient(token);
-  const mint = (scope: 'write' | 'read') => c.request<{ key: string; id?: string }>('POST', `/account/worlds/${rec.id}/keys`, { body: { scope, name: `Lantern on ${deviceName()}` } });
+  const mint = (scope: 'write' | 'read') => c.request<{ key: string; id?: string }>('POST', `/account/worlds/${rec.id}/keys`, { body: { scope, name: `Lantern on ${deviceName()}`, ...KEPT } });
   let key: { key: string; id?: string };
   if (listed.member_role === 'guest') key = await mint('read');
   else {
@@ -450,7 +482,7 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
   try {
     key = (
       await accountClient(token).request<{ key: string }>('POST', `/account/worlds/${worldId}/keys`, {
-        body: { scope: 'write', name: `Lantern on ${deviceName()}` },
+        body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT },
       })
     ).key;
   } catch (e) {

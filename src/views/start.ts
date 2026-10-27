@@ -15,6 +15,7 @@ import {
   signInWithPassword,
   signOut,
   signedOutLine,
+  takeBackDeviceKey,
   type AccountWorld,
 } from '../account';
 import type { RevokeOutcome } from '../revoke';
@@ -774,6 +775,8 @@ async function saySignedOut(revoking: Promise<RevokeOutcome> | null, rest: strin
 }
 
 export async function removeWorldFromPhone(id: string): Promise<void> {
+  // The key Lantern made for it goes first, while the account is still signed in.
+  await takeBackDeviceKey(await db.getWorldRecord(id));
   forgetSession(id);
   // A world opened with a key takes its own PIN with it; your account's PIN stays for your other worlds.
   setPin({ id }, undefined);

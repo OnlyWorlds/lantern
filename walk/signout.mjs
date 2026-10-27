@@ -40,6 +40,13 @@ async function walk(engine, tag) {
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
   // keel never reached: the fake token would be refused, and nothing here needs it.
   await page.route('**/api/v2/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) }));
+  // A world leaving the phone takes back the key Lantern made for it (keel's DELETE, 204).
+  const keyDeletes = [];
+  await page.route(/\/api\/v2\/account\/worlds\/[^/]+\/keys\/[^/]+$/, (r) => {
+    if (r.request().method() !== 'DELETE') return r.fallback();
+    keyDeletes.push(new URL(r.request().url()).pathname.replace('/api/v2', ''));
+    return r.fulfill({ status: 204, body: '' });
+  });
 
   for (const [id, name] of [[MINE, 'My world'], [LENT, 'Lent world']]) {
     await page.goto(`${BASE}/#/worlds`);
@@ -56,7 +63,8 @@ async function walk(engine, tag) {
           const t = r.result.transaction(['worlds', 'kv'], 'readwrite');
           const st = t.objectStore('worlds');
           const a = st.get(mine);
-          a.onsuccess = () => st.put({ ...a.result, kind: 'online', role: 'owner', apiKey: 'ow_w_' + 'm'.repeat(30), keyKind: 'write' });
+          // The key Lantern made for it, with the id kept at its mint (its last eight beside the id).
+          a.onsuccess = () => st.put({ ...a.result, kind: 'online', role: 'owner', apiKey: 'ow_w_' + 'm'.repeat(30), keyKind: 'write', keyMint: { id: '0f0f0f0f-0000-4000-8000-00000000c0de', tail: 'm'.repeat(8) } });
           const b = st.get(lent);
           b.onsuccess = () => st.put({ ...b.result, kind: 'online', apiKey: 'ow_r_' + 'l'.repeat(30), keyKind: 'read' });
           t.objectStore('kv').put('ow_a_' + 'w'.repeat(40), 'accountToken');
@@ -101,6 +109,11 @@ async function walk(engine, tag) {
   check(tag, JSON.stringify(left) === JSON.stringify({ worlds: ['Lent world'], token: null }), `signed out, the account's world gone, the lent one kept (${JSON.stringify(left)})`);
   const gone = await page.evaluate((id) => indexedDB.databases?.().then((ds) => ds.some((d) => d.name === `lantern-world-${id}`)) ?? 'unknown', MINE);
   check(tag, gone === false || gone === 'unknown', `its copy and outbox are gone too (${gone})`);
+  check(
+    tag,
+    JSON.stringify(keyDeletes) === JSON.stringify([`/account/worlds/${MINE}/keys/0f0f0f0f-0000-4000-8000-00000000c0de`]),
+    `the key Lantern made for it is taken back by its id, and nothing of the lent world (${JSON.stringify(keyDeletes)})`,
+  );
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }
