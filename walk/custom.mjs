@@ -40,6 +40,7 @@ const zip = Buffer.from(
           x_gone: null,
           x_identity_key: '019a1f3c-2b4e-7d10-8c3a-6f2e9b0d4a71',
           atlas_aliases: ['The ferrywoman'],
+          x_served_trimmed: ['characters'],
           physicality: 'Broad hands, a boatman’s back.',
         }),
       },
@@ -83,6 +84,7 @@ async function walk(engine, tag) {
   check(tag, got.some((r) => r[1] === 'Height cm' && r[2] === '172') && got.some((r) => r[1] === 'Tags' && r[2] === 'harbour, night'), 'named without the prefix; a list reads as one line');
   const text = await page.locator('main').innerText();
   check(tag, !/ferrywoman/i.test(text.replace('A ferrywoman.', '')) && !/aliases|Gone/i.test(text), "Atlas's machinery (atlas_aliases) and a deleted field (null) never show");
+  check(tag, !/served trimmed/i.test(text), "keel's trimmed mark (x_served_trimmed) never shows as a field");
   await page.locator('main').screenshot({ path: `${OUT}/custom-${tag}-01-page.png` });
 
   // Text: the row opens the sheet; the value changes on screen.
@@ -178,6 +180,11 @@ async function walk(engine, tag) {
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
   const spine = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
   check(tag, /spine/.test(spine) && (await page.locator('.frow[data-field=x_spine_status]').count()) === 0, `a spine key's name is refused (${JSON.stringify(spine)})`);
+  // keel's trimmed mark is OnlyWorlds' word, never a field to add.
+  await page.locator('.sheet input[aria-label="Field name"]').fill('Served trimmed');
+  await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
+  const trimmedSaid = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
+  check(tag, /its own mark/.test(trimmedSaid), `the trimmed mark's name is refused (${JSON.stringify(trimmedSaid)})`);
   await page.locator('.sheet input[aria-label="Field name"]').fill('Eye colour');
   await page.locator('.sheet textarea[aria-label="Value"]').fill('grey');
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
