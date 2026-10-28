@@ -57,11 +57,11 @@ describe('the room', () => {
   });
 });
 
-// schema-dist's room profile (v0.33.0-dist.66, profiles/room.fixture.json, copied whole): the
+// schema-dist's room profile (v0.33.0-dist.83, profiles/room.fixture.json, copied whole): the
 // conformance cases every reader of the room answers, until the SDK's export replaces this copy.
 import fixture from './fixtures/room.fixture.json';
 
-describe("the room profile's cases (dist.66)", () => {
+describe("the room profile's cases (dist.83)", () => {
   it('holds the profile pairs, no more, no less', () => {
     const want = fixture.pairs.map((p) => `${p.type}/${p.supertype.toLowerCase()}`).sort();
     expect(ROOM_SUPERTYPES.map(([t, w]) => `${t}/${w}`).sort()).toEqual(want);

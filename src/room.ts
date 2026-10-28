@@ -15,10 +15,10 @@ import { ROOM_PAIRS, isRoomElement as sdkIsRoomElement, type OwElement } from '@
 /** The room profile's pairs as the SDK carries them (4.55.0, generated from the profile), lower-cased. */
 export const ROOM_SUPERTYPES: ReadonlyArray<readonly [string, string]> = ROOM_PAIRS.map((p) => [p.type, p.supertype.toLowerCase()] as const);
 
-/** The SDK's rule (4.55.0): the pair, trimmed and case-folded, AND the mark. A body whose type, supertype or mark is not a string is lore. */
+/** The SDK's rule (4.100.0, serial 83): the pair, trimmed and case-folded, AND the mark by presence (not null, a string only when something is left after trimming, any other value present). A body whose type or supertype is not a string is lore. */
 export function isRoomElement(el: OwElement): boolean {
   const r = el as Record<string, unknown>;
-  if (typeof r.type !== 'string' || typeof r.supertype !== 'string' || typeof r.x_room_of !== 'string') return false;
+  if (typeof r.type !== 'string' || typeof r.supertype !== 'string') return false;
   return sdkIsRoomElement({ type: r.type, supertype: r.supertype, x_room_of: r.x_room_of });
 }
 

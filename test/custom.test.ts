@@ -108,5 +108,13 @@ describe('custom fields', () => {
     expect(customFieldProblem({ id: '1', type: 'object' }, customFieldKey('Spine status'))).toMatch(/spine/i);
     expect(isProfileField('x_spine_depends_on')).toBe(true);
     expect(isProfileField('x_spines')).toBe(false);
+    // And a lens (dist.74's lens profile: the recipe key whole, its prefix) and a charter's mark (dist.83).
+    expect(customFieldProblem({ id: '1', type: 'construct' }, customFieldKey('Lens'))).toMatch(/lens/i);
+    expect(isProfileField('x_lens')).toBe(true);
+    expect(isProfileField('x_lens_note')).toBe(true);
+    expect(isProfileField('x_lenses')).toBe(false);
+    expect(customFieldProblem({ id: '1', type: 'law' }, customFieldKey('Charter of'))).toMatch(/charter/i);
+    expect(isProfileField('x_charter_of')).toBe(true);
+    expect(isProfileField('x_charters')).toBe(false);
   });
 });

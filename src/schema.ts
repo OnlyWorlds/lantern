@@ -168,14 +168,17 @@ export function isCustomField(field: string): boolean {
 // elements and where it came from; x_review_ (profiles/review.md, dist.37; Skeld, 2026-10-22) a new
 // element's proposed mark and its last check; x_room_ (profiles/room.md, dist.45) the parlor's mark on
 // what its room makes; x_checks_ (profiles/checks.md, dist.47) a work world's rules on its Charter;
-// x_spine_ (profiles/spine.md, dist.55) a software ecosystem's rows: the same rule, as Atlas reserves them.
-const PROFILE_PREFIXES = ['x_identity_', 'x_packet_', 'x_review_', 'x_room_', 'x_checks_', 'x_spine_'];
+// x_spine_ (profiles/spine.md, dist.55) a software ecosystem's rows; x_lens_ (profiles/lens.md, dist.74)
+// beside a lens's recipe x_lens itself; x_charter_ (profiles/charter.md, dist.83) a reading aid's mark:
+// the same rule, as Atlas reserves them.
+const PROFILE_PREFIXES = ['x_identity_', 'x_packet_', 'x_review_', 'x_room_', 'x_checks_', 'x_spine_', 'x_charter_', 'x_lens_'];
+const PROFILE_NAMES = ['x_lens'];
 
 // keel's word on a body it served in part (folder spec §4.4 rule 6): kept, never a person's field.
 export const SERVED_TRIMMED = 'x_served_trimmed';
 
 export function isProfileField(field: string): boolean {
-  return PROFILE_PREFIXES.some((p) => field.startsWith(p));
+  return PROFILE_NAMES.includes(field) || PROFILE_PREFIXES.some((p) => field.startsWith(p));
 }
 
 /** The element's custom fields, by label; null is a deleted one (Atlas's tombstone), never shown. */
@@ -213,7 +216,7 @@ export function customFieldProblem(el: { type: string; [k: string]: unknown }, k
   if (!key) return 'Give the field a name.';
   if (key.startsWith('atlas_')) return 'Names starting with atlas_ are kept for Atlas. Pick another.';
   if (key === SERVED_TRIMMED) return 'OnlyWorlds uses that name for its own mark. Pick another.';
-  if (isProfileField(key)) return "That name is kept for a field other tools read (an identity key, a work packet, a review mark, the parlor's mark, a world's checks or a spine's rows). Pick another.";
+  if (isProfileField(key)) return "That name is kept for a field other tools read (an identity key, a work packet, a review mark, the parlor's mark, a world's checks, a spine's rows, a lens or a charter's mark). Pick another.";
   const bare = key.replace(/^(x_|shadow_)/, '');
   if (BASE_FIELDS.includes(bare) || fieldInfo(el.type, bare)) return `${fieldLabel(bare)} is already a field of every ${typeLabel(el.type)}: use that one.`;
   if (el[key] !== undefined && el[key] !== null) return `${fieldLabel(key)} is already on this ${typeLabel(el.type)}.`;
