@@ -1,10 +1,10 @@
 // The frames' cleanup (#388): the scratch world deleted on the site by its id (its name read on the
-// delete page first), each phone's own account token revoked (the row whose last four match the
-// token the phone holds), the L17 read key gone with the world, the site signed out.
-// Every revoke is read back as a 401.
+// delete page first), each phone's own account token revoked by the id Lantern recorded from its mint
+// (kv accountTokenMint, beside the token's last eight characters; never a row picked from a list), the
+// world's keys gone with the world, the site signed out. Every revoke is read back as a 401.
 //
 //   CREW_FILE=<crew accounts file> FRAMES_STATE=<scratch dir> node walk/frames-cleanup.mjs [--go --keys | --go]
-// Without --go it only lists. --go --keys: the world keys and the two tokens; --go: the world and the site session.
+// Without --go it only lists. --go --keys: the two tokens; --go: the world (and its keys) and the site session.
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,41 +22,33 @@ async function phoneToken(who) {
   await page.waitForSelector('[data-screen]');
   const token = await page.evaluate(async () => {
     const db = await new Promise((res, rej) => { const r = indexedDB.open('lantern'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-    return new Promise((res) => { const q = db.transaction('kv').objectStore('kv').get('accountToken'); q.onsuccess = () => res(q.result); });
+    const get = (k) => new Promise((res) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); });
+    return { token: await get('accountToken'), mint: await get('accountTokenMint') };
   });
   await ctx.close();
-  return token;
+  const { mint } = token;
+  const id = typeof token.token === 'string' && mint && typeof mint.tail === 'string' && mint.tail.length === 8 && token.token.endsWith(mint.tail) ? mint.id : null;
+  return { token: token.token, id };
 }
 const call = (token, method, p) => fetch(`${API}${p}`, { method, headers: { Authorization: `Bearer ${token}` } });
 
-const tokens = { owner: await phoneToken('owner'), friend: await phoneToken('friend') };
-const rows = {};
-for (const [who, t] of Object.entries(tokens)) {
-  const r = await call(t, 'GET', '/account/tokens');
-  const list = (await r.json()).data ?? [];
-  rows[who] = list.filter((x) => !x.revoked && x.last4 === t.slice(-4));
-  console.log(who, r.status, "this phone's own token:", rows[who].map((x) => `${x.id} ${x.name} ...${x.last4}`));
-}
+const phones = { owner: await phoneToken('owner'), friend: await phoneToken('friend') };
+for (const [who, ph] of Object.entries(phones)) console.log(who, "this phone's own token, by its recorded id:", ph.id ?? 'none recorded');
+const tokens = { owner: phones.owner.token, friend: phones.friend.token };
 const w = await call(tokens.owner, 'GET', '/account/worlds');
 console.log('b holds', ((await w.json()).data ?? []).map((x) => `${x.id.slice(0, 8)} ${x.name}`));
 const keys = await call(tokens.owner, 'GET', `/account/worlds/${state.worldId}/keys`);
 const worldKeys = keys.ok ? ((await keys.json()).data ?? []).filter((k) => !k.revoked) : [];
-console.log('world keys', keys.status, worldKeys.map((k) => `${k.id} ${k.name ?? ''} ${k.scope ?? ''}`));
+console.log('world keys (listed only: the world\'s delete takes them)', keys.status, worldKeys.map((k) => `${k.id} ${k.name ?? ''} ${k.scope ?? ''}`));
 if (!GO) process.exit(0);
 
-// The world's keys (the copy's own was revoked when it was made, so every live one is this walk's),
-// then each phone's token, the phone's own last.
+// Each phone's token, by the id its mint answered with.
 if (process.argv.includes('--keys')) {
-  for (const k of worldKeys) {
-    const r = await call(tokens.owner, 'DELETE', `/account/worlds/${state.worldId}/keys/${k.id}`);
-    console.log('world key revoked', k.name ?? k.id, r.status);
-  }
-  for (const [who, t] of Object.entries(tokens)) {
-    for (const x of rows[who]) {
-      const r = await call(t, 'DELETE', `/account/tokens/${x.id}`);
-      console.log('revoke', who, x.name, r.status);
-    }
-    const check = await call(t, 'GET', '/account/worlds');
+  for (const [who, ph] of Object.entries(phones)) {
+    if (!ph.id) { console.log('revoke', who, 'nothing: no recorded id beside the token'); continue; }
+    const r = await call(ph.token, 'DELETE', `/account/tokens/${encodeURIComponent(ph.id)}`);
+    console.log('revoke', who, ph.id, r.status);
+    const check = await call(ph.token, 'GET', '/account/worlds');
     console.log(who, 'token now answers', check.status);
   }
   process.exit(0);

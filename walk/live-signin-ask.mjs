@@ -1,8 +1,10 @@
 // Live receipts for Ask in a sentence and the password sign-in: on the live lantern.onlyworlds.com,
 // a crew account signs in with email and password (keel's app login), opens a scratch world
 // of its own, and asks it one question through keel's /account/ask. The scratch world and
-// its two elements are made over the API first; every token and key made here is listed at the end
-// for the cleanup step (`--cleanup <worldId>`), which revokes them.
+// its two elements are made over the API first. Every token and world key made here is recorded by the
+// id keel answered its mint with, in walk/shots/live-signin-ask/minted.json (ids only, never a secret),
+// and the cleanup step (`--cleanup`) revokes those ids alone and reads each back; it never picks a row
+// from a list. The scratch world is deleted on the site (its name typed), which takes its keys with it.
 //
 // Run from tools/lantern: CREW_FILE=<the crew accounts file> node walk/live-signin-ask.mjs [crew-walk-b]
 // Credentials are read from CREW_FILE at run time and never printed.
@@ -21,6 +23,12 @@ const acct = process.argv.find((a) => a.startsWith('crew-walk-')) ?? 'crew-walk-
 const lines = fs.readFileSync(process.env.CREW_FILE, 'utf8').split(/\r?\n/);
 const [, email, password] = lines.find((l) => l.startsWith(`${acct} `) && l.includes('@')).trim().split(/\s+/);
 const pin = lines.find((l) => l.startsWith(`${acct} PIN`)).trim().split(/\s+/)[2];
+const MINTED = path.join(OUT, 'minted.json');
+const record = (row) => {
+  const all = fs.existsSync(MINTED) ? JSON.parse(fs.readFileSync(MINTED, 'utf8')) : [];
+  all.push(row);
+  fs.writeFileSync(MINTED, JSON.stringify(all, null, 2));
+};
 
 async function setupToken(name) {
   const res = await fetch(`${AUTH}/auth/login`, {
@@ -31,38 +39,47 @@ async function setupToken(name) {
   const t = await fetch(`${API}/account/tokens`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Session-Token': session }, body: JSON.stringify({ name }),
   });
-  const token = (await t.json()).token;
+  const j = await t.json();
   await fetch(`${AUTH}/auth/session`, { method: 'DELETE', headers: { 'X-Session-Token': session } });
-  if (!token) throw new Error(`token refused: ${t.status}`);
-  return token;
+  if (!j.token || !j.id) throw new Error(`token refused: ${t.status}`);
+  return { token: j.token, id: j.id };
 }
 
 const account = (token) => new OwV2Client({ apiKey: token, baseUrl: API });
 
 if (process.argv.includes('--cleanup')) {
-  const worldId = process.argv[process.argv.indexOf('--cleanup') + 1];
-  const token = await setupToken('temper 159 cleanup');
-  const c = account(token);
-  if (worldId) {
-    const keys = await c.request('GET', `/account/worlds/${worldId}/keys`);
-    for (const k of keys.data ?? []) {
-      await c.request('DELETE', `/account/worlds/${worldId}/keys/${k.id}`);
-      console.log('world key revoked', k.id, k.name ?? '');
-    }
+  const rows = fs.existsSync(MINTED) ? JSON.parse(fs.readFileSync(MINTED, 'utf8')) : [];
+  if (!rows.length) { console.log('cleanup: nothing recorded in', MINTED); process.exit(0); }
+  // The cleanup's own token is recorded first, so a run that dies here is still cleaned by the next.
+  const own = await setupToken('temper 159 cleanup');
+  record({ kind: 'token', id: own.id });
+  const auth = { Authorization: `Bearer ${own.token}` };
+  const left = [];
+  for (const r of rows) {
+    const url = r.kind === 'key' ? `${API}/account/worlds/${r.world}/keys/${encodeURIComponent(r.id)}` : `${API}/account/tokens/${encodeURIComponent(r.id)}`;
+    const del = await fetch(url, { method: 'DELETE', headers: auth, signal: AbortSignal.timeout(15000) });
+    console.log(`${r.kind} ${r.id} revoked by its recorded id: DELETE ${del.status}`);
+    if (![204, 404].includes(del.status)) left.push(r);
   }
-  const tokens = await c.request('GET', '/account/tokens');
-  const mine = (tokens.data ?? []).filter((t) => /^temper 159|^Lantern on /.test(t.name ?? ''));
-  // This run's own token goes last, so the loop keeps its credential to the end.
-  mine.sort((a, b) => (a.name === 'temper 159 cleanup') - (b.name === 'temper 159 cleanup'));
-  for (const t of mine) {
-    await c.request('DELETE', `/account/tokens/${t.id}`);
-    console.log('account token revoked', t.id, t.name);
+  // Read back: every recorded token row is revoked (keel lists revoked rows with the flag) or gone.
+  const listed = (await (await fetch(`${API}/account/tokens`, { headers: auth, signal: AbortSignal.timeout(15000) })).json()).data ?? [];
+  for (const r of rows.filter((x) => x.kind === 'token')) {
+    const row = listed.find((t) => t.id === r.id);
+    if (row && !row.revoked) { console.log(`FAIL token ${r.id} still live`); left.push(r); }
   }
+  const delOwn = await fetch(`${API}/account/tokens/${encodeURIComponent(own.id)}`, { method: 'DELETE', headers: auth, signal: AbortSignal.timeout(15000) });
+  const after = await fetch(`${API}/account`, { headers: auth, signal: AbortSignal.timeout(15000) });
+  console.log(`cleanup's own token: DELETE ${delOwn.status}, then GET /account ${after.status}`);
+  if (after.status !== 401) left.push({ kind: 'token', id: own.id });
+  if (left.length) { fs.writeFileSync(MINTED, JSON.stringify(left, null, 2)); console.log('FAIL kept for the next cleanup:', left.map((r) => r.id).join(', ')); process.exit(1); }
+  fs.rmSync(MINTED);
   process.exit(0);
 }
 
 // 1. The scratch world, over the API.
-const setup = await setupToken('temper 159 setup');
+const setupMint = await setupToken('temper 159 setup');
+record({ kind: 'token', id: setupMint.id });
+const setup = setupMint.token;
 const created = await account(setup).request('POST', '/account/worlds', { body: { name: 'Temper 159 ask walk' } });
 const worldId = created.id;
 console.log('world', worldId, created.name);
@@ -77,7 +94,16 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 const asked = [];
-page.on('response', (r) => { if (r.url().endsWith('/account/ask')) asked.push(r.status()); });
+page.on('response', async (r) => {
+  if (r.url().endsWith('/account/ask')) asked.push(r.status());
+  if (r.request().method() !== 'POST' || r.status() !== 201) return;
+  const key = r.url().match(/\/account\/worlds\/([^/]+)\/keys\/?$/);
+  if (!key && !r.url().startsWith(`${API}/account/tokens`)) return;
+  try {
+    const j = await r.json();
+    if (j.id) record(key ? { kind: 'key', world: key[1], id: j.id } : { kind: 'token', id: j.id });
+  } catch { /* not json */ }
+});
 let n = 0;
 const shot = (name) => page.screenshot({ path: path.join(OUT, `${String(++n).padStart(2, '0')}-${name}.png`) });
 
@@ -109,4 +135,4 @@ await shot('ask');
 console.log('page errors:', errors.length ? errors.join(' | ') : 'none');
 console.log('at', new Date().toISOString());
 await browser.close();
-console.log(`cleanup: CREW_FILE=... node walk/live-signin-ask.mjs ${acct} --cleanup ${worldId}`);
+console.log(`cleanup: CREW_FILE=... node walk/live-signin-ask.mjs ${acct} --cleanup; then delete the world ${worldId} on the site`);

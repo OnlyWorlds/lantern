@@ -24,14 +24,10 @@ p.on('request', (r) => { const u = r.url(); if (u.includes('/signin/') || u.incl
 const report = { lantern, engine: engineName, steps: [] };
 const step = (s) => report.steps.push(s);
 
-// 0. The walk's own token, minted and recorded, to read the account's token ids before the tap: the
-// one revoked after is the one id that was not there before (a delete runs only on ids this walk
-// made and recorded; the sign-in code gate's C8).
+// 0. The walk's own token, minted and recorded by the id keel answered (a delete runs only on ids this
+// walk made and recorded, never on a list's answer; the sign-in code gate's C8).
 const walkToken = await new OwV2Client({ baseUrl: API, client: 'lantern' }).signInWithPassword({ email, password, tokenName: 'Lantern walk S470' });
 const walkAuth = { Authorization: `Bearer ${walkToken.token}` };
-const tokenIds = async () => ((await (await fetch(`${API}/account/tokens`, { headers: walkAuth })).json()).data ?? []);
-const before = new Set((await tokenIds()).map((t) => t.id));
-report.tokensBefore = before.size;
 
 // 1. Signed in on onlyworlds.com, by its own form.
 await p.goto('https://www.onlyworlds.com/accounts/login/');
@@ -71,15 +67,20 @@ if (await consent.waitFor({ timeout: 8000 }).then(() => true, () => false)) {
 const landed = await p.waitForSelector('[data-screen="worlds"]', { timeout: 30000 }).then(() => true, () => false);
 await p.waitForTimeout(1500);
 await p.screenshot({ path: `${out}-3-back.png` });
-const token = await p.evaluate(() => new Promise((res) => {
+// The token Lantern kept, and keel's id for it as the sign-in's answer gave it (kv accountTokenMint,
+// recorded beside the token's last eight characters).
+const kv = (key) => p.evaluate((k) => new Promise((res) => {
   const o = indexedDB.open('lantern');
   o.onsuccess = () => {
-    const g = o.result.transaction('kv').objectStore('kv').get('accountToken');
+    const g = o.result.transaction('kv').objectStore('kv').get(k);
     g.onsuccess = () => res(g.result ?? null);
     g.onerror = () => res(null);
   };
   o.onerror = () => res(null);
-}));
+}), key);
+const token = await kv('accountToken');
+const mint = await kv('accountTokenMint');
+const tokenId = typeof token === 'string' && mint && typeof mint.tail === 'string' && mint.tail.length === 8 && token.endsWith(mint.tail) ? mint.id : null;
 Object.assign(report, {
   landed, url: p.url(), tokenKept: Boolean(token?.startsWith('ow_a_')),
   recordLeft: await p.evaluate(() => localStorage.getItem('ow_signin:lantern')),
@@ -87,17 +88,14 @@ Object.assign(report, {
 });
 await b.close();
 
-// 4. The token Lantern kept: the one id new since step 0 and ending as it does, revoked, then 401.
-// Anything else (none, or more than one new) revokes nothing and says so.
-const fresh = (await tokenIds()).filter((t) => !before.has(t.id));
-report.newTokens = fresh.map((t) => t.name);
-const mine = token ? fresh.filter((t) => token.endsWith(t.last4)) : [];
-if (token && fresh.length === 1 && mine.length === 1) {
-  const del = await fetch(`${API}/account/tokens/${mine[0].id}`, { method: 'DELETE', headers: walkAuth });
+// 4. The token Lantern kept, revoked by the id its mint answered with, then 401. No recorded id (the
+// tail does not match, or none was kept) revokes nothing and says so.
+if (tokenId) {
+  const del = await fetch(`${API}/account/tokens/${encodeURIComponent(tokenId)}`, { method: 'DELETE', headers: walkAuth });
   const after = await fetch(`${API}/account`, { headers: { Authorization: `Bearer ${token}` } });
   report.revoked = `DELETE ${del.status}, then GET /account ${after.status}`;
 } else {
-  report.revoked = `nothing revoked: ${fresh.length} new token(s), ${mine.length} matching`;
+  report.revoked = `nothing revoked: Lantern kept no id beside the token${token ? ' (its tail did not match)' : ''}`;
 }
 // The walk's own token last, by its recorded id.
 const delWalk = await fetch(`${API}/account/tokens/${walkToken.id}`, { method: 'DELETE', headers: walkAuth });
