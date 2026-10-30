@@ -4,6 +4,7 @@ import '@fontsource/atkinson-hyperlegible/700.css';
 import '@fontsource-variable/bricolage-grotesque/opsz.css';
 import './themes/theme-warm.css';
 import './themes/theme-house.css';
+import '@onlyworlds/sdk/waymark.css';
 import './style.css';
 
 import './install'; // listens for the browser's install offer from the first moment
@@ -13,6 +14,7 @@ import { applyTheme, checkForUpdate, currentTheme } from './app-state';
 import { openWorld, type WorldSession } from './world';
 import { keyView, newWorldView, settingsView, signingInView, signInView, welcomeView, worldsView } from './views/start';
 import { elementView, homeView, notFound, setBehindReload, typeView, type View } from './views/world';
+import { focusWaymark, waymarkFocusIn, waymarkOpenIn, WAYMARK_SETTLED } from './views/waymark';
 import { captureView } from './views/capture';
 import { outboxView } from './views/outbox';
 import { askView } from './views/ask';
@@ -58,9 +60,29 @@ function mount(view: View | HTMLElement, s?: WorldSession): void {
   const v: View = view instanceof HTMLElement ? { el: view } : view;
   app.replaceChildren(v.el);
   window.scrollTo(0, 0);
-  const unsubscribe = s && v.refresh ? s.subscribe(v.refresh) : null;
+  // The OnlyWorlds mark's fan-out (src/views/waymark.ts): while it is open or its toast shows, a
+  // world change waits and runs once after it settles; focus on a mark goes to the new mark.
+  let owed = false;
+  const refresh = v.refresh
+    ? () => {
+        if (waymarkOpenIn(v.el)) {
+          owed = true;
+          return;
+        }
+        owed = false;
+        const focused = waymarkFocusIn(v.el);
+        v.refresh!();
+        if (focused) focusWaymark(v.el, focused);
+      }
+    : null;
+  const onSettled = () => {
+    if (owed) refresh?.();
+  };
+  v.el.addEventListener(WAYMARK_SETTLED, onSettled);
+  const unsubscribe = s && refresh ? s.subscribe(refresh) : null;
   cleanup = () => {
     unsubscribe?.();
+    v.el.removeEventListener(WAYMARK_SETTLED, onSettled);
     v.destroy?.();
   };
 }

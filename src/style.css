@@ -500,6 +500,32 @@ h2 {
   text-decoration: none;
 }
 
+/* The world's name and the OnlyWorlds mark beside it (src/views/waymark.ts). */
+.world-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The mark at the name's size: the component's glyph is 1em of its slot. */
+.lantern-waymark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.45rem;
+}
+
+/* Beside the name's first line, not the middle of the name block (the kind and the marks under it). */
+.el-head > .lantern-waymark {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.lantern-waymark:empty {
+  display: none;
+}
+
 .world-name span {
   font-family: var(--lan-font-display);
   font-size: 1.45rem;

@@ -43,6 +43,8 @@ import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
 import { inviteSheet } from './invite';
+import { waymarkSlot, type WaymarkSlot } from './waymark';
+import { waymarkFor } from '../waymark-for';
 import { putKeyInPlace, readsForWantOfPin, renewWorldKey, takeNoPinMark, upgradeMemberKey } from '../account';
 
 /**
@@ -452,13 +454,23 @@ export function homeView(s: WorldSession): View {
     );
   };
 
+  // The OnlyWorlds mark (src/views/waymark.ts): its own slot beside the name, which is a link to Your worlds.
+  let mark: WaymarkSlot | null = null;
   const refresh = () => {
+    mark?.dispose();
+    s.askPublicPage();
+    mark = waymarkSlot(waymarkFor(s.rec, null), 'world');
     head.replaceChildren(
       h(
-        'a',
-        { class: 'world-name', href: '#/worlds', 'aria-label': `${s.rec.name}, your worlds` },
-        h('span', null, s.rec.name || 'Unnamed world'),
-        icon('down', 20),
+        'div',
+        { class: 'world-title' },
+        h(
+          'a',
+          { class: 'world-name', href: '#/worlds', 'aria-label': `${s.rec.name}, your worlds` },
+          h('span', null, s.rec.name || 'Unnamed world'),
+          icon('down', 20),
+        ),
+        mark.el,
       ),
       headPill(s) ?? '',
     );
@@ -486,7 +498,7 @@ export function homeView(s: WorldSession): View {
     body,
     tabbar(s, 'world'),
   );
-  return { el, refresh };
+  return { el, refresh, destroy: () => mark?.dispose() };
 }
 
 // ---------- a type's list ----------
@@ -607,8 +619,12 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
   // All fields (Settings) opens with the empty ones showing, as a page just made from Catch does.
   let showEmpty = fill || fieldsShown() === 'all';
   let showAllBacklinks = false;
+  // The OnlyWorlds mark (src/views/waymark.ts): its own slot beside the name block, which opens the rename.
+  let mark: WaymarkSlot | null = null;
 
   const refresh = () => {
+    mark?.dispose();
+    mark = null;
     const el = s.get(id);
     const back = h('a', { class: 'btn btn-round', href: `#/w/${s.id}`, 'aria-label': 'Back', style: 'border:0;background:transparent' }, icon('back', 24));
     back.addEventListener('click', (e) => {
@@ -841,6 +857,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     const addField = h('button', { class: 'btn btn-quiet', type: 'button', 'data-action': 'add-field' }, 'Add a field');
     addField.addEventListener('click', () => addFieldSheet(s, el));
     const needs = [...pending.values()].find((r) => r.state === 'needs-you' || r.state === 'gone' || r.state === 'refused');
+    s.askPublicPage();
+    mark = waymarkSlot(waymarkFor(s.rec, el, { creating: !!create, stub, editing: pending.size > 0 }), 'element');
 
     main.replaceChildren(
       h('div', { class: 'topbar' }, back, h('div', { class: 'actions' })),
@@ -851,7 +869,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
             needs.state === 'refused' ? 'A change to this was not sent. Tap to see why.' : 'A change to this needs you. Tap to choose.',
           )
         : '',
-      h('div', { class: 'el-head' }, avatarBox, headText),
+      h('div', { class: 'el-head' }, avatarBox, headText, mark.el),
       actionRow(s, el, wait('image_url')),
       picture(el),
       descNode ?? '',
@@ -874,7 +892,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     );
   };
   refresh();
-  return { el: main, refresh };
+  return { el: main, refresh, destroy: () => mark?.dispose() };
 }
 
 /**

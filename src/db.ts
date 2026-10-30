@@ -18,6 +18,11 @@ export interface WorldRecord {
    * file's own line kept verbatim for one opened from it, null when that file had none (written
    * once, by the maker: Lantern never claims a world it only saved). Absent on a record from before. */
   producer?: Record<string, unknown> | null;
+  /** The site's public page for the world is on (keel's GET /world: `public_read` and `public_page.on`),
+   * and when that was last answered: the OnlyWorlds mark's public face (src/waymark-for.ts). Absent
+   * until a GET /world has answered. */
+  publicPageOn?: boolean;
+  publicPageAt?: number;
   kind: WorldKind;
   /** The world key (ow_w_, ow_r_ or a legacy 10-digit key). Absent for a world on this phone only. */
   apiKey?: string;

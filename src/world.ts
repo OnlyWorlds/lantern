@@ -26,6 +26,7 @@ import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
 import { isRoomElement, roomShown, setRoomShown } from './room';
 import { isProposed } from './review';
 import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
+import { publicPageOnFrom, publicPageStale, readerOf } from './waymark-for';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -207,6 +208,35 @@ export class WorldSession {
       );
     }
     return this.rosterRows;
+  }
+
+  private publicPageAsked = false;
+
+  /**
+   * The site's public page switch, for the OnlyWorlds mark's public face (src/waymark-for.ts): asked
+   * once a session, only for a reader who sees the world through that page, when the record's answer
+   * is missing or older than five minutes and the phone has signal. A redraw only when it changed; a
+   * failed read changes nothing (the last answer stands, offline-first).
+   */
+  askPublicPage(): void {
+    if (this.publicPageAsked || this.rec.kind !== 'online' || !this.rec.apiKey || !navigator.onLine) return;
+    if (readerOf(this.rec) !== 'public' || !publicPageStale(this.rec)) return;
+    // A full read under way asks GET /world itself and writes the answer: the ask is kept for later.
+    if (this.status === 'syncing') return;
+    this.publicPageAsked = true;
+    this.client(false).getWorld().then(
+      async (meta) => {
+        if (this.retired) return;
+        const on = publicPageOnFrom(meta as unknown as Record<string, unknown>);
+        const was = this.rec.publicPageOn;
+        const rec = await db.updateWorldRecord(this.id, { publicPageOn: on, publicPageAt: Date.now() });
+        if (rec && !this.retired) {
+          this.rec = rec;
+          if (was !== on) this.emit();
+        }
+      },
+      () => {},
+    );
   }
 
   private fileSlots = new Map<string, { rows: OwFileRow[] | null; readAt: number; asking: boolean }>();
@@ -600,6 +630,9 @@ export class WorldSession {
           })(),
           // The world's own words: keel's are the truth for a world it holds.
           names: (meta as unknown as Record<string, unknown>).x_names,
+          // The site's public page, for the OnlyWorlds mark's public face (src/waymark-for.ts).
+          publicPageOn: publicPageOnFrom(meta as unknown as Record<string, unknown>),
+          publicPageAt: Date.now(),
         });
         if (rec) this.rec = rec;
       }
