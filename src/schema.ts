@@ -1,7 +1,7 @@
 // What the schema says about a type: its fields in display order, and how a type looks.
-// Everything comes from the SDK (FIELD_SCHEMA, ELEMENT_SECTIONS, FAMILY_COLORS); nothing is restated.
+// Everything comes from the SDK (FIELD_SCHEMA, ELEMENT_SECTIONS, ELEMENT_GROUPS, elementColor); nothing is restated.
 import {
-  ELEMENT_FAMILIES,
+  ELEMENT_GROUPS,
   ELEMENT_SECTIONS,
   ELEMENT_TYPES,
   FIELD_SCHEMA,
@@ -18,7 +18,8 @@ export const TYPES: ElementType[] = ELEMENT_TYPES;
 export const BASE_FIELDS = ['name', 'description', 'supertype', 'subtype', 'image_url'];
 
 export function isType(t: string): t is ElementType {
-  return t in ELEMENT_FAMILIES;
+  // An own key only: `in` also answers for 'constructor' and 'toString'.
+  return Object.prototype.hasOwnProperty.call(ELEMENT_GROUPS, t);
 }
 
 export function fieldInfo(type: string, field: string): FieldInfo | undefined {
