@@ -38,6 +38,7 @@ const zip = Buffer.from(
       { path: 'elements/character/boatswain.json', data: enc({ id: CHAR, name: 'The Boatswain' }) },
     ],
     'coast',
+    { includeAuthorFields: true },
   ),
 );
 
