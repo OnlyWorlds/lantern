@@ -26,6 +26,7 @@ import {
 import { chipMark, elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
 import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { roomShown } from '../room';
+import { aidLead, aidLine, aidsShown, aidsWords, isReadingAid } from '../aids';
 import { noteOpened, recent } from '../recent';
 import { givenTonight } from '../given';
 import { notes } from '../notes';
@@ -37,7 +38,7 @@ import { MAP_TYPES, placesOf, type Place } from '../maps';
 import { canGive } from '../party';
 import { agentLine } from '../agentmark';
 import { proposedWord } from '../review';
-import { hiddenLine } from '../hidden';
+import { hiddenLine, markWords } from '../hidden';
 import { knownOfLine } from '../knownof';
 import { trailLines, type DoorRead } from '../doortrail';
 import { giveToParty } from './party';
@@ -73,6 +74,77 @@ function roomChoice(s: WorldSession, redraw: () => void): HTMLElement | '' {
     redraw();
   });
   return b;
+}
+
+/**
+ * The reading aids' switch (src/aids.ts, the charter profile's rule 1): out of the lists and the counts
+ * unless this phone shows them, said once beside the counts. Offered only where the world holds some.
+ */
+function aidsChoice(s: WorldSession, redraw: () => void): HTMLElement | '' {
+  const a = s.aids();
+  if (!a.count) return '';
+  const shown = aidsShown(s.id);
+  const words = aidsWords(a);
+  const what = words.charAt(0).toUpperCase() + words.slice(1);
+  const one = a.count === 1;
+  const b = h(
+    'button',
+    { class: 'choice', type: 'button', 'data-action': 'aids-shown', 'aria-pressed': shown ? 'true' : 'false' },
+    h('b', null, `The reading aids · ${a.count.toLocaleString('en')}`),
+    h(
+      'span',
+      null,
+      shown
+        ? `${what} ${one ? 'is' : 'are'} in the lists, the counts and search. Tap to keep ${one ? 'it' : 'them'} out.`
+        : `${what} ${one ? 'stays' : 'stay'} out of the lists, the counts and search. Tap to show ${one ? 'it' : 'them'}.`,
+    ),
+  );
+  b.addEventListener('click', () => {
+    if (!s.showAids(!shown)) toast('This phone could not keep that choice.');
+    redraw();
+  });
+  return b;
+}
+
+/**
+ * The door (the charter profile's rule 2): the Charter, the Guide, then the Domains, first on a world's home,
+ * from the SDK's packet. Nothing absent draws, and nothing asks for one to be added.
+ */
+function aidsDoor(s: WorldSession): HTMLElement | '' {
+  const { packet } = s.aids();
+  const charter = packet.charter ? s.get(packet.charter.id) : undefined;
+  const guide = packet.guide ? s.get(packet.guide.id) : undefined;
+  if (!charter && !guide && !packet.domains.length) return '';
+  // A hidden aid says so at its holder's door, as on every list row (src/hidden.ts).
+  const marks = (el: OwElement | undefined) => (el ? markWords(el).map((w) => ` · ${w}`).join('') : '');
+  const card = (el: OwElement, label: string, role: string) => {
+    const lead = aidLead(el);
+    const head = `${label}${marks(el)}`;
+    return h('a', { class: 'choice', href: `#/w/${s.id}/e/${el.id}`, 'data-role': role }, h('b', null, elName(el)), h('span', null, lead ? `${head} · ${lead}` : head));
+  };
+  return h(
+    'div',
+    { class: 'stack', 'data-part': 'reading-aids' },
+    charter ? card(charter, "This world's charter", 'charter') : '',
+    guide ? card(guide, 'Start here', 'guide') : '',
+    ...(packet.domains.length
+      ? [
+          h('p', { class: 'section-label' }, packet.domains.length === 1 ? 'Its domain' : 'Its domains'),
+          h(
+            'div',
+            { class: 'results', 'data-role': 'domains' },
+            ...packet.domains.map((d) =>
+              h(
+                'a',
+                { class: 'el-row', href: `#/w/${s.id}/e/${d.id}` },
+                typeChip('construct'),
+                h('span', { class: 'label' }, h('b', null, d.name.trim() || 'Domain'), h('span', { class: 'muted' }, `${marks(s.get(d.id))}${d.sentence ? ` · ${d.sentence}` : ''}`)),
+              ),
+            ),
+          ),
+        ]
+      : []),
+  );
 }
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
@@ -349,10 +421,20 @@ export function homeView(s: WorldSession): View {
     // so a type with no tile could never get its first element.
     const all = s.canWrite ? [...present, ...TYPES.filter((t) => !counts.get(t) && !MAP_TYPES.has(t))] : present;
     if (!present.length && (!s.canWrite || s.status === 'syncing' || !showAll)) {
+      // A world holding only its reading aids (or a room kept out) is not empty: the door and the switches stay.
+      const beyond = s.aids().count > 0 || s.roomCount() > 0;
       const empty = h(
         'p',
         { class: 'empty' },
-        s.status === 'syncing' ? 'Fetching the world…' : s.canWrite ? 'Nothing here yet. Tap Catch to keep the first idea.' : 'This world is empty.',
+        s.status === 'syncing'
+          ? 'Fetching the world…'
+          : beyond
+            ? s.canWrite
+              ? 'Nothing in the lists yet. Tap Catch to keep the first idea.'
+              : 'Nothing in the lists yet.'
+            : s.canWrite
+              ? 'Nothing here yet. Tap Catch to keep the first idea.'
+              : 'This world is empty.',
       );
       const types =
         s.canWrite && s.status !== 'syncing'
@@ -367,7 +449,7 @@ export function homeView(s: WorldSession): View {
           : '';
       // An empty world can still be shared: a game master may invite before adding anything.
       const invite = canInvite(s.rec) && s.status !== 'syncing' ? [inviteRow(s)] : [];
-      body.replaceChildren(empty, h('div', { style: 'text-align:center' }, types), ...invite);
+      body.replaceChildren(aidsDoor(s), empty, h('div', { style: 'text-align:center' }, types), aidsChoice(s, renderBody), roomChoice(s, renderBody), ...invite);
       return;
     }
     const shown = showAll ? all : present.slice(0, 9);
@@ -403,12 +485,16 @@ export function homeView(s: WorldSession): View {
     });
     // Recent: the last few opened on this phone, those already on Tonight left out.
     const castIds = new Set(cast.map((e) => e.id));
+    // A lore view: the room and the aids out unless shown (the door already holds the aids).
+    const shows = s.inLore();
     const lately = recent(s.id)
       .filter((id) => !castIds.has(id))
       .map((id) => s.get(id))
-      .filter((e): e is OwElement => !!e)
+      .filter((e): e is OwElement => !!e && shows(e))
       .slice(0, 5);
     body.replaceChildren(
+      // The door first (the charter profile's rule 2): the Charter, the Guide, the Domains.
+      aidsDoor(s),
       ...(cast.length
         ? [h('p', { class: 'section-label' }, 'Tonight'), h('div', { class: 'results', 'data-part': 'tonight' }, ...cast.map((e) => elRow(s.id, e))), clear]
         : []),
@@ -449,6 +535,7 @@ export function homeView(s: WorldSession): View {
           `${proposedTotal} proposed, not yet reviewed, ${proposedTotal === 1 ? 'is' : 'are'} not counted above. Each says so on its row.`)
         : '',
       more ?? '',
+      aidsChoice(s, renderBody),
       roomChoice(s, renderBody),
       // Invite someone: the owner makes the link here (SDK 4.24; it once sent them to the website).
       canInvite(s.rec) ? inviteRow(s) : '',
@@ -726,9 +813,12 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     const proposed = proposedWord(el);
     // Hidden (src/hidden.ts, folder spec §4.8): shown to its holder with the word, and who else can see it.
     const hidden = hiddenLine(el, !s.isLocal);
+    // A reading aid (src/aids.ts): which one, whether it leads, and that the lists leave it out.
+    const aid = isReadingAid(el) ? aidLine(el, s.aids().packet, aidsShown(s.id), (aidId) => elName(s.get(aidId))) : null;
     const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind),
       proposed ? h('span', { class: 'proposed-mark', 'data-role': 'proposed-mark' }, proposed === 'proposed' ? 'Proposed, not yet reviewed: not part of the world until a keeper accepts it on OnlyWorlds.' : 'Proposed and not yet reviewed; the proposal has lapsed.') : null,
       hidden ? h('span', { class: 'muted', 'data-role': 'hidden-mark' }, hidden) : null,
+      aid ? h('span', { class: 'muted', 'data-role': 'aid-mark' }, aid) : null,
       agent ? h('span', { class: 'muted agent-mark', 'data-role': 'agent-mark' }, agent) : null);
     if (editable) {
       headText.style.cursor = 'pointer';
@@ -811,7 +901,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
 
     // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,
     // and the first eight shown must not change with it.
-    const links = [...s.backlinks(id)].sort((a, b) => {
+    // An aid's own page reads the whole world: the Guide is what links to a Domain.
+    const links = [...s.backlinks(id, isReadingAid(el))].sort((a, b) => {
       const ea = s.get(a);
       const eb = s.get(b);
       return (ea?.type ?? '').localeCompare(eb?.type ?? '') || elName(ea).localeCompare(elName(eb)) || (a < b ? -1 : a > b ? 1 : 0);
@@ -916,6 +1007,8 @@ function playerHome(s: WorldSession): (Node | string)[] {
     : h('p', { class: 'dim', style: 'margin:0' }, `You are a player here. You see what your ${typeLabel('character')} knows.`);
   return [
     intro,
+    // The door (the charter profile's rule 2, rule 5: the Charter is every member's to read).
+    aidsDoor(s),
     els.length
       ? h('div', { class: 'stack' }, h('p', { class: 'section-label' }, 'Newest'), h('div', { class: 'results' }, ...newest.map((e) => elRow(s.id, e))))
       : h('p', { class: 'empty' }, s.status === 'syncing' ? 'Fetching what you know…' : 'Nothing yet. What your game master gives you appears here.'),

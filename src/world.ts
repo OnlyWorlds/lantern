@@ -24,6 +24,7 @@ import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
 import { isRoomElement, roomShown, setRoomShown } from './room';
+import { aidsShown, isReadingAid, readAids, setAidsShown, type AidsRead } from './aids';
 import { isProposed } from './review';
 import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import { publicPageOnFrom, publicPageStale, readerOf } from './waymark-for';
@@ -144,6 +145,7 @@ export class WorldSession {
   private calendarCache: CalendarConfig | null | undefined = undefined;
   private lookupCache: OwWorldIndex<OwElement> | null = null;
   private handOnCache: OwWorldIndex<OwElement> | null = null;
+  private aidsCache: AidsRead | null = null;
   private pulling: Promise<void> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
   private queuedFlush: Promise<void> | null = null;
@@ -452,9 +454,10 @@ export class WorldSession {
     this.calendarCache = undefined;
     this.lookupCache = null;
     this.handOnCache = null;
+    this.aidsCache = null;
   }
 
-  /** Kael's lookup index (SDK buildWorldIndex) over what the lists show (the room left out unless shown), built on first ask. */
+  /** Kael's lookup index (SDK buildWorldIndex) over what the lists show (the room and the reading aids left out unless shown), built on first ask. */
   lookupIndex(): OwWorldIndex<OwElement> {
     this.lookupCache ??= buildWorldIndex(this.lore());
     return this.lookupCache;
@@ -484,12 +487,39 @@ export class WorldSession {
   }
 
   /**
-   * The world as its lists read it: without the parlor's room (src/room.ts) unless this phone chose
-   * to show it. `elements()` stays whole for links, maps, the party and a page opened by its id.
+   * The world as its lists read it: without the parlor's room (src/room.ts) and without the reading aids
+   * (src/aids.ts), each unless this phone chose to show it. `elements()` stays whole for links, maps, the
+   * party, the home's door and a page opened by its id.
    */
   lore(): OwElement[] {
     const all = this.elements();
-    return roomShown(this.id) ? all : all.filter((e) => !isRoomElement(e));
+    if (roomShown(this.id) && aidsShown(this.id)) return all;
+    return all.filter(this.inLore());
+  }
+
+  /**
+   * The lists' rule as a test: the room by its switch, the aids by theirs. `withAids` is an aid's own page and
+   * picker, which read the aids whatever their switch (the Guide names the Domains) and the room still by its own.
+   */
+  inLore(withAids = false): (e: OwElement) => boolean {
+    const room = roomShown(this.id);
+    const aids = withAids || aidsShown(this.id);
+    return (e) => (room || !isRoomElement(e)) && (aids || !isReadingAid(e));
+  }
+
+  /** The world's reading aids: the SDK's packet (the home's door) and how many it holds, by kind. */
+  aids(): AidsRead {
+    this.aidsCache ??= readAids(this.elements());
+    return this.aidsCache;
+  }
+
+  /** Shows or hides the reading aids in the lists; the lookup is rebuilt. */
+  showAids(on: boolean): boolean {
+    const kept = setAidsShown(this.id, on);
+    this.lookupCache = null;
+    this.handOnCache = null;
+    this.emit();
+    return kept;
   }
 
   /** How many of the room's elements the world holds, shown or not. */
@@ -499,18 +529,18 @@ export class WorldSession {
     return n;
   }
 
-  /** Shows or hides the room in the lists; the lookup and the backlinks are rebuilt. */
+  /** Shows or hides the room in the lists; the lookup is rebuilt (the backlinks hold the whole world and filter as read). */
   showRoom(on: boolean): boolean {
     const kept = setRoomShown(this.id, on);
-    this.backlinkCache = null;
     this.lookupCache = null;
     this.handOnCache = null;
     this.emit();
     return kept;
   }
 
-  ofType(type: string): OwElement[] {
-    return this.lore()
+  /** A type's elements as its list reads them; `withAids` brings the aids in (an aid's own link picker). */
+  ofType(type: string, withAids = false): OwElement[] {
+    return (withAids ? this.elements().filter(this.inLore(true)) : this.lore())
       .filter((e) => e.type === type)
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
   }
@@ -554,11 +584,14 @@ export class WorldSession {
     this.emit();
   }
 
-  /** Elements whose link fields point at this one. */
-  backlinks(id: string): string[] {
+  /**
+   * Elements whose link fields point at this one, as the lists read the world (the room and the aids out
+   * unless shown); `withAids` brings the aids in (an aid's own page: the Guide is what links to a Domain).
+   */
+  backlinks(id: string, withAids = false): string[] {
     if (!this.backlinkCache) {
       const m = new Map<string, string[]>();
-      for (const el of this.lore()) {
+      for (const el of this.elements()) {
         for (const [k, v] of Object.entries(el)) {
           if (k === 'id' || k === 'created_by') continue;
           const ids = Array.isArray(v) ? v : typeof v === 'string' && v.length === 36 && v[8] === '-' ? [v] : [];
@@ -573,7 +606,12 @@ export class WorldSession {
       }
       this.backlinkCache = m;
     }
-    return this.backlinkCache.get(id) ?? [];
+    const all = this.backlinkCache.get(id) ?? [];
+    const keep = this.inLore(withAids);
+    return all.filter((x) => {
+      const e = this.view.get(x);
+      return !!e && keep(e);
+    });
   }
 
   waitingCount(): number {

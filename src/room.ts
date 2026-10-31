@@ -8,8 +8,8 @@
 // The pair AND the mark (dist.45): a room element carries `x_room_of`, the id of the world or the sitting
 // its room belongs to, written by the parlor on everything it makes. Without the mark a Narrative with
 // supertype Message is lore (a novel's letters, the Manifest's Wire) and stays in view. A pair, never a
-// supertype alone: a Location called Board is a place. The charter (a Law, supertype Charter) stays in:
-// it is the world's own rule, not a line said in the room. Type and supertype match in any case, trimmed. Per phone and per world, like Tonight; it never travels and never changes the world.
+// supertype alone: a Location called Board is a place. The charter (a Law, supertype Charter) is never the
+// room's: marked, it is a reading aid with its own switch (src/aids.ts); unmarked, it is lore. Type and supertype match in any case, trimmed. Per phone and per world, like Tonight; it never travels and never changes the world.
 import { ROOM_PAIRS, isRoomElement as sdkIsRoomElement, type OwElement } from '@onlyworlds/sdk';
 
 /** The room profile's pairs as the SDK carries them (4.55.0, generated from the profile), lower-cased. */

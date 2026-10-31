@@ -19,7 +19,9 @@ export function typeChip(type: string): HTMLElement {
 }
 
 export function elName(el: OwElement | undefined): string {
-  return el?.name?.trim() || 'Unnamed';
+  // A world file can carry any value in `name`: only a string is a name.
+  const n = el?.name as unknown;
+  return (typeof n === 'string' && n.trim()) || 'Unnamed';
 }
 
 export function elRow(worldId: string, el: OwElement, extra?: string): HTMLElement {
