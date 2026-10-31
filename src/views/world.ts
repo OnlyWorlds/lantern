@@ -39,6 +39,7 @@ import { agentLine } from '../agentmark';
 import { proposedWord } from '../review';
 import { hiddenLine } from '../hidden';
 import { knownOfLine } from '../knownof';
+import { trailLines, type DoorRead } from '../doortrail';
 import { giveToParty } from './party';
 import { makeFromNoteSheet } from './makeit';
 import { canInvite } from '../invite';
@@ -885,6 +886,8 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
         : [h('div', { class: 'fields' }, ...schemaRows, backNode ?? '')]),
       toggle ?? '',
       filesSection(s, el),
+      // Where it has been on OnlyWorlds (the Waymark's trail): an online world only, as the agent mark.
+      s.isLocal ? '' : trailNode(el, s.doors(el.type, el.id, el.updated_at)),
       editable ? addField : '',
       editable ? h('p', { class: 'muted small', style: 'margin:0' }, 'Tap the name or a value to change it.') : '',
       editable ? deleteButton(s, el) : '',
@@ -1046,6 +1049,17 @@ function fileRow(s: WorldSession, el: OwElement, r: OwFileRow): HTMLElement {
       h('span', { class: 'muted small file-line' }, fileLine(r), r.added_by?.agent ? ' · an agent' : ''),
       get,
     ),
+  );
+}
+
+/** The trail's lines, quiet, under the fields; none when OnlyWorlds has said nothing of it (src/doortrail.ts). */
+function trailNode(el: OwElement, read: DoorRead | null): HTMLElement | '' {
+  const lines = trailLines(el, read);
+  if (lines.length === 0) return '';
+  return h(
+    'div',
+    { class: 'stack', 'data-section': 'door-trail', style: 'gap:2px;margin-top:8px' },
+    ...lines.map((t) => h('p', { class: 'muted small', style: 'margin:0' }, t)),
   );
 }
 

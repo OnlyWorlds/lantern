@@ -28,6 +28,7 @@ import { isProposed } from './review';
 import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import { publicPageOnFrom, publicPageStale, readerOf } from './waymark-for';
 import { worldExtensionsOf } from './worldfile';
+import { readCovers, type DoorRead } from './doortrail';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -276,6 +277,55 @@ export class WorldSession {
         });
     }
     return s.rows;
+  }
+
+  private doorSlots = new Map<string, { read: DoorRead | null; readAt: number; asking: boolean; askedFor: unknown }>();
+
+  /**
+   * keel's door record on an element (the trail, src/doortrail.ts), read from the element itself:
+   * keel serves `doors` on a read and never in /changes, so the copy a pull brings has none. Asked
+   * as files are, when the page shows with signal, kept for the session, asked again once a minute
+   * old or once the copy has moved past the read (`copyUpdated`, asked once per copy); a redraw only
+   * when the answer moved. Not asked while the element's create still waits (keel's 404). A
+   * refusal or no signal: none. keel serves `doors` to every member, guests included.
+   */
+  doors(type: string, id: string, copyUpdated?: unknown, now: number = Date.now()): DoorRead | null {
+    if (this.isLocal || !this.rec.apiKey || this.isStub(id)) return null;
+    if (this.outbox.some((r) => r.id === id && r.op === 'create')) return null;
+    let slot = this.doorSlots.get(id);
+    if (!slot) {
+      slot = { read: null, readAt: 0, asking: false, askedFor: undefined };
+      this.doorSlots.set(id, slot);
+    }
+    const s = slot;
+    const stale = s.readAt === 0 || now - s.readAt > 60_000;
+    const passed = s.read !== null && !readCovers(s.read, copyUpdated) && s.askedFor !== copyUpdated;
+    if (!s.asking && navigator.onLine && (stale || passed)) {
+      s.asking = true;
+      s.askedFor = copyUpdated;
+      Promise.resolve()
+        .then(() => this.client(false).get(type, id))
+        .then(
+          (el) => {
+            if (this.retired) return;
+            const body = el as Record<string, unknown>;
+            const d = body.doors;
+            const read: DoorRead = {
+              doors: d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : null,
+              updated_at: typeof body.updated_at === 'string' ? body.updated_at : null,
+            };
+            const moved = JSON.stringify(read) !== JSON.stringify(s.read);
+            s.read = read;
+            if (moved) this.emit();
+          },
+          () => {},
+        )
+        .finally(() => {
+          s.readAt = Date.now();
+          s.asking = false;
+        });
+    }
+    return s.read;
   }
 
   /** A link to one file, asked for at the tap and used at once: the link is the credential, never kept. */
@@ -721,8 +771,14 @@ export class WorldSession {
         // A stub (keel's known of) is kept as a stub, trimmed here where the wire becomes the copy.
         // Its stamp does not move with its shape, so a cursor walk never brings the change: keel
         // says it with a view reset, whose walk from zero replaces the copy (below).
-        if (ch.op === 'upsert') puts.push(fromWire({ ...ch.element, type: ch.type, id: ch.id }));
-        else dels.push(ch.id);
+        if (ch.op === 'upsert') {
+          const el = fromWire({ ...ch.element, type: ch.type, id: ch.id });
+          // The feed serves no `doors`: the echo of a write this copy already holds keel's answer for
+          // keeps that answer's door record (the same write, so the same record; the S523 gate's S1).
+          const held = this.truth.get(ch.id);
+          if (!('doors' in el) && held && 'doors' in held && held.change_seq === el.change_seq) (el as Record<string, unknown>).doors = held.doors;
+          puts.push(el);
+        } else dels.push(ch.id);
         seen++;
         changed = true;
         if (puts.length + dels.length >= 500) {
@@ -1262,7 +1318,8 @@ export class WorldSession {
     const base = row.base ?? ({} as OwElement);
     const values: Record<string, unknown> = {};
     for (const [k, v] of Object.entries({ ...base, ...row.values })) {
-      if (['id', 'type', 'change_seq', 'created_at', 'updated_at', 'created_by'].includes(k)) continue;
+      // keel's own record of the old element (who wrote it, through which door) is not the new one's (the S523 gate's S2).
+      if (['id', 'type', 'change_seq', 'created_at', 'updated_at', 'created_by', 'changed_by', 'changed_via', 'changed_client', 'doors'].includes(k)) continue;
       if (!isEmptyValue(v)) values[k] = v;
     }
     await this.drop(row);
