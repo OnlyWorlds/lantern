@@ -37,6 +37,8 @@ import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 /** Lantern's name on every write (keel's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
 export const LANTERN_CLIENT_NAME = 'lantern';
+/** A change whose element id (or type) OnlyWorlds cannot take as an address: refused, never waiting. */
+export const PATH_REFUSAL = 'OnlyWorlds cannot take this element: its id is not one it can address.';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -1334,6 +1336,12 @@ export class WorldSession {
     // network", or the row would wait for signal forever.
     if (e instanceof TypeError && /known_of/.test(e.message)) {
       await keep('refused', KNOWN_OF_REFUSAL);
+      return false;
+    }
+    // The SDK refuses a type or id that is not one path segment before sending (4.123.3): the same,
+    // or a world file's odd id would hold the outbox on "No connection" for good.
+    if (e instanceof TypeError && /is not one path segment/.test(e.message)) {
+      await keep('refused', PATH_REFUSAL);
       return false;
     }
     // No network (or a fetch that never answered): wait for the browser to say online.

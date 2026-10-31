@@ -18,7 +18,7 @@ Object.assign(globalThis, {
 // Node 22 has its own read-only navigator: replaced, so the files ask sees signal (as setnow.test.ts).
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true, writable: true });
 
-const { openWorld, forgetSession, setBuildBehind } = await import('../src/world');
+const { openWorld, forgetSession, setBuildBehind, PATH_REFUSAL } = await import('../src/world');
 const { buildSlice } = await import('../src/sortplan');
 const { buildWorldIndex, writeWorldFile } = await import('@onlyworlds/sdk');
 const { setPin } = await import('../src/pin');
@@ -214,6 +214,21 @@ describe('a stub is never changed, deleted or sent from here (rules 3 and 5)', (
     expect(again.outbox[0].error).toBe(KNOWN_OF_REFUSAL);
     expect(again.status).not.toBe('offline');
     expect(keel.calls.filter((c) => c.startsWith('POST'))).toEqual([]);
+  });
+
+  it('a row whose id is not one path segment is refused, never left waiting for signal (SDK 4.123.3)', async () => {
+    const s = await playerWorld({ apiKey: 'ow_w_' + 'w'.repeat(40), keyKind: 'write', memberRole: undefined, role: 'owner', characterId: null });
+    setPin(s.rec, '1234');
+    await s.pull();
+    // Hand-built, as a world file could carry one: the SDK refuses the path before it is sent.
+    await db.putOutboxRow(s.id, { op: 'patch', type: 'character', id: 'odd id/hidden', values: { name: 'Ana' }, state: 'waiting', createdAt: '' });
+    forgetSession(s.id);
+    const again = await openWorld(s.id);
+    await again.flush();
+    expect(again.outbox[0].state).toBe('refused');
+    expect(again.outbox[0].error).toBe(PATH_REFUSAL);
+    expect(again.status).not.toBe('offline');
+    expect(keel.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
   });
 });
 
