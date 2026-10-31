@@ -21,9 +21,25 @@ type El = Record<string, unknown> & { id: string; type: string; change_seq: numb
 
 let madeWorlds = 0;
 
+/** An object's keys reversed, at every depth: Postgres's jsonb does not keep the order a value was sent in. */
+function reorder(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(reorder);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).reverse().map((k) => [k, reorder((v as Record<string, unknown>)[k])]));
+  return v;
+}
+
 class FakeAccountKeel {
   accountPin: string | null = null;
-  worlds = new Map<string, { name: string; key: string; els: Map<string, El> }>();
+  worlds = new Map<string, { name: string; key: string; els: Map<string, El>; meta: Record<string, unknown> }>();
+  creates: Record<string, unknown>[] = [];
+  patches: Record<string, unknown>[] = [];
+  refuseProducer = false;
+  /** keel before d98ba65: the create kept no prefixed key. */
+  oldCreate = false;
+  /** A server that answers a PATCH 200 and keeps none of its prefixed keys: the read is the only witness. */
+  losePatchedKeys = false;
+  refuseSettings = false;
+  extMax = 65536;
   otherWorldIds = new Set<string>();
   idem = new Map<string, string>();
   seq = 0;
@@ -63,12 +79,19 @@ class FakeAccountKeel {
       if (headers.get('Authorization') !== 'Bearer ow_a_test') return this.err(401, 'invalid_credentials');
       if (this.accountPin && body.pin) return this.err(422, 'invalid', 'pin');
       if (!this.accountPin && !body.pin) return this.err(422, 'required', 'pin');
+      if (body.producer !== undefined && this.refuseProducer) return this.err(422, 'invalid', 'producer');
+      // keel d98ba65 (accounts/api.py _clean_new_world): the prefixed keys are taken as given, a null is
+      // no key, an unprefixed stray is ignored; the store under the cap (422 param extensions), echoed on the row.
+      const ext: Record<string, unknown> = {};
+      if (!this.oldCreate) for (const [k, v] of Object.entries(body)) if (/^(x_|atlas_|shadow_)/.test(k) && v !== null) ext[k] = v;
+      if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
+      this.creates.push(body);
       if (body.pin) this.accountPin = body.pin;
       // Unique across the file's tests: the phone's store outlives each test's fake.
       const id = `0w${++madeWorlds}000000-0000-4000-8000-000000000000`;
       const key = `ow_w_${'k'.repeat(30)}${this.worlds.size}`;
-      this.worlds.set(id, { name: body.name, key, els: new Map() });
-      return this.json(201, { id, name: body.name, role: 'owner', key });
+      this.worlds.set(id, { name: body.name, key, els: new Map(), meta: { ...ext } });
+      return this.json(201, { id, name: body.name, role: 'owner', ...ext, key });
     }
     const found = this.worldOfKey(headers.get('API-Key'));
     if (!found) return this.err(401, 'invalid_credentials');
@@ -76,8 +99,24 @@ class FakeAccountKeel {
     if (method !== 'GET' && headers.get('API-Pin') !== this.accountPin) return this.err(401, 'invalid_credentials');
     if (path === '/media/ticket') return this.json(200, { ticket: 't', upload_url: 'https://edge.test/up', prefix: 'w/', max_bytes: 15e6, exp: 0 });
     if (path === '/world') {
-      if (method === 'PATCH') return this.json(200, { id: worldId, name: world.name, ...body });
-      return this.json(200, { id: worldId, name: world.name });
+      // keel's clean_world_updates: a prefixed key merges onto the store (null removes it), an
+      // unknown plain field is a 422; GET serves the store's keys beside the fields, reordered as jsonb does.
+      if (method === 'PATCH') {
+        this.patches.push(body);
+        if (this.refuseSettings && 'description' in body) return this.err(422, 'invalid_request', 'description');
+        for (const [k, v] of Object.entries(body)) {
+          if (/^(x_|atlas_|shadow_)/.test(k)) {
+            if (this.losePatchedKeys) continue;
+            if (v === null) delete world.meta[k];
+            else world.meta[k] = v;
+          } else if (!['description', 'time_range_current', 'time_basic_unit'].includes(k)) return this.err(422, 'invalid_request', k);
+          else if (k === 'time_basic_unit' && String(v).trim().length > 128) return this.err(422, 'invalid_request', k);
+          else if (k === 'time_range_current' && !(Number.isInteger(v) && (v as number) >= -2147483648 && (v as number) <= 2147483647)) return this.err(422, 'invalid_request', k);
+          else world.meta[k] = v;
+        }
+      }
+      const served = Object.fromEntries(Object.entries(world.meta).map(([k, v]) => [k, reorder(v)]));
+      return this.json(200, { id: worldId, name: world.name, ...served });
     }
     if (path === '/bulk') {
       if (this.failBulkOnce) {
@@ -253,5 +292,135 @@ describe('put it online', () => {
     await expect(putOnline(local, '1111')).rejects.toThrow();
     expect((await db.allElements(local)).length).toBe(2);
     expect(await db.getWorldRecord(local)).toBeTruthy();
+  });
+});
+
+// The World's own keys (keel d98ba65: POST /account/worlds takes the prefixed keys as PATCH /world does).
+const STRAND = { story: ELS[0].id, happening: null, place: null, v: 1 };
+const PRODUCER = { tool: 'lantern', version: 'abc', input: 'bare' };
+
+async function keyedWorld() {
+  const id = await localWorld(ELS);
+  await db.updateWorldRecord(id, {
+    extensions: { x_strand: STRAND, atlas_calendar_pick: 'cal-1', shadow_gone: null, x_names: { character: 'Old word' } },
+    names: { character: 'Soul', characters: 'Souls' },
+    producer: PRODUCER,
+    timeNow: 1204,
+    timeUnit: 'Year',
+  });
+  return id;
+}
+
+describe("put it online keeps the World's own keys", () => {
+  it('they go with the create, a null left out and the names as the world uses them; the maker line too; the now and the description after; the online copy holds them', async () => {
+    keel.accountPin = '4321';
+    const local = await keyedWorld();
+    const id = await putOnline(local, '4321');
+    const sent = keel.creates[0];
+    expect(sent.x_strand).toEqual(STRAND);
+    expect(sent.atlas_calendar_pick).toBe('cal-1');
+    expect(sent).not.toHaveProperty('shadow_gone');
+    expect(sent.x_names).toEqual({ character: 'Soul', characters: 'Souls' });
+    expect(sent.producer).toEqual(PRODUCER);
+    expect(keel.patches[0]).toEqual({ description: 'Ideas at the bus stop', time_range_current: 1204, time_basic_unit: 'Year' });
+    // Nothing went twice: the read served every key as sent, so no second PATCH.
+    expect(keel.patches).toHaveLength(1);
+    const rec = (await db.getWorldRecord(id))!;
+    expect(rec.extensions?.x_strand).toEqual(STRAND);
+    expect(rec.names).toEqual({ character: 'Soul', characters: 'Souls' });
+    expect(rec.timeNow).toBe(1204);
+    expect(rec.producer).toEqual(PRODUCER);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it('a create that kept none of them (a retry over a world made before): the missing ones go by PATCH, and the world is read again', async () => {
+    keel.accountPin = '4321';
+    keel.oldCreate = true;
+    const local = await keyedWorld();
+    const id = await putOnline(local, '4321');
+    expect(keel.patches[1]).toEqual({ x_strand: STRAND, atlas_calendar_pick: 'cal-1', x_names: { character: 'Soul', characters: 'Souls' } });
+    expect((await db.getWorldRecord(id))!.extensions?.x_strand).toEqual(STRAND);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it('a server that answers 200 and keeps none: the read says so, the phone copy stays with its keys', async () => {
+    keel.accountPin = '4321';
+    keel.oldCreate = true;
+    keel.losePatchedKeys = true;
+    const local = await keyedWorld();
+    await expect(putOnline(local, '4321')).rejects.toThrow(/own settings did not read back \(x_strand, atlas_calendar_pick, x_names\)/);
+    const rec = (await db.getWorldRecord(local))!;
+    expect(rec.kind).toBe('local');
+    expect(rec.extensions?.x_strand).toEqual(STRAND);
+    expect((await db.allElements(local)).length).toBe(2);
+  });
+
+  it('a maker line keel refuses: the world is made without it, its keys still with it', async () => {
+    keel.accountPin = '4321';
+    keel.refuseProducer = true;
+    const local = await keyedWorld();
+    const id = await putOnline(local, '4321');
+    expect(keel.creates).toHaveLength(1);
+    expect(keel.creates[0]).not.toHaveProperty('producer');
+    expect(keel.worlds.get(id)!.meta.x_strand).toEqual(STRAND);
+  });
+
+  it('keys past keel\'s cap: said before anything is made, the phone copy stays', async () => {
+    keel.accountPin = '4321';
+    keel.extMax = 10;
+    const local = await keyedWorld();
+    await expect(putOnline(local, '4321')).rejects.toThrow(/would not take this world's own settings.*Nothing was sent/);
+    expect(keel.worlds.size).toBe(0);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+  });
+
+  // What keel would refuse in the settings is said before the world is made: made and then refused on every
+  // retry, a world would sit half online for good (the gate's M1, S1, S3).
+  for (const [what, change, said] of [
+    ['a time unit past 128 characters', { timeUnit: 'Y'.repeat(129) }, /time unit is longer than OnlyWorlds keeps/],
+    ['a now that is not a whole number', { timeNow: 12.5 }, /now \(12\.5\) is not a whole number/],
+    ['a now past keel\'s 32-bit range', { timeNow: 2147483648 }, /is not a whole number OnlyWorlds keeps/],
+    ['a NUL in the description', { description: 'cut\u0000here' }, /description holds a character/],
+    ['half an emoji in a key', { extensions: { x_note: 'cut \uD83D' } }, /setting x_note holds a character/],
+    ['keys past 64 KB', { extensions: { x_big: 'é'.repeat(33000) } }, /\(66\d{3} bytes, at most 65536\)/],
+  ] as const) {
+    it(`${what}: said before anything is made, the phone copy stays`, async () => {
+      keel.accountPin = '4321';
+      const local = await keyedWorld();
+      await db.updateWorldRecord(local, change as never);
+      await expect(putOnline(local, '4321')).rejects.toThrow(said);
+      expect(keel.creates).toHaveLength(0);
+      expect(keel.worlds.size).toBe(0);
+      expect((await db.getWorldRecord(local))?.kind).toBe('local');
+    });
+  }
+
+  it('the lowest number keel holds is a now it takes', async () => {
+    keel.accountPin = '4321';
+    const local = await keyedWorld();
+    await db.updateWorldRecord(local, { timeNow: -2147483648 });
+    await putOnline(local, '4321');
+    expect(keel.patches[0].time_range_current).toBe(-2147483648);
+  });
+
+  it("keel's served-trimmed word is never sent up as a World key", async () => {
+    keel.accountPin = '4321';
+    const local = await keyedWorld();
+    await db.updateWorldRecord(local, { extensions: { x_strand: STRAND, x_served_trimmed: ['description'] } });
+    await putOnline(local, '4321');
+    expect(keel.creates[0]).not.toHaveProperty('x_served_trimmed');
+  });
+
+  it('settings keel refuses: said, the phone copy stays, and the retry sends nothing twice', async () => {
+    keel.accountPin = '4321';
+    keel.refuseSettings = true;
+    const local = await keyedWorld();
+    await expect(putOnline(local, '4321')).rejects.toThrow(/would not take its settings/);
+    expect((await db.getWorldRecord(local))?.kind).toBe('local');
+    keel.refuseSettings = false;
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
+    expect(keel.worlds.get(id)!.meta.description).toBe('Ideas at the bus stop');
   });
 });

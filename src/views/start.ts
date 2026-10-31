@@ -25,7 +25,7 @@ import { afterSignInHash } from '../opendoor';
 import { SIGNUP_URL } from '../invite';
 import { uuid7 } from '../uuid7';
 import { lanternProducer, openWorldFile, saveFile, worldCopy, type CopyQuestion } from '../worldfile';
-import { PinNeeded, putOnline } from '../online';
+import { OnlineSaid, PinNeeded, putOnline } from '../online';
 import { errorText, go, sheet, toast, topbar } from '../ui';
 import { beginOnlyWorldsSignIn, canSignInWithOnlyWorlds, takeSignInNotice } from '../signin';
 import { installButton, onHomeScreen } from '../install';
@@ -490,7 +490,9 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
           err.textContent =
             ex instanceof PinNeeded
               ? 'Your account has no PIN yet: these four digits become it (from 1000 to 9999).'
-              : /PIN|credential/i.test(errorText(ex))
+              : ex instanceof OnlineSaid
+                ? ex.message
+                : /PIN|credential/i.test(errorText(ex))
                 ? 'That PIN does not match your account.'
                 : errorText(ex);
           go1.disabled = false;
