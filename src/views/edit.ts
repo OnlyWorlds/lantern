@@ -10,7 +10,6 @@ import { photoPicker } from './photo';
 import { proposedWord } from '../review';
 import { hiddenWord, markWords } from '../hidden';
 import { isKnownOf } from '../knownof';
-import { isReadingAid } from '../aids';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
@@ -200,7 +199,7 @@ function linkSheet(s: WorldSession, el: OwElement, field: string, multi: boolean
       if (!chosen.length) current.appendChild(h('span', { class: 'muted small' }, 'None yet'));
     };
     // An aid's own picker reads the whole world (src/aids.ts): the Guide's constructs are the Domains.
-    const pool = () => s.ofType(target, isReadingAid(el));
+    const pool = () => s.ofType(target, s.isAid(el));
     const renderResults = () => {
       const q = input.value.trim();
       const els = (q ? search(pool(), q, 30).map((x) => x.el) : pool().slice(0, 30)).filter((x) => !chosen.includes(x.id) && x.id !== el.id);

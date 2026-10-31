@@ -1,6 +1,6 @@
 // The phone's store: IndexedDB, one app database (the world list and settings) and one
 // database per world (its elements as the API returned them, and the outbox).
-import type { OwElement, OwKeyKind } from '@onlyworlds/sdk';
+import type { OwElement, OwKeyKind, OwReadingAids } from '@onlyworlds/sdk';
 
 export type WorldKind = 'online' | 'local' | 'demo';
 
@@ -18,6 +18,10 @@ export interface WorldRecord {
    * `x_strand`), verbatim as the file or keel gave them, so a copy carries them (folder spec §3.3).
    * Absent on a record from before. */
   extensions?: Record<string, unknown>;
+  /** keel's reading aids for this key (GET /me `reading_aids`: the Charter, the Guide, the Domains; the strand
+   * left out), kept from each launch. Read for a player, whose known-of stubs carry no mark (src/aids.ts).
+   * Absent until a /me has answered with them. */
+  servedAids?: OwReadingAids;
   /** Who made this world's folder (folder spec §4.2): Lantern's own line for a world born here, a
    * file's own line kept verbatim for one opened from it, null when that file had none (written
    * once, by the maker: Lantern never claims a world it only saved). Absent on a record from before. */

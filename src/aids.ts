@@ -8,7 +8,8 @@
 //
 // The pick is the SDK's own `charterOf`, never a copy of its rule. It reads the phone's copy at the owner
 // rung: the copy already is what this phone's key was served, so a hidden aid a contributor was never
-// served is not in it, and a guest's known-of stub carries no mark and reads as lore.
+// served is not in it. A player's known-of stub carries no mark, so for a player keel's own packet from
+// GET /me is the reading (`servedAidsOf`, kept on the world record at each launch; the session's `isAid`).
 import { charterOf, handsOnAsProposed, isCharterElement, readingAidOf, type OwElement, type OwReadingAids } from '@onlyworlds/sdk';
 
 export type AidKind = 'charter' | 'guide' | 'domain';
@@ -40,6 +41,36 @@ export interface AidsRead {
 }
 
 const NONE: OwReadingAids = { charter: null, guide: null, domains: [] };
+
+/**
+ * keel's own packet from GET /me (`reading_aids`), the strand left out, or undefined when the answer has none
+ * (an older keel) or its shape is not the packet's. keel reads the marks at its own rows, so a Domain a player
+ * knows only as a stub is in it (keel elements/charter.py `read`: its hubs empty).
+ */
+export function servedAidsOf(me: unknown): OwReadingAids | undefined {
+  const ra = (me as { reading_aids?: unknown } | null)?.reading_aids as Partial<OwReadingAids> | undefined;
+  if (!ra || typeof ra !== 'object' || !Array.isArray(ra.domains)) return undefined;
+  const named = (x: unknown): x is { id: string; name: string } =>
+    !!x && typeof x === 'object' && typeof (x as { id?: unknown }).id === 'string';
+  return {
+    charter: named(ra.charter) ? ra.charter : null,
+    guide: named(ra.guide) ? ra.guide : null,
+    domains: ra.domains.filter(named),
+  };
+}
+
+/** The ids keel's packet names: an element with one of them is an aid for its reader, mark or none. */
+export function servedAidIds(p: OwReadingAids): Set<string> {
+  return new Set([p.charter?.id, p.guide?.id, ...p.domains.map((d) => d.id)].filter((x): x is string => typeof x === 'string'));
+}
+
+/** keel's packet as Lantern counts it: one Charter and one Guide at most (the leading ones), every Domain. */
+export function readServedAids(p: OwReadingAids): AidsRead {
+  const charters = p.charter ? 1 : 0;
+  const guides = p.guide ? 1 : 0;
+  const domains = p.domains.length;
+  return { packet: p, charters, guides, domains, count: charters + guides + domains };
+}
 
 /** The packet and the counts for a world's elements. The SDK's whole reading only when there is an aid to read. */
 export function readAids(elements: readonly OwElement[]): AidsRead {
@@ -83,11 +114,18 @@ export function aidLead(el: OwElement, max = 200): string {
 /**
  * The line under an aid's name on its own page: which aid it is, whether it leads (an older marked Charter
  * or Guide is superseded, the profile's "which one"), and that the lists leave it out while the aids are hidden.
- * Null for anything that is not a marked aid.
+ * Null for anything that is not an aid for this reader (`aid`: the session's `isAid`, which counts a player's
+ * stub keel's packet names). The packet says which aid an element is before its pair does: a stub may not carry one.
  */
-export function aidLine(el: OwElement, packet: OwReadingAids, shown: boolean, nameOf: (id: string) => string): string | null {
-  if (!isReadingAid(el)) return null;
-  const kind = aidKind(el);
+export function aidLine(el: OwElement, packet: OwReadingAids, shown: boolean, nameOf: (id: string) => string, aid = isReadingAid(el)): string | null {
+  if (!aid) return null;
+  const kind: AidKind | null = packet.domains.some((d) => d.id === el.id)
+    ? 'domain'
+    : packet.charter?.id === el.id
+      ? 'charter'
+      : packet.guide?.id === el.id
+        ? 'guide'
+        : aidKind(el);
   const out = shown ? '' : ' It stays out of the lists and search.';
   if (kind === 'domain') return `One of this world's domains, on its home.${out}`;
   const lead = kind === 'charter' ? packet.charter : packet.guide;

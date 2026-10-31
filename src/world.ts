@@ -14,6 +14,7 @@ import {
   type OwElement,
   type OwMember,
   strandOf,
+  type OwReadingAids,
   type OwStrand,
 } from '@onlyworlds/sdk';
 import * as db from './db';
@@ -26,7 +27,7 @@ import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
 import { isRoomElement, roomShown, setRoomShown } from './room';
-import { aidsShown, isReadingAid, readAids, setAidsShown, type AidsRead } from './aids';
+import { aidsShown, isReadingAid, readAids, readServedAids, servedAidIds, servedAidsOf, setAidsShown, type AidsRead } from './aids';
 import { isProposed } from './review';
 import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import { publicPageOnFrom, publicPageStale, readerOf } from './waymark-for';
@@ -148,6 +149,7 @@ export class WorldSession {
   private lookupCache: OwWorldIndex<OwElement> | null = null;
   private handOnCache: OwWorldIndex<OwElement> | null = null;
   private aidsCache: AidsRead | null = null;
+  private servedIdsCache: Set<string> | null = null;
   private strandCache: { mark: string; read: OwStrand } | null = null;
   private pulling: Promise<void> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
@@ -362,9 +364,16 @@ export class WorldSession {
         characterId: role === 'guest' && typeof me.character === 'string' ? me.character : null,
         // A world from the account list keeps the list's role; one opened with a key takes keel's.
         ...(this.rec.role ? {} : { memberRole: role }),
+        // keel's reading aids for this key, for a player's door and lists (src/aids.ts); an answer without them keeps the last.
+        ...(() => {
+          const served = servedAidsOf(me);
+          return served ? { servedAids: served } : {};
+        })(),
       });
       if (rec) {
         this.rec = rec;
+        this.aidsCache = null;
+        this.servedIdsCache = null;
         this.emit();
       }
     } catch {
@@ -508,12 +517,30 @@ export class WorldSession {
   inLore(withAids = false): (e: OwElement) => boolean {
     const room = roomShown(this.id);
     const aids = withAids || aidsShown(this.id);
-    return (e) => (room || !isRoomElement(e)) && (aids || !isReadingAid(e));
+    return (e) => (room || !isRoomElement(e)) && (aids || !this.isAid(e));
   }
 
-  /** The world's reading aids: the SDK's packet (the home's door) and how many it holds, by kind. */
+  /**
+   * keel's packet, where the phone's copy cannot read the marks: a player's known-of stubs carry none, so for a
+   * player the packet GET /me served at the last launch is the reading. Everyone else reads the copy's marks.
+   */
+  private servedPacket(): OwReadingAids | null {
+    return this.isPlayer && this.rec.servedAids ? this.rec.servedAids : null;
+  }
+
+  /** A reading aid for this reader: the mark on the copy, or (a player) an id keel's packet names. */
+  isAid(el: OwElement): boolean {
+    if (isReadingAid(el)) return true;
+    const p = this.servedPacket();
+    if (!p) return false;
+    this.servedIdsCache ??= servedAidIds(p);
+    return this.servedIdsCache.has(el.id);
+  }
+
+  /** The world's reading aids: the SDK's packet (the home's door) and how many it holds, by kind; keel's for a player. */
   aids(): AidsRead {
-    this.aidsCache ??= readAids(this.elements());
+    const p = this.servedPacket();
+    this.aidsCache ??= p ? readServedAids(p) : readAids(this.elements());
     return this.aidsCache;
   }
 

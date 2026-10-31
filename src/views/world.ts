@@ -26,7 +26,7 @@ import {
 import { chipMark, elName, elRow, errorText, sheet, tabbar, toast, topbar, typeChip } from '../ui';
 import { clearTonight, tonight, toggleTonight } from '../tonight';
 import { roomShown } from '../room';
-import { aidLead, aidLine, aidsShown, aidsWords, isReadingAid } from '../aids';
+import { aidLead, aidLine, aidsShown, aidsWords } from '../aids';
 import { noteOpened, recent } from '../recent';
 import { givenTonight } from '../given';
 import { notes } from '../notes';
@@ -847,7 +847,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     // Hidden (src/hidden.ts, folder spec §4.8): shown to its holder with the word, and who else can see it.
     const hidden = hiddenLine(el, !s.isLocal);
     // A reading aid (src/aids.ts): which one, whether it leads, and that the lists leave it out.
-    const aid = isReadingAid(el) ? aidLine(el, s.aids().packet, aidsShown(s.id), (aidId) => elName(s.get(aidId))) : null;
+    const aid = s.isAid(el) ? aidLine(el, s.aids().packet, aidsShown(s.id), (aidId) => elName(s.get(aidId)), true) : null;
     const headText = h('div', { class: 'stack', style: 'gap:4px;min-width:0' }, nameH, h('span', { class: 'muted' }, kind),
       proposed ? h('span', { class: 'proposed-mark', 'data-role': 'proposed-mark' }, proposed === 'proposed' ? 'Proposed, not yet reviewed: not part of the world until a keeper accepts it on OnlyWorlds.' : 'Proposed and not yet reviewed; the proposal has lapsed.') : null,
       hidden ? h('span', { class: 'muted', 'data-role': 'hidden-mark' }, hidden) : null,
@@ -935,7 +935,7 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     // Grouped by type, then by name: the store's order differs between a fresh read and a reopen,
     // and the first eight shown must not change with it.
     // An aid's own page reads the whole world: the Guide is what links to a Domain.
-    const links = [...s.backlinks(id, isReadingAid(el))].sort((a, b) => {
+    const links = [...s.backlinks(id, s.isAid(el))].sort((a, b) => {
       const ea = s.get(a);
       const eb = s.get(b);
       return (ea?.type ?? '').localeCompare(eb?.type ?? '') || elName(ea).localeCompare(elName(eb)) || (a < b ? -1 : a > b ? 1 : 0);
