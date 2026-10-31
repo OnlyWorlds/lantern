@@ -114,7 +114,8 @@ function aidsDoor(s: WorldSession): HTMLElement | '' {
   const { packet } = s.aids();
   const charter = packet.charter ? s.get(packet.charter.id) : undefined;
   const guide = packet.guide ? s.get(packet.guide.id) : undefined;
-  if (!charter && !guide && !packet.domains.length) return '';
+  const strand = s.strand();
+  if (!charter && !guide && !packet.domains.length && !strand) return '';
   // A hidden aid says so at its holder's door, as on every list row (src/hidden.ts).
   const marks = (el: OwElement | undefined) => (el ? markWords(el).map((w) => ` · ${w}`).join('') : '');
   const card = (el: OwElement, label: string, role: string) => {
@@ -144,8 +145,40 @@ function aidsDoor(s: WorldSession): HTMLElement | '' {
           ),
         ]
       : []),
+    // The strand fourth (the strand profile's rule 2): its filled slots in the story's order, Atlas's words.
+    ...(strand
+      ? [
+          h('p', { class: 'section-label' }, "The world's strand"),
+          h(
+            'div',
+            { class: 'results', 'data-role': 'strand' },
+            ...STRAND_SLOTS.flatMap(([slot, type, word]) => {
+              const f = strand[slot];
+              if (!f) return [];
+              const tail = slot === 'now' && strand.same ? `${word}, the same place` : word;
+              return [
+                h(
+                  'a',
+                  { class: 'el-row', href: `#/w/${s.id}/e/${f.id}`, 'data-slot': slot },
+                  typeChip(type),
+                  h('span', { class: 'label' }, h('b', null, f.name.trim() || 'Unnamed'), h('span', { class: 'muted' }, ` · ${tail}${marks(s.get(f.id))}`)),
+                ),
+              ];
+            }),
+          ),
+        ]
+      : []),
   );
 }
+
+/** The strand's slots in the story's order, each with its type and Atlas's word for it (Atlas's `SLOT_WORD`). */
+const STRAND_SLOTS: ReadonlyArray<readonly ['narrative' | 'event' | 'location' | 'character' | 'now', string, string]> = [
+  ['narrative', 'narrative', 'Story'],
+  ['event', 'event', 'Happening'],
+  ['location', 'location', 'Where it happened'],
+  ['character', 'character', 'Hero'],
+  ['now', 'location', 'Where the hero is now'],
+];
 
 /** A caught note still waiting in Unsorted (a Narrative with that supertype, Skeld's convention). */
 function isUnsortedNote(el: OwElement): boolean {

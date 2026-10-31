@@ -123,7 +123,7 @@ export function toWorldFile(
   // The folder spec's names for the clock (Atlas reads both spellings of now).
   if (rec.timeNow !== undefined) world.time_current = rec.timeNow;
   if (rec.timeUnit) world.time_basic_unit = rec.timeUnit;
-  // Every extension key the world came with, carried as given: Lantern reads only x_names of them.
+  // Every extension key the world came with, carried as given: Lantern reads only x_names and x_strand of them.
   Object.assign(world, rec.extensions ?? {});
   if (rec.names !== undefined) world.x_names = rec.names;
   if (rec.producer) world.producer = rec.producer;

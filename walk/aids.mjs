@@ -26,7 +26,7 @@ const lone = '0f0f0f0f-0000-4000-8000-0000000d0002';
 const id = (n) => `d0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
 const file = (type, o) => ({ path: `elements/${type}/${o.name.toLowerCase().replace(/[^a-z]+/g, '-')}--${o.id.slice(-8)}.json`, data: enc({ ...o, type }) });
-const zip = (name, w, files) => Buffer.from(writeWorldFile([{ path: 'world.json', data: enc({ id: w, name }) }, ...files], name.toLowerCase().replace(/ /g, '-')));
+const zip = (name, w, files, extra = {}) => Buffer.from(writeWorldFile([{ path: 'world.json', data: enc({ id: w, name, ...extra }) }, ...files], name.toLowerCase().replace(/ /g, '-')));
 
 const aidsWorld = zip('Aids walk', wid, [
   file('law', { id: id(1), name: 'House rules', supertype: 'Charter', x_charter_of: wid, description: 'Be kind at the table.', created_at: '2026-10-01T00:00:00Z' }),
@@ -36,9 +36,12 @@ const aidsWorld = zip('Aids walk', wid, [
   file('construct', { id: id(5), name: 'The court', supertype: 'Domain', x_charter_of: wid, description: 'Who rules.', hidden: true }),
   // Lore: a kingdom's charter with no mark, a person, a place.
   file('law', { id: id(6), name: "The kingdom's charter", supertype: 'Charter', description: 'Signed at the ford.' }),
-  file('character', { id: id(7), name: 'Ada', description: 'A ferrywoman who keeps the house rules.' }),
+  file('character', { id: id(7), name: 'Ada', description: 'A ferrywoman who keeps the house rules.', location: id(8) }),
   file('location', { id: id(8), name: 'The harbour' }),
-]);
+  // The strand (the strand profile): a story, its happening at the harbour, Ada its hero, Ada at the harbour now.
+  file('narrative', { id: id(30), name: 'The Long Thaw', supertype: 'Story', events: [id(31)], protagonist: id(7) }),
+  file('event', { id: id(31), name: 'The Ice Breaks', locations: [id(8)] }),
+], { x_strand: { narrative: id(30), event: id(31), location: id(8) } });
 const loneWorld = zip('Lone charter', lone, [file('law', { id: id(11), name: 'Our rules', supertype: 'Charter', x_charter_of: lone, description: 'Ask first.' })]);
 // A world file can carry any value as a name: a marked Guide named 42 must not stop the home.
 const odd = '0f0f0f0f-0000-4000-8000-0000000d0003';
@@ -99,11 +102,17 @@ async function walk(engine, tag) {
     `Charter, Guide, then the Domains in the Guide's order (${JSON.stringify(doorText)})`);
   check(tag, doorText.includes("This world's charter · Be kind at the table.") && doorText.includes('Where the ferries run.'), 'each says its opening or its sentence');
   check(tag, doorText.includes('The court · hidden · Who rules.'), 'a hidden Domain says so at the door');
+  const strandRows = await page.$$eval('[data-part="reading-aids"] [data-role="strand"] .el-row', (rs) => rs.map((r) => [r.getAttribute('data-slot'), r.querySelector('b')?.textContent, r.querySelector('.muted')?.textContent]));
+  check(tag, JSON.stringify(strandRows) === JSON.stringify([
+    ['narrative', 'The Long Thaw', ' · Story'], ['event', 'The Ice Breaks', ' · Happening'], ['location', 'The harbour', ' · Where it happened'],
+    ['character', 'Ada', ' · Hero'], ['now', 'The harbour', ' · Where the hero is now, the same place'],
+  ]), `the strand fourth, after the Domains, its five slots in the story's order (${JSON.stringify(strandRows)})`);
+  check(tag, at('The coast') < doorText.indexOf("THE WORLD'S STRAND") || at('The coast') < doorText.toLowerCase().indexOf("the world's strand"), 'the strand comes after the Domains');
   check(tag, !doorText.includes('Old rules') && !doorText.includes("kingdom"), 'the older Charter and the unmarked one are not at the door');
 
   // Out of every lore view by default.
   let t = await tiles();
-  check(tag, t.Laws === '1' && !t.Constructs && t.Characters === '1', `the tiles count the lore alone: ${JSON.stringify(t)}`);
+  check(tag, t.Laws === '1' && !t.Constructs && t.Characters === '1' && t.Narratives === '1' && t.Events === '1', `the tiles count the lore alone, the strand's story and happening with it: ${JSON.stringify(t)}`);
   check(tag, (await card.count()) === 1 && (await card.innerText()).includes('The reading aids · 5') && (await card.innerText()).includes('2 charters, the guide and 2 domains stay out of'),
     `the switch says what it holds (${(await card.count()) ? await card.innerText() : 'no card'})`);
   let hits = await search('rules');

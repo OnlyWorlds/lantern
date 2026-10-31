@@ -151,3 +151,33 @@ describe("a world's lore views", () => {
     expect(elName(el({ id: 'x', type: 'law', name: '  Rules ' }))).toBe('Rules');
   });
 });
+
+describe("the world's strand at the door", () => {
+  const story = el({ id: id(51), type: 'narrative', name: 'The Long Thaw', events: [id(52)], protagonist: id(54) });
+  const ice = el({ id: id(52), type: 'event', name: 'The Ice Breaks', locations: [id(53)] });
+  const ford = el({ id: id(53), type: 'location', name: 'Kessel Ford' });
+  const wren = el({ id: id(54), type: 'character', name: 'Wren', location: id(53) });
+
+  it("reads the SDK's five slots from the World's mark, and none without one", async () => {
+    const mark = { narrative: id(51), event: id(52), location: id(53) };
+    const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000a3', name: 'Strand', kind: 'local', addedAt: '', extensions: { x_strand: mark } }, [story, ice, ford, wren, ada]);
+    const s = await openWorld(await openWorldFile(bytes));
+    const st = s.strand();
+    expect([st?.narrative?.name, st?.event?.name, st?.location?.name, st?.character?.name, st?.now?.name, st?.same]).toEqual(['The Long Thaw', 'The Ice Breaks', 'Kessel Ford', 'Wren', 'Kessel Ford', true]);
+    // The strand's elements are ordinary lore: no list leaves them out.
+    expect(s.ofType('narrative').map((e) => e.name)).toEqual(['The Long Thaw']);
+    // An edit moves the reading: the hero goes, and so does where the hero is now.
+    await s.edit(story.id, { protagonist: null });
+    expect([s.strand()?.character, s.strand()?.now]).toEqual([null, null]);
+
+    // The mark alone moves (a world GET): the reading follows it.
+    await s.edit(story.id, { protagonist: wren.id });
+    s.rec = { ...s.rec, extensions: { x_strand: { narrative: id(51), event: null, location: null } } };
+    expect([s.strand()?.event, s.strand()?.location, s.strand()?.character?.name, s.strand()?.same]).toEqual([null, null, 'Wren', null]);
+
+    const { bytes: none } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000a4', name: 'No strand', kind: 'local', addedAt: '' }, [story, ice]);
+    expect((await openWorld(await openWorldFile(none))).strand()).toBeNull();
+    const { bytes: gone } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000a5', name: 'Gone story', kind: 'local', addedAt: '', extensions: { x_strand: { narrative: id(99) } } }, [ice]);
+    expect((await openWorld(await openWorldFile(gone))).strand()).toBeNull();
+  });
+});

@@ -13,6 +13,8 @@ import {
   kindCanWrite,
   type OwElement,
   type OwMember,
+  strandOf,
+  type OwStrand,
 } from '@onlyworlds/sdk';
 import * as db from './db';
 import type { OutboxRow, WorldRecord } from './db';
@@ -146,6 +148,7 @@ export class WorldSession {
   private lookupCache: OwWorldIndex<OwElement> | null = null;
   private handOnCache: OwWorldIndex<OwElement> | null = null;
   private aidsCache: AidsRead | null = null;
+  private strandCache: { mark: string; read: OwStrand } | null = null;
   private pulling: Promise<void> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
   private queuedFlush: Promise<void> | null = null;
@@ -455,6 +458,7 @@ export class WorldSession {
     this.lookupCache = null;
     this.handOnCache = null;
     this.aidsCache = null;
+    this.strandCache = null;
   }
 
   /** Kael's lookup index (SDK buildWorldIndex) over what the lists show (the room and the reading aids left out unless shown), built on first ask. */
@@ -511,6 +515,35 @@ export class WorldSession {
   aids(): AidsRead {
     this.aidsCache ??= readAids(this.elements());
     return this.aidsCache;
+  }
+
+  /**
+   * The world's strand (schema-dist profiles/strand.md): the SDK's `strandOf` over the phone's copy at the owner
+   * rung (as the aids), the mark the World's `x_strand` keel served or the world file carried. Null when the world
+   * has no mark or its story is not in the copy. Kept until the elements or the mark change.
+   */
+  strand(): OwStrand | null {
+    const mark = this.rec.extensions?.x_strand;
+    if (mark === undefined || mark === null) return null;
+    const key = JSON.stringify(mark);
+    if (this.strandCache?.mark !== key) {
+      // Only the bodies the answer can name (Atlas's `strandBodies`): the story, the marked happening and place,
+      // the story's hero and the hero's place. At the owner rung the reading over them is the reading over the copy.
+      const bodies = new Map<string, OwElement>();
+      const take = (id: unknown): OwElement | undefined => {
+        const el = typeof id === 'string' ? this.view.get(id) : undefined;
+        if (el) bodies.set(el.id, el);
+        return el;
+      };
+      const m = mark && typeof mark === 'object' ? (mark as Record<string, unknown>) : {};
+      const story = take(m.narrative);
+      take(m.event);
+      take(m.location);
+      const hero = story ? take((story as Record<string, unknown>).protagonist) : undefined;
+      if (hero) take((hero as Record<string, unknown>).location);
+      this.strandCache = { mark: key, read: strandOf({ elements: [...bodies.values()], x_strand: mark }, { rung: 'owner' }) };
+    }
+    return this.strandCache.read.narrative ? this.strandCache.read : null;
   }
 
   /** Shows or hides the reading aids in the lists; the lookup is rebuilt. */
