@@ -56,6 +56,13 @@ describe('doorTrail', () => {
     expect(doorTrail(scrubbed, read)).toEqual([{ where: 'in Atlas', at: '2026-10-21T06:00:00+00:00' }]);
   });
 
+  it('a read of an element keel has no door record on keeps its last write\'s door (the Atlas gate\'s M1)', () => {
+    // keel added `doors` on 2026-10-29 without filling it: an element not written since reads null.
+    const pulled = { ...base, updated_at: '2026-10-20T06:00:00+00:00', changed_client: 'lantern', changed_via: 'api' } as OwElement;
+    const read = { doors: null, updated_at: '2026-10-20T06:00:00+00:00', changed_client: 'lantern', changed_via: 'api' };
+    expect(doorTrail(pulled, read)).toEqual([{ where: 'in Lantern', at: '2026-10-20T06:00:00+00:00' }]);
+  });
+
   it('"in code" stands for many doors: its newest says it, once', () => {
     const el = {
       ...base,

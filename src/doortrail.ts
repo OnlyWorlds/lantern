@@ -23,6 +23,9 @@ export interface TrailStep {
 export interface DoorRead {
   doors: Record<string, unknown> | null;
   updated_at: string | null;
+  /** The last write's door, for an element keel has no door record on (written before `doors` existed). */
+  changed_client?: string | null;
+  changed_via?: string | null;
 }
 
 /** Is this read at least as new as the copy? (A copy with no time is older than any read.) */
@@ -35,7 +38,7 @@ export function readCovers(read: DoorRead | null | undefined, copyUpdated: unkno
 /** The element's trail, newest first, one step per phrase; empty when OnlyWorlds has said nothing of it, or on a stub. */
 export function doorTrail(el: OwElement, read?: DoorRead | null): TrailStep[] {
   if (isKnownOf(el)) return [];
-  const source = readCovers(read, el.updated_at) ? { updated_at: read!.updated_at, doors: read!.doors } : el;
+  const source = readCovers(read, el.updated_at) ? { updated_at: read!.updated_at, doors: read!.doors, changed_client: read!.changed_client, changed_via: read!.changed_via } : el;
   const seen = new Set<string>();
   const out: TrailStep[] = [];
   for (const d of doorsOf(source)) {

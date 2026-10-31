@@ -313,6 +313,8 @@ export class WorldSession {
             const read: DoorRead = {
               doors: d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : null,
               updated_at: typeof body.updated_at === 'string' ? body.updated_at : null,
+              changed_client: typeof body.changed_client === 'string' ? body.changed_client : null,
+              changed_via: typeof body.changed_via === 'string' ? body.changed_via : null,
             };
             const moved = JSON.stringify(read) !== JSON.stringify(s.read);
             s.read = read;
