@@ -181,3 +181,37 @@ describe("the world's strand at the door", () => {
     expect((await openWorld(await openWorldFile(gone))).strand()).toBeNull();
   });
 });
+
+describe("a player's reading aids, from keel's own packet", () => {
+  // keel serves a player a Domain known only as a stub: no mark on the phone's copy, but in /me's reading_aids
+  // (keel elements/charter.py `read`, its hubs empty).
+  const stubDomain = el({ id: id(61), type: 'construct', name: 'The coast', known_of: true });
+  const lore = el({ id: id(62), type: 'construct', name: 'A rumour', supertype: 'Domain' });
+  const served = { charter: null, guide: null, domains: [{ id: id(61), name: 'The coast', sentence: 'Where the ferries run.', hubs: [] }] };
+
+  it("servedAidsOf reads /me's packet, the strand left out, and nothing from an answer without one", async () => {
+    const { servedAidsOf, servedAidIds } = await import('../src/aids');
+    const p = servedAidsOf({ role: 'guest', reading_aids: { ...served, strand: { narrative: null } } });
+    expect(p).toEqual(served);
+    expect([...servedAidIds(p!)]).toEqual([id(61)]);
+    expect(servedAidsOf({ role: 'guest' })).toBeUndefined();
+    expect(servedAidsOf({ reading_aids: { charter: null } })).toBeUndefined();
+  });
+
+  it("a player: the stub keel names is an aid, out of the lore and on the door; a contributor's copy reads the marks alone", async () => {
+    const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000b1', name: 'Player', kind: 'local', addedAt: '' }, [stubDomain, lore, ada]);
+    const player = await openWorld(await openWorldFile(bytes));
+    player.rec = { ...player.rec, kind: 'online', memberRole: 'guest', servedAids: served };
+    expect(player.isAid(stubDomain)).toBe(true);
+    expect(player.isAid(lore)).toBe(false);
+    expect(player.lore().map((e) => e.name).sort()).toEqual(['A rumour', 'Ada']);
+    expect(player.aids().packet.domains.map((d) => d.name)).toEqual(['The coast']);
+    expect(aidLine(stubDomain, player.aids().packet, false, () => '', player.isAid(stubDomain))).toMatch(/^One of this world's domains/);
+
+    const { bytes: b2 } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000b2', name: 'Member', kind: 'local', addedAt: '' }, [stubDomain, lore, ada]);
+    const member = await openWorld(await openWorldFile(b2));
+    member.rec = { ...member.rec, kind: 'online', memberRole: 'contributor', servedAids: served };
+    expect(member.isAid(stubDomain)).toBe(false);
+    expect(member.lore().map((e) => e.name).sort()).toEqual(['A rumour', 'Ada', 'The coast']);
+  });
+});
