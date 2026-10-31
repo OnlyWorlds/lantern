@@ -114,6 +114,17 @@ describe('world files', () => {
     expect(lineOf(toWorldFile({ ...base, id: 'w0000000-0000-4000-8000-0000000000b4', name: 'Old record' }, []).bytes)).toBeUndefined();
   });
 
+  it("every World extension key a file brought (the strand's x_strand, another tool's atlas_ and shadow_) leaves in its copy as given", async () => {
+    const strand = { narrative: 'n1', event: null, location: 'l1' };
+    const world = { id: 'w0000000-0000-4000-8000-0000000000c1', name: 'Strand', x_strand: strand, atlas_home: { grid: [1, 2] }, shadow_note: 'kept', x_gone: null, plain: 'not a tool key' };
+    const id = await openWorldFile(writeWorldFile([{ path: 'world.json', data: new TextEncoder().encode(JSON.stringify(world)) }], 'Strand'));
+    const rec = (await db.getWorldRecord(id))!;
+    const out = JSON.parse(new TextDecoder().decode(readWorldFile(toWorldFile(rec, []).bytes).files.find((f) => f.path === 'world.json')!.data));
+    expect([out.x_strand, out.atlas_home, out.shadow_note, out.x_gone]).toEqual([strand, { grid: [1, 2] }, 'kept', null]);
+    expect('plain' in out).toBe(false);
+    expect('x_strand' in JSON.parse(new TextDecoder().decode(readWorldFile(toWorldFile({ ...rec, extensions: undefined }, []).bytes).files.find((f) => f.path === 'world.json')!.data))).toBe(false);
+  });
+
   it("a world's own words (x_names) leave in its file and come back verbatim", async () => {
     const names = { version: 1, types: { character: { one: 'Employee', many: 'Employees' } }, later: [1] };
     const { bytes } = toWorldFile({ id: 'w0000000-0000-4000-8000-0000000000aa', name: 'Work', kind: 'local', addedAt: '', names }, []);

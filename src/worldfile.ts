@@ -63,6 +63,14 @@ function producerLineOf(world: unknown): Record<string, unknown> | null {
   return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : null;
 }
 
+/** The World's extension keys, by the prefixes keel and the folder spec carry (§3.3), each value as given. */
+export function worldExtensionsOf(world: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!world || typeof world !== 'object') return out;
+  for (const [k, v] of Object.entries(world as Record<string, unknown>)) if (/^(x_|atlas_|shadow_)/.test(k)) out[k] = v;
+  return out;
+}
+
 const RECORDS_MANIFEST = 'records/RECORDS.json';
 
 /** What Save a copy asks before it hands a file over (folder spec §4.5 rule 11, OW-8). */
@@ -115,6 +123,8 @@ export function toWorldFile(
   // The folder spec's names for the clock (Atlas reads both spellings of now).
   if (rec.timeNow !== undefined) world.time_current = rec.timeNow;
   if (rec.timeUnit) world.time_basic_unit = rec.timeUnit;
+  // Every extension key the world came with, carried as given: Lantern reads only x_names of them.
+  Object.assign(world, rec.extensions ?? {});
   if (rec.names !== undefined) world.x_names = rec.names;
   if (rec.producer) world.producer = rec.producer;
   const files: OwWorldFileEntry[] = [{ path: 'world.json', data: enc.encode(JSON.stringify(world, null, 2) + '\n') }];
@@ -192,6 +202,7 @@ export async function openWorldFile(bytes: Uint8Array): Promise<string> {
     timeNow: clockFrom(read.world as Record<string, unknown>).now,
     timeUnit: clockFrom(read.world as Record<string, unknown>).unit,
     names: (read.world as Record<string, unknown>).x_names,
+    extensions: worldExtensionsOf(read.world),
     producer: producerLineOf(read.world),
     kind: 'local',
     count: elements.length,

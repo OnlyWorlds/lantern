@@ -14,6 +14,10 @@ export interface WorldRecord {
   timeUnit?: string;
   /** The world's own words for the types (keel's `x_names`, the names profile), verbatim: src/schema.ts typeName. */
   names?: unknown;
+  /** The World's own extension keys (`x_`, `atlas_`, `shadow_`: another tool's settings, the strand's
+   * `x_strand`), verbatim as the file or keel gave them, so a copy carries them (folder spec §3.3).
+   * Absent on a record from before. */
+  extensions?: Record<string, unknown>;
   /** Who made this world's folder (folder spec §4.2): Lantern's own line for a world born here, a
    * file's own line kept verbatim for one opened from it, null when that file had none (written
    * once, by the maker: Lantern never claims a world it only saved). Absent on a record from before. */

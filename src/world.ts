@@ -27,6 +27,7 @@ import { isRoomElement, roomShown, setRoomShown } from './room';
 import { isProposed } from './review';
 import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import { publicPageOnFrom, publicPageStale, readerOf } from './waymark-for';
+import { worldExtensionsOf } from './worldfile';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
@@ -630,6 +631,8 @@ export class WorldSession {
           })(),
           // The world's own words: keel's are the truth for a world it holds.
           names: (meta as unknown as Record<string, unknown>).x_names,
+          // Every World extension key keel served this reader (the strand's by its rule 1), for a copy.
+          extensions: worldExtensionsOf(meta),
           // The site's public page, for the OnlyWorlds mark's public face (src/waymark-for.ts).
           publicPageOn: publicPageOnFrom(meta as unknown as Record<string, unknown>),
           publicPageAt: Date.now(),

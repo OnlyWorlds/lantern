@@ -90,6 +90,19 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('a full pull keeps the World extension keys keel served', () => {
+  it('the strand and another tool key are on the record for a copy, and one keel stops serving goes', async () => {
+    const strand = { narrative: 'n1', event: 'e1', location: null };
+    keel.world = { id: 'w1', name: 'Fake world', x_strand: strand, atlas_home: { grid: [] }, x_names: { version: 1 } };
+    const s = await freshWorld();
+    await s.pull();
+    expect((await db.getWorldRecord(s.id))?.extensions).toEqual({ x_strand: strand, atlas_home: { grid: [] }, x_names: { version: 1 } });
+    keel.world = { id: 'w1', name: 'Fake world' };
+    await s.pull();
+    expect((await db.getWorldRecord(s.id))?.extensions).toEqual({});
+  });
+});
+
 describe('a full pull writes the switch', () => {
   it('public_read and public_page.on both true: on, with a time', async () => {
     keel.world = { id: 'w1', name: 'Fake world', public_read: true, public_page: { on: true } };
