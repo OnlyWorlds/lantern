@@ -110,6 +110,9 @@ async function walk(engine, deviceName, tag) {
   check(tag, page.url() === hrefBefore, 'the tap left the address as it was (no Your worlds)');
   const rows = await page.locator('.ow-waymark__row .ow-waymark__label').allTextContents();
   check(tag, rows[0] === 'onlyworlds.com' && rows.includes('Lantern') && rows.at(-1) === 'Copy link', `the rows: ${rows.join(', ')}`);
+  // SDK 4.123.5: the tools list offers Little Lens, opening the same world (red on a build before it).
+  const llHref = await page.locator('.ow-waymark__row', { hasText: 'Little Lens' }).first().getAttribute('href').catch(() => null);
+  check(tag, rows.includes('Little Lens') && typeof llHref === 'string' && llHref.startsWith('https://little-lens.onlyworlds.com/#/open/'), `Little Lens is offered (${llHref})`);
   check(tag, (await page.locator('.ow-waymark--sheet, .ow-waymark__pop').first().isVisible()), 'the fan-out shows');
   // Above the tab bar: the point at the Copy link row's centre is the row.
   const onTop = await page.evaluate(() => {
