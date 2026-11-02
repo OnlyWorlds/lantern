@@ -101,7 +101,7 @@ describe("an element's mark", () => {
 
   it('every form keeps the marks, so the menu leaves out a tool whose door cannot open the element', () => {
     const littleLens = (element: Record<string, unknown> | null | undefined) =>
-      openersFor(TOOLS, 'element', { world: W, type: String(element?.type), id: E }, { audience: 'member' }, { element }).some((r) => r.id === 'little-lens');
+      openersFor(TOOLS, 'element', { form: 'human', world: W, type: String(element?.type), id: E }, { audience: 'member' }, { element }).some((r) => r.id === 'little-lens');
     const room = ch({ type: 'narrative', supertype: 'Message', x_room_of: MARK });
     for (const facts of [{}, { editing: true }, { stub: true }]) {
       expect(littleLens(waymarkFor(owner, room, facts)?.element)).toBe(false);
