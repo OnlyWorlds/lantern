@@ -256,6 +256,16 @@ async function walk(engine, deviceName, tag) {
   await homeMark.tap();
   await page.waitForTimeout(300);
   check(tag, (await page.locator('.ow-waymark__door').count()) === 0, 'the public face shows no last door');
+  // SDK 4.130.0: a reader with no account sees Lantern's own row, and Atlas greyed as needing an account,
+  // opening nothing (red on a build before it: both rows were left out for the public).
+  check(tag, (await page.locator('.ow-waymark__row[data-here]').count()) === 1, 'the public face: Lantern\'s own row, "You are here"');
+  const atlasRow = page.locator('.ow-waymark__row[aria-disabled="true"]', { hasText: 'Atlas' });
+  const atlasText = await atlasRow.first().textContent().catch(() => '');
+  check(tag, (await atlasRow.count()) === 1 && /Needs an account/.test(atlasText ?? ''), `the public face: Atlas greyed, "Needs an account" (${(atlasText ?? '').trim()})`);
+  const hrefRead = page.url();
+  await atlasRow.first().tap({ force: true }).catch(() => {});
+  await page.waitForTimeout(400);
+  check(tag, page.url() === hrefRead && ctx.pages().length === 1, 'a press on the greyed Atlas row goes nowhere');
   await page.keyboard.press('Escape');
 
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ')})`);
