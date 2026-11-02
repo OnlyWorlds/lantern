@@ -70,8 +70,16 @@ export function waymarkFor(rec: WorldRecord | null | undefined, el: OwElement | 
   // has no page of its own there.
   if (reader === 'public' && (isHidden(el) || isRoomElement(el) || handsOnAsProposed(el) || el.type === 'pin' || el.type === 'marker')) return null;
   const name = typeof el.name === 'string' && el.name ? el.name : '(unnamed)';
-  const element = facts.stub || facts.editing || reader === 'public'
-    ? { id: el.id, type: el.type, name }
-    : { ...(el as Record<string, unknown>), id: el.id, type: el.type, name };
-  return { world, element, reader };
+  const body = facts.stub || facts.editing || reader === 'public' ? withoutDoors(el) : { ...(el as Record<string, unknown>) };
+  return { world, element: { ...body, id: el.id, type: el.type, name }, reader };
+}
+
+/**
+ * The element without what the mark's "Last shaped" line is read from (the SDK's `doorsOf`: `doors`,
+ * else `changed_client` or `changed_via` with `updated_at`). Every other key stays, so the menu still
+ * reads the element's marks and leaves out a tool whose door cannot open it (`element_skips`).
+ */
+function withoutDoors(el: OwElement): Record<string, unknown> {
+  const { doors: _d, updated_at: _u, changed_client: _c, changed_via: _v, ...rest } = el as Record<string, unknown>;
+  return rest;
 }

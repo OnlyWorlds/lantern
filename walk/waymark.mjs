@@ -25,6 +25,7 @@ const check = (tag, ok, what) => {
 const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
 const WID = '0f0f0f0f-0000-4000-8000-00000000a755';
 const ADA = 'a7550000-0000-4000-8000-000000000001';
+const WORD = 'a7550000-0000-4000-8000-000000000002';
 const WRITE = 'ow_w_' + 'w'.repeat(30);
 const READ = 'ow_r_' + 'r'.repeat(30);
 const zip = Buffer.from(
@@ -32,6 +33,7 @@ const zip = Buffer.from(
     [
       { path: 'world.json', data: enc({ id: WID, name: 'The Lantern Coast' }) },
       { path: 'elements/character/ada.json', data: enc({ id: ADA, name: 'Ada Brightwater', description: 'Keeps the light.', changed_client: 'atlas', changed_via: 'api', updated_at: '2026-10-30T10:00:00+00:00' }) },
+      { path: 'elements/narrative/word.json', data: enc({ id: WORD, name: 'A word at the table', supertype: 'Message', x_room_of: WID, description: 'A room message.' }) },
     ],
     'coast',
     { includeAuthorFields: true },
@@ -143,6 +145,20 @@ async function walk(engine, deviceName, tag) {
   }
   await page.waitForTimeout(600);
   check(tag, (await marks.count()) === 1, `ten world changes leave one mark (${await marks.count()})`);
+
+  // SDK 4.126.0: a room element's mark leaves out Little Lens, whose door cannot open it (the list's
+  // element_skips); a plain Character's offers it, so the check can move (red on a build before it).
+  for (const [id, want, what] of [[WORD, false, 'a room Message'], [ADA, true, 'a plain Character']]) {
+    await page.goto(`${BASE}/#/w/${WID}/e/${id}`);
+    await page.waitForSelector('[data-screen="element"] .el-head', { timeout: 20000 });
+    await elMark.waitFor({ timeout: 10000 }).catch(() => {});
+    await elMark.tap();
+    await page.waitForTimeout(300);
+    const r = await page.locator('.ow-waymark__row .ow-waymark__label').allTextContents();
+    check(tag, r.includes('Lantern') && r.includes('Little Lens') === want, `${what}: Little Lens ${want ? 'offered' : 'left out'} (${r.join(', ')})`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
 
   // The element page.
   await page.goto(`${BASE}/#/w/${WID}/e/${ADA}`);

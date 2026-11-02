@@ -1,7 +1,7 @@
 // The OnlyWorlds mark beside a name (src/waymark-for.ts, #755; Atlas 1.112.0's twin): whether it
 // shows, for whom, and what the component is given, on every way a world reaches the phone.
 import { describe, expect, it } from 'vitest';
-import type { OwElement } from '@onlyworlds/sdk';
+import { openersFor, TOOLS, type OwElement } from '@onlyworlds/sdk';
 import type { WorldRecord } from '../src/db';
 import { publicPageOnFrom, publicPageStale, readerOf, waymarkFor, PUBLIC_PAGE_FRESH_MS } from '../src/waymark-for';
 
@@ -91,12 +91,26 @@ describe("an element's mark", () => {
     expect(waymarkFor(owner, ch(), { creating: true })).toBeNull();
   });
 
-  it('a stub passes its id, type and name only', () => {
-    expect(waymarkFor(owner, ch({ known_of: true }), { stub: true })?.element).toEqual({ id: E, type: 'character', name: 'Ada' });
+  it('a stub passes no door', () => {
+    expect(waymarkFor(owner, ch({ known_of: true }), { stub: true })?.element).toEqual({ id: E, type: 'character', name: 'Ada', known_of: true });
   });
 
   it("while a change of mine waits: no door, since keel's last write is not what the page shows", () => {
-    expect(waymarkFor(owner, ch(), { editing: true })?.element).toEqual({ id: E, type: 'character', name: 'Ada' });
+    expect(waymarkFor(owner, ch({ doors: { atlas: '2026-10-30T10:00:00Z' }, changed_via: 'api' }), { editing: true })?.element).toEqual({ id: E, type: 'character', name: 'Ada' });
+  });
+
+  it('every form keeps the marks, so the menu leaves out a tool whose door cannot open the element', () => {
+    const littleLens = (element: Record<string, unknown> | null | undefined) =>
+      openersFor(TOOLS, 'element', { world: W, type: String(element?.type), id: E }, { audience: 'member' }, { element }).some((r) => r.id === 'little-lens');
+    const room = ch({ type: 'narrative', supertype: 'Message', x_room_of: MARK });
+    for (const facts of [{}, { editing: true }, { stub: true }]) {
+      expect(littleLens(waymarkFor(owner, room, facts)?.element)).toBe(false);
+      expect(littleLens(waymarkFor(owner, ch({ hidden: true }), facts)?.element)).toBe(false);
+      expect(littleLens(waymarkFor(owner, ch({ x_review_proposed: { by: MARK, evidence: 'seat' } }), facts)?.element)).toBe(false);
+      expect(littleLens(waymarkFor(owner, ch({ type: 'pin' }), facts)?.element)).toBe(false);
+      expect(littleLens(waymarkFor(owner, ch(), facts)?.element)).toBe(true);
+    }
+    expect(littleLens(waymarkFor(lent({ apiKey: READ, publicPageOn: true }), ch({ type: 'map' }))?.element)).toBe(false);
   });
 
   it('the public face: only what the public page shows, and only its id, type and name', () => {
