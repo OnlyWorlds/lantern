@@ -139,16 +139,23 @@ async function walk(engine, deviceName, tag) {
   // 6. The account's own AI key (keel 441): the day's rating spent, answered on the person's key, then refused.
   // keel's shapes: accounts/ask.py's answer (`paid_by`, `remaining` 0 once the rating is spent) and
   // accounts/own_ai.py's 422 `own_key_refused` (its sentence and doc_url, never retried on the platform's key).
+  // A new question's box replaces the last one; until it does, the last box's button (enabled again after
+  // "paused") is still there, and a tap on it lands on a box being replaced (WebKit, on the host). So the
+  // walk waits for the last box to go before it looks for the button.
+  const askAnew = async (q) => {
+    const last = await page.$('[data-sentence]');
+    await page.locator('input[aria-label="Ask your world"]').fill(q);
+    if (last) await page.waitForFunction((el) => !el.isConnected, last, { timeout: 10000 });
+    await btn.waitFor({ timeout: 10000 });
+  };
   answer = json(200, { answer: 'Admiral Fluffington commands the USS Fuzzball.', remaining: 0, tokens_remaining: 0, paid_by: 'own_key' });
-  await page.locator('input[aria-label="Ask your world"]').fill('Who commands the USS Fuzzball?');
-  await btn.waitFor({ timeout: 10000 });
+  await askAnew('Who commands the USS Fuzzball?');
   await btn.tap();
   await page.waitForSelector('[data-answer="sentence"]', { timeout: 10000 });
   const paid = await page.locator('[data-paid]').first().innerText();
   check(tag, /Answered on your own AI key\./.test(paid) && !/left today/.test(paid), `on the own key: said so, and no count (${paid})`);
   answer = json(422, { error: { type: 'invalid_request', code: 'own_key_refused', message: 'Your AI key was refused by its provider; check it on your account page.', doc_url: 'https://www.onlyworlds.com/docs/errors/own_key_refused' } });
-  await page.locator('input[aria-label="Ask your world"]').fill('What sails with the USS Fuzzball?');
-  await btn.waitFor({ timeout: 10000 });
+  await askAnew('What sails with the USS Fuzzball?');
   const sentBefore = asked.length;
   await btn.tap();
   const refused = page.locator('[data-own-key="refused"]');
