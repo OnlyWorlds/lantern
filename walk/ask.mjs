@@ -136,6 +136,29 @@ async function walk(engine, deviceName, tag) {
   await page.waitForFunction(() => /paused/.test(document.querySelector('[data-sentence]')?.textContent ?? ''), null, { timeout: 10000 });
   check(tag, (await page.locator('[data-screen="ask"] .el-row').count()) > 0, 'paused: said, and the list stays');
 
+  // 6. The account's own AI key (keel 441): the day's rating spent, answered on the person's key, then refused.
+  // keel's shapes: accounts/ask.py's answer (`paid_by`, `remaining` 0 once the rating is spent) and
+  // accounts/own_ai.py's 422 `own_key_refused` (its sentence and doc_url, never retried on the platform's key).
+  answer = json(200, { answer: 'Admiral Fluffington commands the USS Fuzzball.', remaining: 0, tokens_remaining: 0, paid_by: 'own_key' });
+  await page.locator('input[aria-label="Ask your world"]').fill('Who commands the USS Fuzzball?');
+  await btn.waitFor({ timeout: 10000 });
+  await btn.tap();
+  await page.waitForSelector('[data-answer="sentence"]', { timeout: 10000 });
+  const paid = await page.locator('[data-paid]').first().innerText();
+  check(tag, /Answered on your own AI key\./.test(paid) && !/left today/.test(paid), `on the own key: said so, and no count (${paid})`);
+  answer = json(422, { error: { type: 'invalid_request', code: 'own_key_refused', message: 'Your AI key was refused by its provider; check it on your account page.', doc_url: 'https://www.onlyworlds.com/docs/errors/own_key_refused' } });
+  await page.locator('input[aria-label="Ask your world"]').fill('What sails with the USS Fuzzball?');
+  await btn.waitFor({ timeout: 10000 });
+  const sentBefore = asked.length;
+  await btn.tap();
+  const refused = page.locator('[data-own-key="refused"]');
+  await refused.waitFor({ timeout: 10000 });
+  await page.waitForTimeout(800);
+  const href = await refused.locator('a').getAttribute('href');
+  check(tag, /refused by its provider\. Nothing was counted\./.test(await refused.innerText()) && href === 'https://www.onlyworlds.com/account/settings#own-ai-key', `the refusal: its sentence and the key's page (${href})`);
+  check(tag, asked.length === sentBefore + 1, `the refused key asked once, never again (${asked.length - sentBefore})`);
+  check(tag, !(await page.locator('[data-sentence] button').first().isEnabled().catch(() => false)), 'no button to send it again');
+
   check(tag, errors.length === 0, `no errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }

@@ -150,6 +150,18 @@ async function walk(engine, deviceName, tag) {
   const said = page.locator('[data-screen="sort"] .error');
   check(tag, (await said.count()) === 1 && /used up/.test(await said.innerText()), 'and is still said on coming back to the screen');
 
+  // 3b. The rating spent and the account's own AI key refused by its provider (keel 441, accounts/own_ai.py):
+  // a 422 like a refused picture, so the words-only fallback must not send it again. Once, said with the key's page.
+  answer = json(422, { error: { type: 'invalid_request', code: 'own_key_refused', message: 'Your AI key was refused by its provider; check it on your account page.', doc_url: 'https://www.onlyworlds.com/docs/errors/own_key_refused' } });
+  const sentBeforeKey = sent.length;
+  await sortBtn.tap();
+  const keyRefused = page.locator('[data-screen="sort"] [data-own-key="refused"]');
+  await keyRefused.waitFor({ timeout: 10000 });
+  await page.waitForTimeout(800);
+  check(tag, sent.length === sentBeforeKey + 1 && sent.at(-1).notes.some((n) => typeof n !== 'string'), `the refused own key: sent once with its picture, never again as words (${sent.length - sentBeforeKey})`);
+  check(tag, (await keyRefused.locator('a').getAttribute('href')) === 'https://www.onlyworlds.com/account/settings#own-ai-key' && (await page.locator('[data-screen="sort"] .error').count()) === 1, "the refusal links the key's page, and only it is said");
+  await shot('own-key-refused');
+
   // 4. What is sent: the notes' words, and a slice of what they name, never the notes.
   const ask = { id: a.id, type: 'character', name: a.name, anchor: 'by the fire' };
   const other = { id: b.id, type: 'character', name: b.name };
@@ -191,9 +203,10 @@ async function walk(engine, deviceName, tag) {
   await shot('review');
 
   // 5. A reload keeps the spent sort.
+  const sentBeforeReload = sent.length;
   await page.reload();
   await page.waitForSelector('.sort-card', { timeout: 15000 });
-  check(tag, (await page.locator('.sort-card').count()) === 4 && sent.length === 3, 'a reload keeps the sort, and asks nothing again');
+  check(tag, (await page.locator('.sort-card').count()) === 4 && sent.length === sentBeforeReload, `a reload keeps the sort, and asks nothing again (${sent.length - sentBeforeReload} sent)`);
 
   // 6. Tick: the make (renamed), the addition, the ask's pick; leave the link.
   // Neither: an empty card to make it new, right under the question, nothing filled in for the person.

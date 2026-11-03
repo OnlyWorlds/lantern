@@ -9,7 +9,8 @@ import { icon } from '../icons';
 import { fieldLabel } from '../schema';
 import { elRow, tabbar } from '../ui';
 import { accountToken, cachedAccountWorlds } from '../account';
-import { askContext, askInASentence } from '../ask';
+import { askContext, askInASentence, AskRefused } from '../ask';
+import { ownKeyRefusedLine, paidLine } from '../own-key';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 
@@ -118,12 +119,16 @@ export function askView(s: WorldSession): View {
       hint.textContent = 'Asking…';
       try {
         const a = await askInASentence(s.id, q, context);
-        const left = typeof a.remaining === 'number' ? ` ${a.remaining} left today.` : '';
         box.replaceChildren(
           h('p', { class: a.none ? 'empty' : 'answer', 'data-answer': a.none ? 'none' : 'sentence' }, a.none ? 'Your world does not say.' : a.answer),
-          h('p', { class: 'muted small', style: 'margin:0' }, `From the elements below.${left}`),
+          h('p', { class: 'muted small', style: 'margin:0', 'data-paid': a.paidBy ?? '' }, `From the elements below.${paidLine(a.paidBy, a.remaining)}`),
         );
       } catch (e) {
+        // The own key refused: its page is the way on, and the button stays off (the same key is refused again).
+        if (e instanceof AskRefused && e.ownKey) {
+          hint.replaceWith(ownKeyRefusedLine());
+          return;
+        }
         hint.textContent = e instanceof Error ? e.message : String(e);
         btn.disabled = false;
       }

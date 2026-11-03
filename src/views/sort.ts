@@ -10,6 +10,7 @@ import { MAP_TYPES } from '../maps';
 import { fieldLabel, TYPES, typeColor, typeLabel } from '../schema';
 import { buildSlice, fitNotes, notesPayload, noteText, planWrites, sanitizeRows, tooLong, type SortRow, type Target, type Ticked, type Write } from '../sortplan';
 import { sortNotes, SortRefused, type Sorted } from '../sort';
+import { ownKeyRefusedLine, paidLine } from '../own-key';
 import { fixPlan, runWrites, type WriteRun } from '../sortwrite';
 import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
@@ -64,7 +65,7 @@ function readKept(worldId: string): Kept | null {
 /** A sort under way, per world: leaving and coming back waits for it instead of spending a second answer. */
 const inFlight = new Map<string, Promise<void>>();
 /** Why the last sort here was refused, per world: a screen that comes back after it still says why (the merge gate). */
-const refusals = new Map<string, { text: string; token: string | undefined }>();
+const refusals = new Map<string, { text: string; token: string | undefined; ownKey?: boolean }>();
 /** A write run under way, per world: one at a time, joined by a screen that comes back to it. */
 const writingRun = new Map<string, Promise<void>>();
 /** False when the phone would not keep it: a reload then loses this sort; the notes stay in Unsorted. */
@@ -206,7 +207,7 @@ export function sortView(s: WorldSession): View {
         state.clear();
         phase = 'review';
       } catch (e) {
-        refusals.set(s.id, { text: e instanceof SortRefused ? e.message : errorText(e), token: sentWith });
+        refusals.set(s.id, { text: e instanceof SortRefused ? e.message : errorText(e), token: sentWith, ownKey: e instanceof SortRefused && e.ownKey });
         phase = 'choose';
       }
     })();
@@ -258,7 +259,7 @@ export function sortView(s: WorldSession): View {
           : '';
       })(),
       reason ? h('p', { class: 'muted small', style: 'margin:0', 'data-why': '' }, reason) : h('p', { class: 'muted small', style: 'margin:0' }, 'One sort uses one of today\'s AI answers.'),
-      refusals.get(s.id) ? h('p', { class: 'error', role: 'alert' }, refusals.get(s.id)!.text) : '',
+      refusals.get(s.id)?.ownKey ? ownKeyRefusedLine() : refusals.get(s.id) ? h('p', { class: 'error', role: 'alert' }, refusals.get(s.id)!.text) : '',
       sortBtn,
     ];
   };
@@ -452,7 +453,7 @@ export function sortView(s: WorldSession): View {
 
   const reviewScreen = (): (Node | string)[] => {
     if (!kept) return [];
-    const { rows, not_proposed, remaining } = kept.result;
+    const { rows, not_proposed, remaining, paidBy } = kept.result;
     const count = [...state.values()].filter((x) => x.on).length;
     const started = !!kept.plan;
     const writing = writingRun.has(s.id);
@@ -497,7 +498,7 @@ export function sortView(s: WorldSession): View {
         'p',
         { class: 'dim', style: 'margin:0' },
         rows.length ? `${plural(rows.length, 'proposal')} from ${plural(kept.notes.length, 'note')}. Tick what is true.` : 'Nothing to propose from these notes.',
-        typeof remaining === 'number' ? h('span', { class: 'muted small' }, ` ${remaining} AI answers left today.`) : '',
+        paidLine(paidBy, remaining, 'AI answers', 'Sorted') ? h('span', { class: 'muted small', 'data-paid': paidBy ?? '' }, paidLine(paidBy, remaining, 'AI answers', 'Sorted')) : '',
       ),
       kept.wordsOnly ? h('p', { class: 'muted small', style: 'margin:0', 'data-words-only': '' }, 'The photos could not be read, so this sort used the words of your notes.') : '',
       kept.heldBack && (kept.heldBack.hidden || kept.heldBack.proposed)
