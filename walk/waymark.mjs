@@ -171,6 +171,9 @@ async function walk(engine, deviceName, tag) {
   check(tag, (await page.locator('.sheet[role="dialog"]').count()) === 0, 'and opens no rename sheet');
   const nameLine = await page.locator('.ow-waymark__name').textContent();
   check(tag, nameLine === 'Ada Brightwater', `the name line (${nameLine})`);
+  // SDK 4.132.1: the tools list's Tangle opens a Character, so a Character's menu offers it (red on a build before it).
+  const tgHref = await page.locator('.ow-waymark__row', { hasText: 'Tactical Tangle' }).first().getAttribute('href', { timeout: 2000 }).catch(() => null);
+  check(tag, tgHref === `https://tangle.onlyworlds.com/#/open/${WID}/element/${ADA}`, `a Character's menu offers Tactical Tangle (${tgHref})`);
   const door = await page.locator('.ow-waymark__door').textContent().catch(() => '');
   check(tag, /Atlas/.test(door ?? ''), `a member reads the last door (${door})`);
   await page.screenshot({ path: `${OUT}/waymark-${tag}-02-element-open.png` });
