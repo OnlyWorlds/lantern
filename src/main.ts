@@ -97,6 +97,8 @@ async function route(): Promise<void> {
   const overtaken = () => turn !== routeTurn;
   const mount = (view: View | HTMLElement, s?: WorldSession) => {
     if (!overtaken()) mountScreen(view, s);
+    // Built but never shown: release what it holds (a map), as leaving a mounted screen does.
+    else if (!(view instanceof HTMLElement)) view.destroy?.();
   };
   const hash = location.hash.replace(/^#/, '') || '/';
   const [path, query = ''] = hash.split('?');
