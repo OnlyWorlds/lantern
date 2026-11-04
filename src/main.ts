@@ -54,7 +54,7 @@ let activeSession: WorldSession | null = null;
 // Every type word asks the open world's record for its own words (src/schema.ts typeName).
 setTypeWordsSource(() => activeSession?.rec);
 
-function mount(view: View | HTMLElement, s?: WorldSession): void {
+function mountScreen(view: View | HTMLElement, s?: WorldSession): void {
   cleanup?.();
   cleanup = null;
   const v: View = view instanceof HTMLElement ? { el: view } : view;
@@ -87,7 +87,17 @@ function mount(view: View | HTMLElement, s?: WorldSession): void {
   };
 }
 
+// Each route is a turn. One that waited (a world opening, the store read) while a newer address
+// came in mounts nothing and sets nothing, so the screen is always the address bar's: a late
+// Your worlds never lands over the Settings tapped a moment after it.
+let routeTurn = 0;
+
 async function route(): Promise<void> {
+  const turn = ++routeTurn;
+  const overtaken = () => turn !== routeTurn;
+  const mount = (view: View | HTMLElement, s?: WorldSession) => {
+    if (!overtaken()) mountScreen(view, s);
+  };
   const hash = location.hash.replace(/^#/, '') || '/';
   const [path, query = ''] = hash.split('?');
   const parts = path.split('/').filter(Boolean);
@@ -101,6 +111,7 @@ async function route(): Promise<void> {
       mount(notFound(errorText(e), '#/worlds'));
       return;
     }
+    if (overtaken()) return;
     activeSession = s;
     void db.persistStorage();
     if (!pulledThisLaunch.has(s.id) && !s.isLocal) {
@@ -186,6 +197,7 @@ async function route(): Promise<void> {
       const want = openWantOf(parts);
       if (want) {
         await setPendingOpen(want);
+        if (overtaken()) return;
         history.replaceState(null, '', '/#/open');
       }
       mount(openView());
