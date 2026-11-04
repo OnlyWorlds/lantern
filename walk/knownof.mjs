@@ -60,6 +60,12 @@ async function walk(engine, deviceName, tag) {
       return json(200, { cursor: '2:ffffffff:1', changes, has_more: false, head: 2, epoch: 1, epoch_reason: 'view' });
     }
     if (/\/files$/.test(path)) return json(200, { results: [] });
+    // The element read an element page makes for its trail: keel answers a member (a player's
+    // guest seat included) with the body as it holds it for that reader, `doors` beside it (none
+    // stamped here); an id it does not hold is its 404.
+    const one = path.match(/^\/character\/([^/]+)$/);
+    const held = one && [TOR_EL, ANA_STUB].find((e) => e.id === one[1]);
+    if (held) return json(200, { ...held, doors: null });
     return json(404, { error: { code: 'not_found', message: 'not_found' } });
   });
 
@@ -102,6 +108,7 @@ async function walk(engine, deviceName, tag) {
 
   check(tag, !asked.some((a) => a.includes(`/${ANA}/files`)), `no files asked for Ana (${asked.filter((a) => a.includes('/files')).join(', ') || 'none'})`);
   check(tag, asked.some((a) => a.includes(`/${TOR}/files`)), "Tor's files were asked: the control can move");
+  check(tag, asked.includes(`GET /character/${TOR}`) && !asked.includes(`GET /character/${ANA}`), "Tor's page read him for its trail, Ana's page did not read her (a stub has none)");
   check(tag, errors.length === 0, `no errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();
 }
