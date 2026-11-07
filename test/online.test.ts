@@ -39,6 +39,8 @@ class FakeAccountKeel {
   /** The next hand-over or create commits and then its answer is lost. */
   loseHandoverAnswer = false;
   loseCreateAnswer = false;
+  /** keel since 2026-11-07: the holding route answers for any element type. Off: keel before it (a Narrative only). */
+  holdingAnyType = false;
   /** The next hand-over is refused (nothing written) and that answer is lost. */
   loseRefusalAnswer = false;
   handovers: Record<string, unknown>[] = [];
@@ -263,7 +265,7 @@ class FakeAccountKeel {
       const acct = this.accountOf(headers.get('Authorization'));
       if (!acct) return this.err(401, 'invalid_credentials');
       const hit = [...this.worlds.entries()].find(
-        ([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct && w.els.get(holding[1])?.type === 'narrative',
+        ([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct && !!w.els.get(holding[1]) && (this.holdingAnyType || w.els.get(holding[1])!.type === 'narrative'),
       );
       return hit ? this.json(200, { world_id: hit[0], door: `/worlds/${hit[0]}/` }) : this.err(404, 'not_found');
     }
@@ -764,6 +766,34 @@ describe('put it online on the hand-over', () => {
     await startOver(local);
     expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
     expect((await db.allElements(local)).length).toBe(1);
+  });
+
+  it('a lost answer on a keel that does not replay, no story sent, on a holding route for any type: the world is found by its first element and the put finishes', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    keel.holdingAnyType = true;
+    const local = await localWorld([ELS[1]]);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it("a world file of the person's own online world with no story, its refusal's answer lost, on a holding route for any type: still never adopted", async () => {
+    keel.accountPin = '4321';
+    keel.holdingAnyType = true;
+    const orig = '0worig10-0000-4000-8000-000000000000';
+    const online = new Map<string, El>([[ELS[1].id, { ...ELS[1], name: 'Ferryman (newer online)', image_url: undefined, change_seq: 1 } as El]]);
+    keel.worlds.set(orig, { name: 'Bus stop ideas', key: 'ow_w_orig', keys: ['ow_w_orig'], els: online, meta: {}, owner: 'acct-a' } as never);
+    const local = await localWorld([ELS[1]]);
+    keel.loseRefusalAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
+    expect(keel.mints).toHaveLength(0);
+    expect(keel.bulks).toBe(0);
+    expect(keel.worlds.get(orig)!.els.get(ELS[1].id)?.name).toBe('Ferryman (newer online)');
   });
 
   it("a world file of the person's own online world, its refusal's answer lost: the retry never takes the original world as the one it made", async () => {
