@@ -39,8 +39,10 @@ class FakeAccountKeel {
   /** The next hand-over or create commits and then its answer is lost. */
   loseHandoverAnswer = false;
   loseCreateAnswer = false;
-  /** keel since 2026-11-07: the holding route answers for any element type. Off: keel before it (a Narrative only). */
-  holdingAnyType = false;
+  /** keel since 2026-11-07 (PR 472): GET /account/worlds/made?key= names the world a hand-over or create made under that key, for as long as it exists. Off: keel before it (no route, 404). */
+  madeRoute = false;
+  /** The worlds made under a key, by route and account (keel keeps a hash on the world). */
+  madeBy = new Map<string, string>();
   /** The next hand-over is refused (nothing written) and that answer is lost. */
   loseRefusalAnswer = false;
   handovers: Record<string, unknown>[] = [];
@@ -161,6 +163,7 @@ class FakeAccountKeel {
       this.worlds.set(id, { name: body.name, key, keys: [key], els: new Map(), meta: { ...ext }, owner: acct } as never);
       const row = { id, name: body.name, role: 'owner', ...ext };
       const k = headers.get('Idempotency-Key');
+      if (k) this.madeBy.set(`create:${acct}:${k}`, id);
       if (this.replay && k) this.acctIdem.set(`create:${acct}:${k}`, { sent: String(init.body), status: 201, answer: row });
       if (this.loseCreateAnswer) {
         this.loseCreateAnswer = false;
@@ -252,6 +255,7 @@ class FakeAccountKeel {
         els.set(extra, { id: extra, type: 'character', name: 'Added online', change_seq: ++this.seq });
       }
       const k = headers.get('Idempotency-Key');
+      if (k) this.madeBy.set(`handover:${auth}:${k}`, id);
       if (this.replay && k) this.acctIdem.set(`handover:${auth}:${k}`, { sent: String(init.body), status: 201, answer });
       if (this.loseHandoverAnswer) {
         this.loseHandoverAnswer = false;
@@ -265,24 +269,17 @@ class FakeAccountKeel {
       const acct = this.accountOf(headers.get('Authorization'));
       if (!acct) return this.err(401, 'invalid_credentials');
       const hit = [...this.worlds.entries()].find(
-        ([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct && !!w.els.get(holding[1]) && (this.holdingAnyType || w.els.get(holding[1])!.type === 'narrative'),
+        ([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct && w.els.get(holding[1])?.type === 'narrative',
       );
       return hit ? this.json(200, { world_id: hit[0], door: `/worlds/${hit[0]}/` }) : this.err(404, 'not_found');
     }
-    // keel's list_worlds: the account's own worlds, each with every key it has (_world_row: last4s, revoked ones too).
-    if (path === '/account/worlds' && method === 'GET') {
+    // keel's made_world: the world this account's key made, in the hand-over's or the create's scope; one 404 otherwise.
+    if (path === '/account/worlds/made' && method === 'GET' && this.madeRoute) {
       const acct = this.accountOf(headers.get('Authorization'));
       if (!acct) return this.err(401, 'invalid_credentials');
-      const data = [...this.worlds.entries()]
-        .filter(([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct)
-        .map(([id, w]) => ({
-          id,
-          name: w.name,
-          role: 'owner',
-          public_read: false,
-          keys: w.keys.map((k) => ({ name: 'Key', last4: k.slice(-4), scope: 'write', revoked: false })),
-        }));
-      return this.json(200, { data });
+      const k = url.searchParams.get('key') ?? '';
+      const id = this.madeBy.get(`handover:${acct}:${k}`) ?? this.madeBy.get(`create:${acct}:${k}`);
+      return id && this.worlds.has(id) ? this.json(200, { world_id: id, door: `/worlds/${id}/` }) : this.err(404, 'not_found');
     }
     const mint = path.match(/^\/account\/worlds\/([^/]+)\/keys$/);
     if (mint && method === 'POST') {
@@ -741,90 +738,110 @@ describe('put it online on the hand-over', () => {
     expect(await db.getWorldRecord(local)).toBeUndefined();
   });
 
-  it('a lost answer on a keel that does not replay: the world that holds the sent story is found and the put finishes', async () => {
+  it('a lost answer on a keel that does not replay: keel names the world this put made by its key, and the put finishes (a story or none)', async () => {
     keel.accountPin = '4321';
     keel.replay = false;
-    const local = await localWorld(ELS);
-    keel.loseHandoverAnswer = true;
-    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
-    const id = await putOnline(local, '4321');
-    expect(keel.worlds.size).toBe(1);
-    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
-    expect(await db.getWorldRecord(local)).toBeUndefined();
+    keel.madeRoute = true;
+    for (const els of [ELS, [ELS[1]]]) {
+      const local = await localWorld(els);
+      keel.loseHandoverAnswer = true;
+      await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+      const before = keel.handovers.length;
+      const id = await putOnline(local, '4321');
+      expect(keel.handovers.length).toBe(before);
+      expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+      expect(await db.getWorldRecord(local)).toBeUndefined();
+      // The made world, once finished, is no longer counted: the next round makes a world of its own ids.
+      keel.worlds.delete(id);
+    }
   });
 
-  it('a lost answer on a keel that does not replay, and no story sent to find it by: the way out is offered, the copy stays held until taken', async () => {
+  it('a lost answer, then a key minted on the made world elsewhere before the retry: still this put\'s world by its key, and it finishes', async () => {
     keel.accountPin = '4321';
     keel.replay = false;
-    const local = await localWorld([ELS[1]]);
-    keel.loseHandoverAnswer = true;
-    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
-    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
-    await expect(putOnline(local, '4321')).rejects.toThrow(/may already have put this world on your account: look in Your worlds\. Keep it on this phone/);
-    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
-    expect(keel.worlds.size).toBe(1);
-    await startOver(local);
-    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
-    expect((await db.allElements(local)).length).toBe(1);
-  });
-
-  it('a lost answer on a keel that does not replay, no story sent, on a holding route for any type: the world is found by its first element and the put finishes', async () => {
-    keel.accountPin = '4321';
-    keel.replay = false;
-    keel.holdingAnyType = true;
-    const local = await localWorld([ELS[1]]);
-    keel.loseHandoverAnswer = true;
-    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
-    const id = await putOnline(local, '4321');
-    expect(keel.worlds.size).toBe(1);
-    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
-    expect(await db.getWorldRecord(local)).toBeUndefined();
-  });
-
-  it("a world file of the person's own online world with no story, its refusal's answer lost, on a holding route for any type: still never adopted", async () => {
-    keel.accountPin = '4321';
-    keel.holdingAnyType = true;
-    const orig = '0worig10-0000-4000-8000-000000000000';
-    const online = new Map<string, El>([[ELS[1].id, { ...ELS[1], name: 'Ferryman (newer online)', image_url: undefined, change_seq: 1 } as El]]);
-    keel.worlds.set(orig, { name: 'Bus stop ideas', key: 'ow_w_orig', keys: ['ow_w_orig'], els: online, meta: {}, owner: 'acct-a' } as never);
-    const local = await localWorld([ELS[1]]);
-    keel.loseRefusalAnswer = true;
-    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
-    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
-    expect(keel.mints).toHaveLength(0);
-    expect(keel.bulks).toBe(0);
-    expect(keel.worlds.get(orig)!.els.get(ELS[1].id)?.name).toBe('Ferryman (newer online)');
-  });
-
-  it("a world file of the person's own online world, its refusal's answer lost: the retry never takes the original world as the one it made", async () => {
-    keel.accountPin = '4321';
-    const orig = '0worig00-0000-4000-8000-000000000000';
-    const online = new Map<string, El>(ELS.map((el, i) => [el.id, { ...el, name: `${el.name} (newer online)`, image_url: undefined, change_seq: i + 1 } as El]));
-    keel.worlds.set(orig, { name: 'Bus stop ideas', key: 'ow_w_orig', keys: ['ow_w_orig'], els: online, meta: { description: 'Online, newer' }, owner: 'acct-a' } as never);
-    const local = await localWorld(ELS);
-    keel.loseRefusalAnswer = true;
-    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
-    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
-    // Nothing written to the original: no key minted there, no settings, no element replaced.
-    expect(keel.mints).toHaveLength(0);
-    expect(keel.patches).toHaveLength(0);
-    expect(keel.bulks).toBe(0);
-    expect([...keel.worlds.get(orig)!.els.values()].map((e) => e.name)).toEqual(['The ferryman (newer online)', 'Ferryman (newer online)']);
-    expect(keel.worlds.size).toBe(1);
-    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
-  });
-
-  it('a lost answer on a keel that does not replay: the found world already has a key (not the one the put made): nothing is written to it', async () => {
-    keel.accountPin = '4321';
-    keel.replay = false;
+    keel.madeRoute = true;
     const local = await localWorld(ELS);
     keel.loseHandoverAnswer = true;
     await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
     const [, made] = [...keel.worlds.entries()][0];
     made.keys.push('ow_w_from_the_site');
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+  });
+
+  it('a lost answer on a keel with neither replay nor the made route: the way out is offered, nothing written, the copy held until taken', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/may already have put this world on your account: look in Your worlds\. Keep it on this phone/);
+    expect(keel.mints).toHaveLength(0);
+    expect(keel.bulks).toBe(0);
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+    expect(keel.worlds.size).toBe(1);
+    await startOver(local);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+    expect((await db.allElements(local)).length).toBe(2);
+  });
+
+  it("a world file of the person's own online world, its refusal's answer lost: never taken as the world this put made, with a key or none, by any keel", async () => {
+    keel.accountPin = '4321';
+    for (const [n, keys, madeRoute] of [[0, ['ow_w_orig'], false], [1, ['ow_w_orig'], true], [2, [], false], [3, [], true]] as const) {
+      keel.madeRoute = madeRoute;
+      const orig = `0worig${n}0-0000-4000-8000-000000000000`;
+      const online = new Map<string, El>(ELS.map((el, i) => [el.id, { ...el, name: `${el.name} (newer online)`, image_url: undefined, change_seq: i + 1 } as El]));
+      keel.worlds.set(orig, { name: 'Bus stop ideas', key: keys[0] ?? '', keys: [...keys], els: online, meta: { description: 'Online, newer' }, owner: 'acct-a' } as never);
+      const local = await localWorld(ELS);
+      keel.loseRefusalAnswer = true;
+      await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+      await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
+      // Nothing written to the original: no key minted there, no settings, no element replaced.
+      expect(keel.mints).toHaveLength(0);
+      expect(keel.patches).toHaveLength(0);
+      expect(keel.bulks).toBe(0);
+      expect([...keel.worlds.get(orig)!.els.values()].map((e) => e.name)).toEqual(['The ferryman (newer online)', 'Ferryman (newer online)']);
+      expect(keel.worlds.size).toBe(1);
+      expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+      keel.worlds.delete(orig);
+    }
+  });
+
+  it('a world an earlier put made and let go, then the edited copy put again with its answer lost: that older world is never taken, the edits kept on the phone', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    keel.madeRoute = true;
+    const local = await localWorld(ELS);
+    // The first put's world is made, its answer never comes, and Keep it on this phone lets it go.
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await startOver(local);
+    const s = await openWorld(local);
+    await s.edit(ELS[0].id, { name: 'The ferryman, edited' });
+    forgetSession(local);
+    // The second put meets the older world's ids, and that refusal's answer is lost.
+    keel.loseRefusalAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
     await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
     expect(keel.mints).toHaveLength(0);
     expect(keel.bulks).toBe(0);
+    expect((await db.allElements(local)).find((el) => el.id === ELS[0].id)?.name).toBe('The ferryman, edited');
+  });
+
+  it('a world with no elements: a lost create answer on a keel that does not replay is found by its key, no second world', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    keel.madeRoute = true;
+    const local = await localWorld([]);
+    keel.loseCreateAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    const id = await putOnline(local, '4321');
+    expect(keel.creates).toHaveLength(1);
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.has(id)).toBe(true);
+    expect(keel.mints).toHaveLength(1);
   });
 
   it('a PIN typed differently on the retry: the replay still answers (the body goes as first sent), the wrong PIN is said at the next write, then the right one finishes', async () => {

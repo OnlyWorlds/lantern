@@ -165,23 +165,16 @@ export async function startOver(localId: string): Promise<void> {
 }
 
 /**
- * The world this put made, found after a send whose answer was lost: the world of this account that holds
- * a sent element (keel's holding route: a world the account owns, one 404 for anything else; any type
- * since 2026-11-07, a Narrative before it, so a story is asked by first), and only while it has no key at
- * all. An element is also held by the world a world file was saved from, and that world is never this
- * put's: the hand-over makes no key, and a lost answer means this phone minted none, so a world with any key
- * (revoked ones too) is another's. None when keel does not say, or the world has a key.
+ * The world this put made, asked by the Idempotency-Key its first send carried (keel keeps a hash of it on
+ * the world a hand-over or create made, and names that world for as long as it exists, long after the
+ * replay is gone; one 404 for a key that made nothing). Never by an element the put sent: a world holding
+ * a sent id may be the world a world file was saved from, or one an earlier put left, and is not this put's.
+ * None when keel names none, does not answer, or has no such route (a keel before 2026-11-07).
  */
-async function holdingWorld(acct: OwV2Client, items: { type: string; element: Record<string, unknown> }[]): Promise<string | null> {
-  const sent = items.filter((it) => typeof it.element.id === 'string');
-  const asked = sent.find((it) => it.type === 'narrative') ?? sent[0];
-  if (!asked) return null;
+async function madeWorld(acct: OwV2Client, sendKey: string): Promise<string | null> {
   try {
-    const r = await acct.request<{ world_id?: string }>('GET', `/account/worlds/holding/${encodeURIComponent(asked.element.id as string)}`);
-    if (typeof r.world_id !== 'string') return null;
-    const list = await acct.request<{ data?: { id?: string; role?: string; keys?: unknown[] }[] }>('GET', '/account/worlds');
-    const row = (list.data ?? []).find((w) => w.id === r.world_id && w.role === 'owner');
-    return row && Array.isArray(row.keys) && row.keys.length === 0 ? r.world_id : null;
+    const r = await acct.request<{ world_id?: string }>('GET', `/account/worlds/made?key=${encodeURIComponent(sendKey)}`);
+    return typeof r.world_id === 'string' ? r.world_id : null;
   } catch {
     return null;
   }
@@ -343,6 +336,12 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
     onStep(route === 'handover' ? `Sending the world and its ${elements.length} elements` : 'Making the world on your account');
     let made: { id: string; key?: string } | undefined;
+    // After a send with no answer, keel is asked first which world this put's key made: it answers long
+    // after the replay is gone, so a lost answer is settled by a read before anything is sent again.
+    if (retry) {
+      const found = await madeWorld(acct, p.sendKey);
+      if (found) made = { id: found };
+    }
     for (let attempt = 0; !made && attempt < 3; attempt++) {
       // A retry sends the body the unanswered send carried, byte for byte (the maker line or the PIN it
       // dropped, the PIN it was typed with), so keel's replay recognises it; the PIN typed now is checked
@@ -384,14 +383,10 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
         }
         if (err.code === 'handover_refused') {
           const slots = slotsOf(err);
-          // On a retry, every id held elsewhere is most likely this put's own world, made by the send that
-          // never answered (a keel that no longer replays it): keel names the world that holds a story.
+          // On a retry, ids held elsewhere may be this put's own world (made by the send that never answered,
+          // on a keel that could not say so by its key) or another world entirely: nothing is written to
+          // either, and the person is pointed at Your worlds.
           if (retry && slots.length && slots.every((s) => s.error?.code === 'id_conflict')) {
-            const found = await holdingWorld(acct, items);
-            if (found) {
-              made = { id: found };
-              break;
-            }
             throw new StartOverOffered(START_OVER);
           }
         }
