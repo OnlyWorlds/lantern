@@ -10,7 +10,9 @@
 //   5. Teardown: the world deleted on the site by its recorded id (its recorded name typed, and only when that
 //      name is this run's), then the account's list read to show it gone; every recorded token revoked by id and
 //      read back 401. A throw or the watchdog still runs it.
+// A wrong PIN goes first: nothing is made, and the sheet says so; the right PIN then makes one world.
 // The control is the live build before (9a0e88f): it must FAIL at the key checks and still delete its world.
+// For the wrong PIN, a3679cb is the control: it makes the world empty and FAILs at those two checks.
 // Secrets are never printed.
 // Run from tools/lantern:
 //   CREW_FILE=<crew-walk-accounts.txt> [SERVE_DIST=dist] node walk/live-online.mjs [url] [chromium|webkit|firefox] [tag]
@@ -178,6 +180,18 @@ try {
   const group = p.locator('.local-group', { hasText: WORLD_NAME });
   await group.waitFor({ timeout: 15000 });
   await group.getByRole('button', { name: 'Put it online' }).tap();
+  // A wrong PIN first: keel checks it at the create, so nothing is made and the sheet says so.
+  // (Before the check, keel made the world and refused its elements: an empty world left on the account.)
+  const wrongPin = String(((Number(pin) - 1000 + 1) % 9000) + 1000);
+  await p.locator('.sheet input[aria-label="PIN"]').fill(wrongPin);
+  await p.locator('.sheet button[type="submit"]').tap();
+  const wrongSaid = await p.locator('.sheet .error').filter({ hasText: /\S/ }).first().innerText({ timeout: 60000 }).catch(() => '');
+  await p.waitForTimeout(1500);
+  await Promise.allSettled(pending);
+  const namedSo = ((await (await fetch(`${API}/account/worlds`, { headers: { Authorization: `Bearer ${own.token}` }, ...limit() })).json().catch(() => ({}))).data ?? []).filter((w) => w.name === WORLD_NAME).length;
+  check(/does not match your account\. Nothing was made\./.test(wrongSaid), `a wrong PIN is said with nothing made (${JSON.stringify(wrongSaid.trim())})`);
+  check(worlds.length === 0 && namedSo === 0, `a wrong PIN makes no world: keel answered no create (${worlds.length}), the account lists none of this run's name (${namedSo})`);
+  await p.screenshot({ path: `${OUT}/live-online-${engine}-${tag}-0-wrong-pin.png` });
   await p.locator('.sheet input[aria-label="PIN"]').fill(pin);
   await p.locator('.sheet button[type="submit"]').tap();
   const landed = await p.waitForFunction(() => /^#\/w\/[0-9a-f-]{36}$/.test(location.hash), null, { timeout: 60000 }).then(() => true, () => false);

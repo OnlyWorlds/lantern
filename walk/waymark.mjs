@@ -262,13 +262,22 @@ async function walk(engine, deviceName, tag) {
   // SDK 4.130.0: a reader with no account sees Lantern's own row, and Atlas greyed as needing an account,
   // opening nothing (red on a build before it: both rows were left out for the public).
   check(tag, (await page.locator('.ow-waymark__row[data-here]').count()) === 1, 'the public face: Lantern\'s own row, "You are here"');
-  const atlasRow = page.locator('.ow-waymark__row[aria-disabled="true"]', { hasText: 'Atlas' });
-  const atlasText = await atlasRow.first().textContent().catch(() => '');
-  check(tag, (await atlasRow.count()) === 1 && /Needs an account/.test(atlasText ?? ''), `the public face: Atlas greyed, "Needs an account" (${(atlasText ?? '').trim()})`);
-  const hrefRead = page.url();
-  await atlasRow.first().tap({ force: true }).catch(() => {});
-  await page.waitForTimeout(400);
-  check(tag, page.url() === hrefRead && ctx.pages().length === 1, 'a press on the greyed Atlas row goes nowhere');
+  // SDK 4.133.1: a tool whose row opens a public world with nothing signed in (`opens_public`) is a live
+  // row for the public reader; Atlas opens a public world with no account since 1.123.0, so its row is
+  // live, linked to this world (red on a build before 4.133.1, where it read "Needs an account").
+  const faceRows = await page.$$eval('.ow-waymark__row', (rs) => rs.map((r) => ({ t: (r.textContent ?? '').replace(/\s+/g, ' ').trim(), off: r.getAttribute('aria-disabled'), href: r.getAttribute('href') })));
+  console.log(`[${tag}]      the public face's rows: ${JSON.stringify(faceRows)}`);
+  const atlas = faceRows.find((r) => /Atlas/.test(r.t));
+  check(tag, !!atlas && atlas.off !== 'true' && !/Needs an account/.test(atlas.t) && /^https:\/\/atlas\.onlyworlds\.com\//.test(atlas.href ?? '') && (atlas.href ?? '').includes(WID),
+    `the public face: Atlas a live row opening this world (${JSON.stringify(atlas ?? null)})`);
+  // A row that still needs an account stays grey and goes nowhere when pressed.
+  const greyRow = page.locator('.ow-waymark__row[aria-disabled="true"]', { hasText: 'Needs an account' });
+  if (await greyRow.count()) {
+    const hrefRead = page.url();
+    await greyRow.first().tap({ force: true }).catch(() => {});
+    await page.waitForTimeout(400);
+    check(tag, page.url() === hrefRead && ctx.pages().length === 1, 'a press on a row that needs an account goes nowhere');
+  }
   await page.keyboard.press('Escape');
 
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ')})`);
