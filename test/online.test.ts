@@ -39,6 +39,8 @@ class FakeAccountKeel {
   /** The next hand-over or create commits and then its answer is lost. */
   loseHandoverAnswer = false;
   loseCreateAnswer = false;
+  /** The next hand-over is refused (nothing written) and that answer is lost. */
+  loseRefusalAnswer = false;
   handovers: Record<string, unknown>[] = [];
   handoverClient: string | null = null;
   /** Someone adds an element to the world online right after the hand-over makes it. */
@@ -227,6 +229,11 @@ class FakeAccountKeel {
       const refusedSlots = slots.filter((s) => (s.status as number) >= 400);
       if (refusedSlots.length) {
         const conflict = refusedSlots.some((s) => (s.error as { code: string }).code === 'id_conflict');
+        // A refusal raised inside once()'s write frees the key (core/idempotency): nothing is stored, a retry is refused again.
+        if (this.loseRefusalAnswer) {
+          this.loseRefusalAnswer = false;
+          throw new TypeError('Failed to fetch');
+        }
         return this.json(conflict ? 409 : 422, {
           error: { code: 'handover_refused', message: `Nothing was written: ${refusedSlots.length} of ${slots.length} items were refused.` },
           items: slots,
@@ -259,6 +266,21 @@ class FakeAccountKeel {
         ([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct && w.els.get(holding[1])?.type === 'narrative',
       );
       return hit ? this.json(200, { world_id: hit[0], door: `/worlds/${hit[0]}/` }) : this.err(404, 'not_found');
+    }
+    // keel's list_worlds: the account's own worlds, each with every key it has (_world_row: last4s, revoked ones too).
+    if (path === '/account/worlds' && method === 'GET') {
+      const acct = this.accountOf(headers.get('Authorization'));
+      if (!acct) return this.err(401, 'invalid_credentials');
+      const data = [...this.worlds.entries()]
+        .filter(([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct)
+        .map(([id, w]) => ({
+          id,
+          name: w.name,
+          role: 'owner',
+          public_read: false,
+          keys: w.keys.map((k) => ({ name: 'Key', last4: k.slice(-4), scope: 'write', revoked: false })),
+        }));
+      return this.json(200, { data });
     }
     const mint = path.match(/^\/account\/worlds\/([^/]+)\/keys$/);
     if (mint && method === 'POST') {
@@ -742,6 +764,37 @@ describe('put it online on the hand-over', () => {
     await startOver(local);
     expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
     expect((await db.allElements(local)).length).toBe(1);
+  });
+
+  it("a world file of the person's own online world, its refusal's answer lost: the retry never takes the original world as the one it made", async () => {
+    keel.accountPin = '4321';
+    const orig = '0worig00-0000-4000-8000-000000000000';
+    const online = new Map<string, El>(ELS.map((el, i) => [el.id, { ...el, name: `${el.name} (newer online)`, image_url: undefined, change_seq: i + 1 } as El]));
+    keel.worlds.set(orig, { name: 'Bus stop ideas', key: 'ow_w_orig', keys: ['ow_w_orig'], els: online, meta: { description: 'Online, newer' }, owner: 'acct-a' } as never);
+    const local = await localWorld(ELS);
+    keel.loseRefusalAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
+    // Nothing written to the original: no key minted there, no settings, no element replaced.
+    expect(keel.mints).toHaveLength(0);
+    expect(keel.patches).toHaveLength(0);
+    expect(keel.bulks).toBe(0);
+    expect([...keel.worlds.get(orig)!.els.values()].map((e) => e.name)).toEqual(['The ferryman (newer online)', 'Ferryman (newer online)']);
+    expect(keel.worlds.size).toBe(1);
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+  });
+
+  it('a lost answer on a keel that does not replay: the found world already has a key (not the one the put made): nothing is written to it', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    const [, made] = [...keel.worlds.entries()][0];
+    made.keys.push('ow_w_from_the_site');
+    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
+    expect(keel.mints).toHaveLength(0);
+    expect(keel.bulks).toBe(0);
   });
 
   it('a PIN typed differently on the retry: the replay still answers (the body goes as first sent), the wrong PIN is said at the next write, then the right one finishes', async () => {

@@ -165,16 +165,22 @@ export async function startOver(localId: string): Promise<void> {
 }
 
 /**
- * The world of this account that holds one of the sent stories (keel's holding route answers for a
- * Narrative in a world the account owns, one 404 for anything else): the put's own world, found after a
- * send whose answer was lost. None when the put sends no Narrative, or keel does not say.
+ * The world this put made, found after a send whose answer was lost: the world of this account that holds
+ * one of the sent stories (keel's holding route answers for a Narrative in a world the account owns, one
+ * 404 for anything else), and only while it has no key at all. A story is also held by the world a world
+ * file was saved from, and that world is never this put's: the hand-over makes no key, and a lost answer
+ * means this phone minted none, so a world with any key (revoked ones too) is another's. None when the put
+ * sends no Narrative, keel does not say, or the world has a key.
  */
 async function holdingWorld(acct: OwV2Client, items: { type: string; element: Record<string, unknown> }[]): Promise<string | null> {
   const story = items.find((it) => it.type === 'narrative' && typeof it.element.id === 'string');
   if (!story) return null;
   try {
     const r = await acct.request<{ world_id?: string }>('GET', `/account/worlds/holding/${encodeURIComponent(story.element.id as string)}`);
-    return typeof r.world_id === 'string' ? r.world_id : null;
+    if (typeof r.world_id !== 'string') return null;
+    const list = await acct.request<{ data?: { id?: string; role?: string; keys?: unknown[] }[] }>('GET', '/account/worlds');
+    const row = (list.data ?? []).find((w) => w.id === r.world_id && w.role === 'owner');
+    return row && Array.isArray(row.keys) && row.keys.length === 0 ? r.world_id : null;
   } catch {
     return null;
   }
