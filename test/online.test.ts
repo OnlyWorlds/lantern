@@ -41,6 +41,10 @@ class FakeAccountKeel {
   loseCreateAnswer = false;
   handovers: Record<string, unknown>[] = [];
   handoverClient: string | null = null;
+  /** Someone adds an element to the world online right after the hand-over makes it. */
+  addAfterHandover = false;
+  /** The next media ticket fails (a 503), once. */
+  failTicketOnce = false;
   mints: Record<string, unknown>[] = [];
   /** Ids keel refuses in its first phase (a field it will not take): every item linking to one fails invalid_link. */
   refuseIds = new Set<string>();
@@ -77,6 +81,12 @@ class FakeAccountKeel {
   err(status: number, code: string, param?: string) {
     return this.json(status, { error: { code, message: code, param } });
   }
+  /** keel's AccountScope keys on the account, not the token: two sign-ins of one account share it. */
+  accountOf(auth: string | null): string | null {
+    if (auth === 'Bearer ow_a_test' || auth === 'Bearer ow_a_test2') return 'acct-a';
+    if (auth === `Bearer ${this.otherToken}`) return 'acct-b';
+    return null;
+  }
   worldOfKey(key: string | null) {
     return [...this.worlds.entries()].find(([, w]) => !!key && w.keys.includes(key));
   }
@@ -109,11 +119,23 @@ class FakeAccountKeel {
       if (init.body instanceof Blob) this.uploaded.push({ type: init.body.type, bytes: new Uint8Array(await init.body.arrayBuffer()) });
       return this.json(200, { url: `https://media.onlyworlds.com/w/${this.uploads}.webp`, key: `w/${this.uploads}.webp`, bytes: 1, type: 'image/webp', etag: 'x' });
     }
+    if (path === '/account' && method === 'GET') {
+      const acct = this.accountOf(headers.get('Authorization'));
+      if (!acct) return this.err(401, 'invalid_credentials');
+      return this.json(200, { id: acct, username: acct === 'acct-a' ? 'ada' : 'bo' });
+    }
     if (path === '/account/worlds' && method === 'POST') {
-      if (headers.get('Authorization') !== 'Bearer ow_a_test') return this.err(401, 'invalid_credentials');
-      // keel since 2026-11-07 (_clean_new_world, core.auth.enforce_account_pin): a pinned account's sent pin is
-      // checked before anything is written, a malformed one counting as wrong (401 param pin); past the
-      // lock, 429 with Retry-After. An account with no PIN needs a valid new one (1000-9999), else 422.
+      const acct = this.accountOf(headers.get('Authorization'));
+      if (!acct) return this.err(401, 'invalid_credentials');
+      // keel's _clean_new_world, in its order: the maker's line, the prefixed keys (taken as given, a null is
+      // no key, an unprefixed stray ignored, the store under the cap: 422 param extensions), then the PIN
+      // (since 2026-11-07 a pinned account's sent pin is checked before anything is written, a malformed one
+      // counting as wrong: 401 param pin; past the lock, 429 with Retry-After; an account with no PIN needs
+      // a valid new one, 1000-9999, else 422).
+      if (body.producer !== undefined && this.refuseProducer) return this.err(422, 'invalid', 'producer');
+      const ext: Record<string, unknown> = {};
+      if (!this.oldCreate) for (const [k, v] of Object.entries(body)) if (/^(x_|atlas_|shadow_)/.test(k) && v !== null) ext[k] = v;
+      if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
       if (this.accountPin && body.pin !== undefined) {
         if (this.pinOmitOnly) return this.err(422, 'invalid_request', 'pin');
         if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
@@ -123,14 +145,8 @@ class FakeAccountKeel {
         }
       }
       if (!this.accountPin && !/^[1-9]\d{3}$/.test(String(body.pin ?? ''))) return this.err(422, 'invalid_request', 'pin');
-      if (body.producer !== undefined && this.refuseProducer) return this.err(422, 'invalid', 'producer');
-      // keel d98ba65 (accounts/api.py _clean_new_world): the prefixed keys are taken as given, a null is
-      // no key, an unprefixed stray is ignored; the store under the cap (422 param extensions), echoed on the row.
-      const ext: Record<string, unknown> = {};
-      if (!this.oldCreate) for (const [k, v] of Object.entries(body)) if (/^(x_|atlas_|shadow_)/.test(k) && v !== null) ext[k] = v;
-      if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
       // keel since 2026-11-07: the create's checks run before once(); a replay answers the world without its key.
-      const seen = this.idemCheck('create', headers.get('Idempotency-Key'), String(init.body));
+      const seen = this.idemCheck(`create:${acct}`, headers.get('Idempotency-Key'), String(init.body));
       if (seen instanceof Response) return seen;
       if (seen) return this.json(seen.status, seen.replay, { 'Idempotent-Replay': 'true' });
       this.creates.push(body);
@@ -138,10 +154,10 @@ class FakeAccountKeel {
       // Unique across the file's tests: the phone's store outlives each test's fake.
       const id = `0w${++madeWorlds}000000-0000-4000-8000-000000000000`;
       const key = `ow_w_${'k'.repeat(30)}${this.worlds.size}`;
-      this.worlds.set(id, { name: body.name, key, keys: [key], els: new Map(), meta: { ...ext } });
+      this.worlds.set(id, { name: body.name, key, keys: [key], els: new Map(), meta: { ...ext }, owner: acct } as never);
       const row = { id, name: body.name, role: 'owner', ...ext };
       const k = headers.get('Idempotency-Key');
-      if (this.replay && k) this.acctIdem.set(`create:${k}`, { sent: String(init.body), status: 201, answer: row });
+      if (this.replay && k) this.acctIdem.set(`create:${acct}:${k}`, { sent: String(init.body), status: 201, answer: row });
       if (this.loseCreateAnswer) {
         this.loseCreateAnswer = false;
         throw new TypeError('Failed to fetch');
@@ -149,8 +165,8 @@ class FakeAccountKeel {
       return this.json(201, { ...row, key });
     }
     if (path === '/account/worlds/handover' && method === 'POST') {
-      const auth = headers.get('Authorization');
-      if (auth !== 'Bearer ow_a_test' && auth !== `Bearer ${this.otherToken}`) return this.err(401, 'invalid_credentials');
+      const auth = this.accountOf(headers.get('Authorization'));
+      if (!auth) return this.err(401, 'invalid_credentials');
       // keel's body cap (DATA_UPLOAD_MAX_MEMORY_SIZE, 2.5 MB): 413 before anything is read.
       if (String(init.body).length > 2_500_000) return this.json(413, { error: { code: 'payload_too_large', message: 'Request body too large.' } });
       const w = body.world;
@@ -222,6 +238,10 @@ class FakeAccountKeel {
       for (const it of items) els.set(it.element.id as string, { ...it.element, id: it.element.id as string, type: it.type, change_seq: ++this.seq });
       this.worlds.set(id, { name: w.name, key: '', keys: [], els, meta: { ...ext }, owner: auth } as never);
       const answer = { world: { id, name: w.name, role: 'owner', ...ext }, items: slots, door: `/worlds/${id}/` };
+      if (this.addAfterHandover) {
+        const extra = 'e9000000-0000-7000-8000-000000000001';
+        els.set(extra, { id: extra, type: 'character', name: 'Added online', change_seq: ++this.seq });
+      }
       const k = headers.get('Idempotency-Key');
       if (this.replay && k) this.acctIdem.set(`handover:${auth}:${k}`, { sent: String(init.body), status: 201, answer });
       if (this.loseHandoverAnswer) {
@@ -230,13 +250,23 @@ class FakeAccountKeel {
       }
       return this.json(201, answer);
     }
+    // keel's holding route: the world this account owns that holds a Narrative of that id; one 404 for anything else.
+    const holding = path.match(/^\/account\/worlds\/holding\/([^/]+)$/);
+    if (holding && method === 'GET') {
+      const acct = this.accountOf(headers.get('Authorization'));
+      if (!acct) return this.err(401, 'invalid_credentials');
+      const hit = [...this.worlds.entries()].find(
+        ([, w]) => ((w as unknown as { owner?: string }).owner ?? 'acct-a') === acct && w.els.get(holding[1])?.type === 'narrative',
+      );
+      return hit ? this.json(200, { world_id: hit[0], door: `/worlds/${hit[0]}/` }) : this.err(404, 'not_found');
+    }
     const mint = path.match(/^\/account\/worlds\/([^/]+)\/keys$/);
     if (mint && method === 'POST') {
-      const auth = headers.get('Authorization');
-      if (auth !== 'Bearer ow_a_test' && auth !== `Bearer ${this.otherToken}`) return this.err(401, 'invalid_credentials');
+      const auth = this.accountOf(headers.get('Authorization'));
+      if (!auth) return this.err(401, 'invalid_credentials');
       const w = this.worlds.get(mint[1]) as unknown as { keys: string[]; owner?: string } | undefined;
       // _owned_or_member_world: a world this account neither owns nor sits in is a 404.
-      if (!w || (w.owner ?? 'Bearer ow_a_test') !== auth) return this.err(404, 'not_found');
+      if (!w || (w.owner ?? 'acct-a') !== auth) return this.err(404, 'not_found');
       this.mints.push(body);
       const key = `ow_w_${'m'.repeat(30)}${this.mints.length}`;
       w.keys.push(key);
@@ -245,7 +275,11 @@ class FakeAccountKeel {
     const found = this.worldOfKey(headers.get('API-Key'));
     if (!found) return this.err(401, 'invalid_credentials');
     const [worldId, world] = found;
-    if (method !== 'GET' && headers.get('API-Pin') !== this.accountPin) return this.err(401, 'invalid_credentials');
+    if (method !== 'GET' && headers.get('API-Pin') !== this.accountPin) return this.err(401, 'invalid_credentials', 'API-Pin');
+    if (path === '/media/ticket' && this.failTicketOnce) {
+      this.failTicketOnce = false;
+      return this.json(503, { error: { code: 'server_busy', message: 'Busy.' } });
+    }
     if (path === '/media/ticket') return this.json(200, { ticket: 't', upload_url: 'https://edge.test/up', prefix: 'w/', max_bytes: 15e6, exp: 0 });
     if (path === '/world') {
       // keel's clean_world_updates: a prefixed key merges onto the store (null removes it), an
@@ -683,27 +717,41 @@ describe('put it online on the hand-over', () => {
     expect(await db.getWorldRecord(local)).toBeUndefined();
   });
 
-  it('a lost answer on a keel that does not replay: Start over is offered, the copy stays held; Start over lets it go', async () => {
+  it('a lost answer on a keel that does not replay: the world that holds the sent story is found and the put finishes', async () => {
     keel.accountPin = '4321';
     keel.replay = false;
     const local = await localWorld(ELS);
     keel.loseHandoverAnswer = true;
     await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it('a lost answer on a keel that does not replay, and no story sent to find it by: the way out is offered, the copy stays held until taken', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    const local = await localWorld([ELS[1]]);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
     await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
-    await expect(putOnline(local, '4321')).rejects.toThrow(/may already have put this world online/);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/may already have put this world on your account: look in Your worlds\. Keep it on this phone/);
     expect(isPutting(await db.getWorldRecord(local))).toBe(true);
     expect(keel.worlds.size).toBe(1);
     await startOver(local);
     expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
-    expect((await db.allElements(local)).length).toBe(2);
+    expect((await db.allElements(local)).length).toBe(1);
   });
 
-  it('a PIN typed differently on the retry: asked for the one from the last try, the copy held, then finished with it', async () => {
+  it('a PIN typed differently on the retry: the replay still answers (the body goes as first sent), the wrong PIN is said at the next write, then the right one finishes', async () => {
     keel.accountPin = '4321';
     const local = await localWorld(ELS);
     keel.loseHandoverAnswer = true;
     await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
-    await expect(putOnline(local, '9999')).rejects.toThrow(/Type the PIN you used on the last try/);
+    const e = await putOnline(local, '9999').catch((x) => x);
+    expect(e).toMatchObject({ status: 401, param: 'API-Pin' });
+    expect(keel.handovers).toHaveLength(1);
     expect(isPutting(await db.getWorldRecord(local))).toBe(true);
     const id = await putOnline(local, '4321');
     expect(keel.worlds.size).toBe(1);
@@ -794,6 +842,88 @@ describe('put it online on the hand-over', () => {
     const e = await putOnline(local, '4321').catch((x) => x);
     expect(e).toBeInstanceOf(StartOverOffered);
     expect(String(e.message)).toMatch(/An empty world of this name stays on your account/);
+    await startOver(local);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+  });
+
+  it('a picture the media host does not take (a GIF): said before anything is made', async () => {
+    keel.accountPin = '4321';
+    const gif = { id: 'e4000000-0000-7000-8000-000000000001', type: 'character', name: 'Spin', image_url: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' };
+    const local = await localWorld([gif]);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/picture of Spin is a kind OnlyWorlds does not take .* Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+  });
+
+  it('an element added to the online world meanwhile is no reason to keep the phone copy', async () => {
+    keel.accountPin = '4321';
+    keel.addAfterHandover = true;
+    const local = await localWorld(ELS);
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.get(id)!.els.size).toBe(3);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it("the phone's key taken back meanwhile: said as the key, not the PIN; the next try makes a new one and finishes", async () => {
+    keel.accountPin = '4321';
+    keel.failTicketOnce = true;
+    const local = await localWorld(ELS);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/its pictures did not arrive/);
+    for (const w of keel.worlds.values()) w.keys = [];
+    await expect(putOnline(local, '4321')).rejects.toThrow(/key for it no longer works\. Try again: a new key is made\./);
+    const id = await putOnline(local, '4321');
+    expect(keel.mints).toHaveLength(2);
+    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+  });
+
+  it('a failed read back leaves no online world on the phone, so it is never opened or signed out of here while the put holds the copy', async () => {
+    keel.accountPin = '4321';
+    keel.oldCreate = true;
+    keel.losePatchedKeys = true;
+    const local = await keyedWorld();
+    await expect(putOnline(local, '4321')).rejects.toThrow(/own settings did not read back/);
+    const made = [...keel.worlds.keys()][0];
+    expect(await db.getWorldRecord(made)).toBeUndefined();
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+  });
+
+  it('a session opened before the put (another tab) cannot change the copy once the put holds it', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld(ELS);
+    const before = await openWorld(local);
+    expect(before.canWrite).toBe(true);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await expect(before.edit(ELS[0].id, { name: 'Changed in tab B' })).rejects.toThrow(/being put online/);
+    // The first refusal brings the session's record up to date, so the next writes meet the plain read-only line.
+    await expect(before.create('character', { name: 'New in tab B' })).rejects.toThrow(/read-only here/);
+    await expect(before.remove(ELS[0].id)).rejects.toThrow(/read-only here/);
+    expect(before.canWrite).toBe(false);
+  });
+
+  it('a copy that changed anyway while it went is never dropped: said, the copy kept, the online world not on the phone', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld(ELS);
+    keel.failTicketOnce = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/pictures did not arrive/);
+    await db.applyElements(local, [{ ...ELS[0], name: 'Changed by a path the lock missed' } as never]);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/this phone copy changed while it went/);
+    expect((await db.allElements(local)).find((x) => x.id === ELS[0].id)?.name).toBe('Changed by a path the lock missed');
+    expect(await db.getWorldRecord([...keel.worlds.keys()][0])).toBeUndefined();
+  });
+
+  it('a phone that does not know its account yet learns it before the put, so another sign-in is refused later', async () => {
+    keel.accountPin = '4321';
+    await db.kvSet('accountId', undefined);
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    expect(await db.kvGet('accountId')).toBe('acct-a');
+    await db.kvSet('accountToken', keel.otherToken);
+    await db.kvSet('accountId', 'acct-b');
+    await expect(putOnline(local, '4321')).rejects.toThrow(/being put online under ada/);
+    await db.kvSet('accountId', undefined);
+    await db.kvSet('accountName', undefined);
     await startOver(local);
     expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
   });

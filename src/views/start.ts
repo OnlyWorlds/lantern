@@ -473,24 +473,29 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
       const step = h('p', { class: 'muted small', role: 'status', style: 'margin:0' });
       const err = h('p', { class: 'error', role: 'alert' });
       const go1 = h('button', { class: 'btn btn-standard', type: 'submit' }, 'Put it online');
-      // Start over lets go of a put this phone cannot finish; a second tap does it.
-      const again = h('button', { class: 'btn btn-quiet', type: 'button', hidden: '' }, 'Start over');
+      // Keep it on this phone lets go of a put under way: the phone copy can be changed again, and whatever
+      // reached the account stays there. Offered whenever a put holds the copy, never while a send runs; a
+      // second tap does it.
+      const again = h('button', { class: 'btn btn-quiet', type: 'button' }, 'Keep it on this phone');
+      again.hidden = !putting;
       let armed = false;
       again.addEventListener('click', async () => {
         if (!armed) {
           armed = true;
-          again.textContent = 'Tap again to start over';
+          again.textContent = 'Tap again: what reached your account stays there';
           return;
         }
         again.disabled = true;
+        go1.disabled = true;
         try {
           await startOver(rec.id);
           close();
-          toast(`${rec.name} can be changed on this phone again. Put it online makes a new world.`);
+          toast(`${rec.name} can be changed on this phone again. Anything that reached your account stays in Your worlds.`);
           go('#/worlds', true);
         } catch (ex) {
           err.textContent = errorText(ex);
           again.disabled = false;
+          go1.disabled = false;
         }
       });
       const form = h('form', { class: 'stack' }, h('label', { class: 'field-label' }, 'Your PIN', pin), step, err, go1, again);
@@ -502,6 +507,7 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
           return;
         }
         go1.disabled = true;
+        again.disabled = true;
         try {
           const id = await putOnline(rec.id, pin.value.trim(), (t) => (step.textContent = t));
           close();
@@ -509,7 +515,11 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
           go(`#/w/${id}`, true);
         } catch (ex) {
           step.textContent = '';
-          again.hidden = !(ex instanceof StartOverOffered);
+          // Whenever the put still holds the copy after this try, the way out is offered beside the reason.
+          again.hidden = !(ex instanceof StartOverOffered || isPutting(await db.getWorldRecord(rec.id)));
+          again.disabled = false;
+          armed = false;
+          again.textContent = 'Keep it on this phone';
           err.textContent =
             ex instanceof PinNeeded
               ? 'Your account has no PIN yet: these four digits become it (from 1000 to 9999).'

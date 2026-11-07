@@ -8,7 +8,7 @@
 // element, picture and own key came back as sent does the phone-only copy go.
 import { OwApiError, OwV2Client } from '@onlyworlds/sdk';
 import * as db from './db';
-import { KEPT, accountName, accountToken, deviceName } from './account';
+import { KEPT, accountName, accountToken, deviceName, whoAmI } from './account';
 import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession } from './world';
 import { setPin } from './pin';
 import { uuid7 } from './uuid7';
@@ -129,7 +129,18 @@ function isV2(p: db.WorldRecord['pendingOnline']): p is db.PendingOnlineV2 {
 }
 
 const START_OVER =
-  'Your last try may already have put this world online on your account. Look in Your worlds: if it is there, open it from there. Start over makes a new one.';
+  'Your last try may already have put this world on your account: look in Your worlds. Keep it on this phone lets you change it here again.';
+
+/** A short, stable fingerprint of the phone copy's elements: the copy must be as it was sent before it goes. */
+function fingerprint(els: { id: string }[]): string {
+  const s = canonical([...els].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${s.length}:${h.toString(16)}`;
+}
 
 /** The sentence that refuses a put under an account it was not started under. */
 async function otherAccount(p: db.PendingOnlineV2): Promise<OnlineSaid | null> {
@@ -151,6 +162,22 @@ export async function startOver(localId: string): Promise<void> {
   }
   await db.updateWorldRecord(localId, { pendingOnline: undefined });
   forgetSession(localId);
+}
+
+/**
+ * The world of this account that holds one of the sent stories (keel's holding route answers for a
+ * Narrative in a world the account owns, one 404 for anything else): the put's own world, found after a
+ * send whose answer was lost. None when the put sends no Narrative, or keel does not say.
+ */
+async function holdingWorld(acct: OwV2Client, items: { type: string; element: Record<string, unknown> }[]): Promise<string | null> {
+  const story = items.find((it) => it.type === 'narrative' && typeof it.element.id === 'string');
+  if (!story) return null;
+  try {
+    const r = await acct.request<{ world_id?: string }>('GET', `/account/worlds/holding/${encodeURIComponent(story.element.id as string)}`);
+    return typeof r.world_id === 'string' ? r.world_id : null;
+  } catch {
+    return null;
+  }
 }
 
 /** No answer came, or keel failed after it may have written: the send counts as unanswered. */
@@ -186,12 +213,32 @@ function bodyOf(el: Record<string, unknown>): Record<string, unknown> {
 
 const isHeld = (el: Record<string, unknown>) => typeof el.image_url === 'string' && el.image_url.startsWith('data:');
 
+/** The kinds of picture the media host takes, read from the bytes as it reads them: webp, png, jpeg, avif. */
+async function pictureKind(blob: Blob): Promise<string | null> {
+  const b = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+  const at = (i: number, s: string) => [...s].every((c, j) => b[i + j] === c.charCodeAt(0));
+  if (b[0] === 0x89 && at(1, 'PNG')) return 'png';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpeg';
+  if (at(0, 'RIFF') && at(8, 'WEBP')) return 'webp';
+  if (at(4, 'ftypavi')) return 'avif';
+  return null;
+}
+
 /** The pictures a world holds on the phone and the hand-over's body, checked against keel's caps before anything is made. */
-function tooMuch(held: Record<string, unknown>[], body: unknown): string | null {
+async function tooMuch(held: Record<string, unknown>[], body: unknown): Promise<string | null> {
   const after = 'Save a copy and open it in Atlas. Nothing was made.';
   if (held.length > PICTURES_MAX) return `This world holds ${held.length} pictures; OnlyWorlds takes ${PICTURES_MAX} for a new world in a day. ${after}`;
-  const big = held.find((el) => dataUrlBlob(el.image_url as string).size > PICTURE_MAX_BYTES);
-  if (big) return `The picture of ${typeof big.name === 'string' && big.name ? big.name : 'an element'} is more than OnlyWorlds takes (15 MB). ${after}`;
+  const nameOf = (el: Record<string, unknown>) => (typeof el.name === 'string' && el.name ? el.name : 'an element');
+  for (const el of held) {
+    let blob: Blob;
+    try {
+      blob = dataUrlBlob(el.image_url as string);
+    } catch {
+      return `The picture of ${nameOf(el)} cannot be read. ${after}`;
+    }
+    if (blob.size > PICTURE_MAX_BYTES) return `The picture of ${nameOf(el)} is more than OnlyWorlds takes (15 MB). ${after}`;
+    if (!(await pictureKind(blob))) return `The picture of ${nameOf(el)} is a kind OnlyWorlds does not take (it takes PNG, JPEG, WebP and AVIF). ${after}`;
+  }
   const bytes = new TextEncoder().encode(JSON.stringify(body)).length;
   if (bytes > BODY_MAX_BYTES) return `This world is more than OnlyWorlds takes in one go (${(bytes / 1e6).toFixed(1)} MB of text, at most ${BODY_MAX_BYTES / 1e6}). ${after}`;
   return null;
@@ -246,15 +293,29 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       return route === 'handover' ? { world, items } : world;
     };
     if (!pending) {
-      const said = tooMuch(held, bodyFor());
+      const said = await tooMuch(held, bodyFor());
       if (said) throw new OnlineSaid(said);
+      // The account the put runs under, learned first when this phone does not know it yet: a put held
+      // under one account is never finished or let go under another.
+      let account = await db.kvGet<string>('accountId');
+      if (!account) {
+        try {
+          const who = await whoAmI(token);
+          account = who.id;
+          await db.kvSet('accountId', who.id);
+          if (who.username) await db.kvSet('accountName', who.username);
+        } catch {
+          throw new OnlineSaid('OnlyWorlds did not say which account this phone is signed in as. Try again when you have signal. Nothing was made.');
+        }
+      }
       pending = {
         v: 2,
-        account: (await db.kvGet<string>('accountId')) ?? '',
+        account,
         accountName: await accountName(),
         route,
         sendKey: uuid7(),
         picturesKey: uuid7(),
+        copy: fingerprint(elements),
       };
       rec = (await db.updateWorldRecord(localId, { pendingOnline: pending })) ?? rec;
       // The phone copy holds still from here: an open view reads the record again.
@@ -262,7 +323,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     }
     const p: db.PendingOnlineV2 = pending;
     // Whether an earlier send of this put went out and never answered: then this one is its retry.
-    const retry = !!p.unanswered;
+    let retry = !!p.unanswered;
     const settle = async (patch: Partial<db.PendingOnlineV2> | null) => {
       if (patch === null) {
         await db.updateWorldRecord(localId, { pendingOnline: undefined });
@@ -276,40 +337,33 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     onStep(route === 'handover' ? `Sending the world and its ${elements.length} elements` : 'Making the world on your account');
     let made: { id: string; key?: string } | undefined;
     for (let attempt = 0; !made && attempt < 3; attempt++) {
-      await settle({ unanswered: true });
+      // A retry sends the body the unanswered send carried, byte for byte (the maker line or the PIN it
+      // dropped, the PIN it was typed with), so keel's replay recognises it; the PIN typed now is checked
+      // by the writes after.
+      const body = retry && p.sentBody ? JSON.parse(p.sentBody) : bodyFor();
+      await settle({ unanswered: true, sentBody: JSON.stringify(body) });
       try {
         const res = await acct.request<{ id?: string; key?: string; world?: { id: string } }>(
           'POST',
           route === 'handover' ? '/account/worlds/handover' : '/account/worlds',
-          { body: bodyFor(), idempotencyKey: p.sendKey, elementWrite: true },
+          { body, idempotencyKey: p.sendKey, elementWrite: true },
         );
         made = route === 'handover' ? { id: res.world!.id } : { id: res.id!, key: res.key };
       } catch (e) {
         if (noAnswer(e)) {
-          throw new OnlineSaid('No answer from OnlyWorlds. Your phone copy is kept and waits; try again when you have signal.');
+          throw new OnlineSaid('No answer from OnlyWorlds, or it failed partway. Your phone copy is kept and waits; try again in a while.');
         }
         const err = e as OwApiError;
-        // An answer: this send wrote nothing.
-        await settle({ unanswered: retry });
-        if (err.status === 422 && err.param === 'producer' && producer) {
-          producer = undefined;
-          continue;
+        // The same key with another body: another tab changed what this put sends, or keel no longer holds the world it latched.
+        if (err.status === 409 && err.code === 'idempotency_error') {
+          throw new StartOverOffered(`This try differs from the last one, so OnlyWorlds will not repeat it. ${START_OVER}`);
         }
-        if (err.status === 422 && err.param === 'pin') {
-          // A keel before the PIN check refuses a pinned account's PIN: the create goes without it.
-          if (withPin && !retry) {
-            withPin = undefined;
-            continue;
-          }
-          await settle(retry ? {} : null);
-          throw new PinNeeded();
+        if (err.status === 409 && err.code === 'idempotency_in_flight') {
+          throw new OnlineSaid('OnlyWorlds is still making this world. Try again in a minute.');
         }
-        if (err.status === 401 && err.param === 'pin') {
-          if (retry) throw new OnlineSaid('That PIN does not match your account. Type the PIN you used on the last try.');
-          await settle(null);
-          throw new OnlineSaid('That PIN does not match your account. Nothing was made.');
-        }
-        if (err.status === 401) {
+        // The sign-in and the PIN lock come before anything else, so after a send with no answer they say
+        // nothing about whether it landed: the put stays held.
+        if (err.status === 401 && err.param !== 'pin') {
           if (retry) throw new OnlineSaid("OnlyWorlds no longer takes this phone's sign-in. Sign in again, then finish putting it online.");
           await settle(null);
           throw new OnlineSaid("OnlyWorlds no longer takes this phone's sign-in. Sign in again, then put it online. Nothing was made.");
@@ -321,36 +375,47 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
           await settle(null);
           throw new OnlineSaid(`${wait} Nothing was made.`);
         }
-        // The same key with another body: the PIN typed differently from the send that never answered.
-        if (err.status === 409 && err.code === 'idempotency_error') {
-          throw new OnlineSaid('That PIN differs from your last try. Type the PIN you used on the last try.');
-        }
-        if (err.status === 409 && err.code === 'idempotency_in_flight') {
-          await settle({ unanswered: true });
-          throw new OnlineSaid('OnlyWorlds is still making this world. Try again in a minute.');
-        }
         if (err.code === 'handover_refused') {
-          // On a retry, every id held elsewhere may be this phone's own first world (a keel that does not
-          // replay a lost answer): it cannot be found from here, so the phone says so and offers Start over.
           const slots = slotsOf(err);
+          // On a retry, every id held elsewhere is most likely this put's own world, made by the send that
+          // never answered (a keel that no longer replays it): keel names the world that holds a story.
           if (retry && slots.length && slots.every((s) => s.error?.code === 'id_conflict')) {
-            await settle({ unanswered: true });
+            const found = await holdingWorld(acct, items);
+            if (found) {
+              made = { id: found };
+              break;
+            }
             throw new StartOverOffered(START_OVER);
           }
-          if (retry) throw new StartOverOffered(`${refusalLine(err, items)} ${START_OVER}`);
+        }
+        if (err.status === 401 && err.param === 'pin' && retry) {
+          throw new OnlineSaid('That PIN does not match your account now. Type your account PIN.');
+        }
+        // Any other answer is one the very same body met the first time too: nothing was made by either
+        // send, so the put is let go, or tried once more without what keel refused.
+        retry = false;
+        await settle({ unanswered: false });
+        if (err.status === 422 && err.param === 'producer' && producer) {
+          producer = undefined;
+          continue;
+        }
+        if (err.status === 422 && err.param === 'pin') {
+          // A keel before the PIN check refuses a pinned account's PIN: the create goes without it.
+          if (withPin) {
+            withPin = undefined;
+            continue;
+          }
           await settle(null);
-          throw new OnlineSaid(refusalLine(err, items));
+          throw new PinNeeded();
         }
-        if (err.status === 413) {
-          await settle(retry ? {} : null);
-          throw new OnlineSaid('This world is more than OnlyWorlds takes in one go. Save a copy and open it in Atlas. Nothing was made.');
-        }
+        await settle(null);
+        if (err.status === 401) throw new OnlineSaid('That PIN does not match your account. Nothing was made.');
+        if (err.code === 'handover_refused') throw new OnlineSaid(refusalLine(err, items));
+        if (err.status === 413) throw new OnlineSaid('This world is more than OnlyWorlds takes in one go. Save a copy and open it in Atlas. Nothing was made.');
         if (err.status === 422 && err.param === 'extensions') {
-          if (!retry) await settle(null);
           throw new OnlineSaid(`OnlyWorlds would not take this world's own settings (${err.message}). Nothing was sent.`);
         }
-        if (!retry) await settle(null);
-        throw new OnlineSaid(`OnlyWorlds would not make this world (${err.message}).${retry ? '' : ' Nothing was made.'}`);
+        throw new OnlineSaid(`OnlyWorlds would not make this world (${err.message}). Nothing was made.`);
       }
     }
     if (!made) throw new OnlineSaid('OnlyWorlds would not make this world. Nothing was made.');
@@ -402,14 +467,34 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
         throw new Error(bad?.error?.message ?? 'refused');
       }
     } catch (e) {
+      if (e instanceof OwApiError && e.status === 401 && e.param !== 'API-Pin') {
+        await forgetPutKey(localId, p);
+        throw new OnlineSaid("The world is online, but this phone's key for it no longer works. Try again: a new key is made.");
+      }
       // A PIN refusal keeps its kind, so the sheet says the PIN.
       if (e instanceof OwApiError && e.status === 401) throw e;
       throw new OnlineSaid(`The world is online, but its pictures did not arrive (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);
     }
   }
 
-  await sendSettings(client, rec);
-  return readBackAndFinish(rec, p.serverId!, p.key, p.keyMint, elements.length, ownKeys, client, pin, onStep, p.pictures ?? {});
+  try {
+    await sendSettings(client, rec);
+    return await readBackAndFinish(rec, p.serverId!, p.key, p.keyMint, elements, ownKeys, client, pin, onStep, p.pictures ?? {}, p.copy);
+  } catch (e) {
+    // The phone's key for the world no longer works (removed on the site, or taken back with a sign-out):
+    // the next try makes a new one, never a PIN sheet that cannot help.
+    if (e instanceof OwApiError && e.status === 401 && e.param !== 'API-Pin') {
+      await forgetPutKey(localId, p);
+      throw new OnlineSaid("The world is online, but this phone's key for it no longer works. Try again: a new key is made.");
+    }
+    throw e;
+  }
+}
+
+async function forgetPutKey(localId: string, p: db.PendingOnlineV2): Promise<void> {
+  delete p.key;
+  delete p.keyMint;
+  await db.updateWorldRecord(localId, { pendingOnline: { ...p } });
 }
 
 /** The description and the world's now, which neither the create nor the hand-over takes. */
@@ -435,18 +520,24 @@ function settingsRefused(e: unknown): Error {
     : new OnlineSaid(`The world is online, but OnlyWorlds would not take its settings (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);
 }
 
-/** Read the world back as an ordinary online world: every element, every picture and every own key as sent; then the phone copy goes. */
+/**
+ * Read the world back as an ordinary online world: every element sent, every picture and every own key as
+ * sent; then the phone copy goes, once it is still the copy the put began with. Until then the online
+ * world is no world on this phone: a failed check takes its record away again, so it is never opened,
+ * removed or signed out of here as an ordinary world while the put still holds the copy.
+ */
 async function readBackAndFinish(
   rec: db.WorldRecord,
   serverId: string,
   key: string,
   keyMint: db.WorldRecord['keyMint'],
-  sent: number,
+  sentEls: { id: string }[],
   ownKeys: Record<string, unknown>,
   client: OwV2Client,
   pin: string,
   onStep: (text: string) => void,
   pictures: Record<string, string>,
+  copy?: string,
 ): Promise<string> {
   const localId = rec.id;
   onStep('Checking what arrived');
@@ -462,34 +553,50 @@ async function readBackAndFinish(
     role: 'owner',
     addedAt: new Date().toISOString(),
   };
+  // The online world opened on this phone meanwhile (from Your worlds) is that copy's own: never overwritten here.
+  if (await db.getWorldRecord(serverId)) {
+    throw new StartOverOffered('The world is online, and it is open on this phone already. Keep it on this phone lets you change this copy again; the online one is in Your worlds.');
+  }
   await db.putWorldRecord(online);
-  setPin(online, pin);
-  forgetSession(online.id);
-  const s = await openWorld(online.id);
-  await s.pull();
-  const arrived = s.elements();
-  if (s.status !== 'idle' || arrived.length !== sent) {
-    throw new Error(`The world is online, but only ${arrived.length} of ${sent} elements read back. Your phone copy is kept; try again.`);
-  }
-  const byId = new Map(arrived.map((el) => [el.id, el as Record<string, unknown>]));
-  const missingPictures = Object.entries(pictures).filter(([id, url]) => byId.get(id)?.image_url !== url).length;
-  if (missingPictures) {
-    throw new OnlineSaid(`The world is online, but ${missingPictures} of its pictures did not read back. Your phone copy is kept; try again.`);
-  }
-  // A key the read does not serve as sent (a retry over a world made before its keys went with the
-  // create, or a create that dropped them) goes once by PATCH, and the world is read again.
-  let missing = keysNotLanded(ownKeys, s.rec.extensions);
-  if (missing.length) {
-    try {
-      await client.request('PATCH', '/world', { body: Object.fromEntries(missing.map((k) => [k, ownKeys[k]])) });
-    } catch (e) {
-      throw settingsRefused(e);
-    }
+  try {
+    setPin(online, pin);
+    forgetSession(online.id);
+    const s = await openWorld(online.id);
     await s.pull();
-    missing = keysNotLanded(ownKeys, s.rec.extensions);
-    if (missing.length) {
-      throw new OnlineSaid(`The world is online, but its own settings did not read back (${missing.join(', ')}). Your phone copy is kept; try again.`);
+    const arrived = new Map(s.elements().map((el) => [el.id, el as Record<string, unknown>]));
+    // Every element sent must be there; one added online meanwhile is no reason to keep the phone copy.
+    const absent = sentEls.filter((el) => !arrived.has(el.id)).length;
+    if (s.status !== 'idle' || absent) {
+      throw new OnlineSaid(`The world is online, but ${absent || 'some'} of its ${sentEls.length} elements did not read back. Your phone copy is kept; try again.`);
     }
+    const missingPictures = Object.entries(pictures).filter(([id, url]) => arrived.get(id)?.image_url !== url).length;
+    if (missingPictures) {
+      throw new OnlineSaid(`The world is online, but ${missingPictures} of its pictures did not read back. Your phone copy is kept; try again.`);
+    }
+    // A key the read does not serve as sent (a retry over a world made before its keys went with the
+    // create, or a create that dropped them) goes once by PATCH, and the world is read again.
+    let missing = keysNotLanded(ownKeys, s.rec.extensions);
+    if (missing.length) {
+      try {
+        await client.request('PATCH', '/world', { body: Object.fromEntries(missing.map((k) => [k, ownKeys[k]])) });
+      } catch (e) {
+        throw settingsRefused(e);
+      }
+      await s.pull();
+      missing = keysNotLanded(ownKeys, s.rec.extensions);
+      if (missing.length) {
+        throw new OnlineSaid(`The world is online, but its own settings did not read back (${missing.join(', ')}). Your phone copy is kept; try again.`);
+      }
+    }
+    // The copy must still be the one the put sent: a change made here meanwhile (a tab opened before the
+    // put began) is never dropped with it.
+    if (copy && fingerprint(await db.allElements(localId)) !== copy) {
+      throw new OnlineSaid('The world is online, but this phone copy changed while it went. Your phone copy is kept: Keep it on this phone, then put the change in the online world.');
+    }
+  } catch (e) {
+    forgetSession(online.id);
+    await db.removeWorld(online.id);
+    throw e;
   }
 
   // Only now: the phone-only copy goes. Its records and media files move across first: keel holds none, so
@@ -541,5 +648,5 @@ async function finishOld(
     }
   }
   await sendSettings(client, rec);
-  return readBackAndFinish(rec, pending.serverId, pending.key, undefined, elements.length, ownKeys, client, pin, onStep, {});
+  return readBackAndFinish(rec, pending.serverId, pending.key, undefined, elements, ownKeys, client, pin, onStep, {});
 }

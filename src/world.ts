@@ -196,6 +196,23 @@ export class WorldSession {
     return recordCanWrite(this.rec);
   }
 
+  /**
+   * Before a write: refused when read only here. A world on this phone reads its record again first, since
+   * another tab or the installed app may have begun putting it online since this session loaded it (a put
+   * under way holds the copy still, src/online.ts).
+   */
+  private async mayWrite(): Promise<void> {
+    if (!this.canWrite) throw new Error('This world is read-only here.');
+    if (this.isLocal) {
+      const now = await db.getWorldRecord(this.id);
+      if (now && putHolds(now)) {
+        this.rec = now;
+        this.emit();
+        throw new Error('This world is read-only here while it is being put online.');
+      }
+    }
+  }
+
   /** A world this key only reads (a player's, a lent read key), not the demo: notes stay on the phone. */
   get takesNotes(): boolean {
     return !this.canWrite && this.rec.kind !== 'demo' && !putHolds(this.rec);
@@ -688,7 +705,7 @@ export class WorldSession {
    */
   async setNow(n: number): Promise<void> {
     if (!Number.isInteger(n)) throw new Error('A whole number, please.');
-    if (this.isLocal && !this.canWrite) throw new Error('This world is read-only here.');
+    if (this.isLocal) await this.mayWrite();
     if (!this.isLocal) {
       if (!navigator.onLine) throw new Error('Moving now needs signal. Try again when you have it.');
       try {
@@ -924,7 +941,7 @@ export class WorldSession {
    * for the 412 rule to judge, never a silent base.
    */
   async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement, photo?: Blob): Promise<void> {
-    if (!this.canWrite) throw new Error('This world is read-only here.');
+    await this.mayWrite();
     // A stub's empties are not its values (a world file can bring one into a world you can write).
     if (this.isStub(id)) throw new Error(KNOWN_OF_REFUSAL);
     if (this.isLocal) {
@@ -979,7 +996,7 @@ export class WorldSession {
    * id is that create done before, so nothing is made twice.
    */
   async create(type: string, values: Record<string, unknown>, photo?: Blob, fixed?: { id: string; idempotencyKey: string }): Promise<string> {
-    if (!this.canWrite) throw new Error('This world is read-only here.');
+    await this.mayWrite();
     if (fixed && (this.truth.has(fixed.id) || this.outbox.some((r) => r.id === fixed.id))) return fixed.id;
     const id = fixed?.id ?? uuid7();
     if (this.isLocal) {
@@ -1025,7 +1042,7 @@ export class WorldSession {
    * flight for it. A catch that never left the phone is simply dropped, and nothing is sent.
    */
   async remove(id: string): Promise<void> {
-    if (!this.canWrite) throw new Error('This world is read-only here.');
+    await this.mayWrite();
     const el = this.view.get(id);
     if (!el) return;
     if (this.isStub(id)) throw new Error(KNOWN_OF_REFUSAL);

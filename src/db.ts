@@ -25,6 +25,10 @@ export interface PendingOnlineV2 {
   serverId?: string;
   key?: string;
   keyMint?: { id: string; tail: string };
+  /** The body the last send carried, as sent: a retry after no answer sends it again, byte for byte. */
+  sentBody?: string;
+  /** The phone copy's fingerprint when the put began: it must be the same before the copy goes. */
+  copy?: string;
   /** The pictures' /bulk key, and the address each held picture got at the edge. */
   picturesKey: string;
   pictures?: Record<string, string>;
