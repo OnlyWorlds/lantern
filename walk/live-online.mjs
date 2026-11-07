@@ -249,6 +249,10 @@ try {
   check((els.changes ?? []).length === 4, `keel holds the four elements (${(els.changes ?? []).length})`);
   const ada = (els.changes ?? []).find((c) => c.id === HERO)?.element ?? {};
   check(/^https:\/\//.test(String(ada.image_url ?? '')), `keel holds Ada's picture as an address on the media host (${String(ada.image_url ?? null).slice(0, 60)})`);
+  // The address serves the phone's own picture, byte for byte.
+  const pic = /^https:\/\//.test(String(ada.image_url ?? '')) ? await fetch(ada.image_url, limit()).catch(() => null) : null;
+  const picBytes = pic?.ok ? Buffer.from(await pic.arrayBuffer()) : null;
+  check(!!picBytes && picBytes.equals(Buffer.from(PNG, 'base64')), `Ada's picture address serves the phone's picture (${pic?.status ?? 'no answer'}, ${pic?.headers.get('content-type') ?? '-'}, ${picBytes?.length ?? 0} bytes)`);
 
   // ---- 5. A world file holding an id the first world now holds: no world made ----
   await p.goto(new URL('/#/worlds', url).href);
