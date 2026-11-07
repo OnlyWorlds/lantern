@@ -21,7 +21,7 @@ const { openWorld, forgetSession, setBuildBehind } = await import('../src/world'
 const { setPin } = await import('../src/pin');
 const { circlesOf, sharedNoteValues } = await import('../src/party');
 const db = await import('../src/db');
-const { mintPlayerKey } = await import('../src/account');
+const { mintPlayerKey, takePlayerSeat, takeBackDeviceKey } = await import('../src/account');
 const { addNote, notes, markShared, unmarkShared, clearNotes } = await import('../src/notes');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
@@ -144,7 +144,7 @@ describe('a player shares a note', () => {
     expect(s.playerCanSend).toBe(false);
     await expect(s.shareNote(sharedNoteValues('x', 'party'), 'n-3')).rejects.toThrow();
     const cursor = s.rec.cursor;
-    await s.takePlayerKey(WRITE);
+    expect(await s.takePlayerKey(WRITE, undefined, READ)).toBe(true);
     expect([s.playerCanSend, s.canWrite, s.rec.apiKey, s.rec.cursor, s.get('mira')?.name]).toEqual([true, false, WRITE, cursor, 'Mira']);
   });
 
@@ -172,38 +172,130 @@ describe('a player shares a note', () => {
 });
 
 describe("the first share's key (the shared-notes gate, G1)", () => {
-  const signedIn = async (worlds: { id: string; role: string; member_role?: string }[], me: { role: string; character: string | null }) => {
+  // keel's mint answers the key's row with its id and the full key (accounts/api.py mint_world_key);
+  // a member revokes only their own keys, by id (revoke_world_key).
+  // Keys with tails of their own, so a mint kept beside the wrong key cannot pass for the right one.
+  const PW = 'ow_w_' + 'w'.repeat(40);
+  const PR = 'ow_r_' + 'r'.repeat(40);
+  const WRITE_ID = '0ccc0000-0000-4000-8000-0000000000a1';
+  const READ_ID = '0ccc0000-0000-4000-8000-0000000000b2';
+  const GUEST = [{ id: 'w1', role: 'collaborator', member_role: 'guest' }];
+  type Hooks = { onMe?: () => Promise<void>; noId?: boolean };
+  const signedIn = async (worlds: { id: string; role: string; member_role?: string }[], me: { role: string; character: string | null } | 'offline', hooks: Hooks = {}) => {
     await db.kvSet('accountToken', 'ow_a_' + 't'.repeat(40));
     const minted: unknown[] = [];
+    const revoked: string[] = [];
+    /** What the phone's record held when each revoke arrived. */
+    const heldAtRevoke: (string | undefined)[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
       const path = new URL(String(input)).pathname.replace('/api/v2', '').replace(/\/+$/, '');
       const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
       if (path === '/account/worlds') return json(200, { data: worlds.map((w) => ({ name: 'The Reach', ...w })) });
       if (path.endsWith('/keys') && init.method === 'POST') {
         minted.push(JSON.parse(String(init.body)));
-        return json(201, { key: WRITE, scope: 'write' });
+        return json(201, { ...(hooks.noId ? {} : { id: WRITE_ID }), last4: PW.slice(-4), name: 'Lantern on a phone', scope: 'write', revoked: false, key: PW });
       }
-      if (path === '/me' || path === '/me/') return json(200, me);
+      const del = path.match(/\/keys\/([^/]+)$/);
+      if (del && init.method === 'DELETE') {
+        revoked.push(decodeURIComponent(del[1]));
+        heldAtRevoke.push((await db.getWorldRecord('w1'))?.apiKey);
+        return new Response(null, { status: 204 });
+      }
+      if (path === '/me' || path === '/me/') {
+        await hooks.onMe?.();
+        if (me === 'offline') throw new TypeError('Failed to fetch');
+        return json(200, me);
+      }
       return json(404, { error: { code: 'not_found', message: 'x', type: 'x' } });
     }) as typeof fetch;
-    return minted;
+    return { minted, revoked, heldAtRevoke };
+  };
+  const readWorld = async (mint = true) => {
+    await db.putWorldRecord({ id: 'w1', name: 'The Reach', kind: 'online', apiKey: PR, keyKind: 'read', ...(mint ? { keyMint: { id: READ_ID, tail: PR.slice(-8) } } : {}), role: 'collaborator', memberRole: 'guest', characterId: 'mira', addedAt: '' });
+    forgetSession('w1');
+    return openWorld('w1');
   };
 
-  it("mints this player's seat", async () => {
-    const minted = await signedIn([{ id: 'w1', role: 'collaborator', member_role: 'guest' }], { role: 'guest', character: 'mira' });
-    expect(await mintPlayerKey('w1', 'mira')).toBe(WRITE);
-    expect(minted).toHaveLength(1);
+  it("mints this player's seat and keeps the id of its mint beside it", async () => {
+    const { minted, revoked } = await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    expect(await mintPlayerKey('w1', 'mira')).toMatchObject({ key: PW, keyMint: { id: WRITE_ID, tail: PW.slice(-8) } });
+    expect([minted.length, revoked]).toEqual([1, []]);
   });
 
   it("refuses on the game master's phone before minting anything", async () => {
-    const minted = await signedIn([{ id: 'w1', role: 'owner' }], { role: 'owner', character: null });
+    const { minted } = await signedIn([{ id: 'w1', role: 'owner' }], { role: 'owner', character: null });
     await expect(mintPlayerKey('w1', 'mira')).rejects.toThrow(/another account/);
     expect(minted).toHaveLength(0);
   });
 
-  it("refuses another player's seat of the same world", async () => {
-    await signedIn([{ id: 'w1', role: 'collaborator', member_role: 'guest' }], { role: 'guest', character: 'tor' });
+  it("refuses another player's seat of the same world, and takes back the key it minted by its id", async () => {
+    const { revoked } = await signedIn([{ id: 'w1', role: 'collaborator', member_role: 'guest' }], { role: 'guest', character: 'tor' });
     await expect(mintPlayerKey('w1', 'mira')).rejects.toThrow(/another account/);
+    expect(revoked).toEqual([WRITE_ID]);
+  });
+
+  it('a seat check that never answers takes back the key it minted', async () => {
+    const { revoked } = await signedIn([{ id: 'w1', role: 'collaborator', member_role: 'guest' }], 'offline');
+    await expect(mintPlayerKey('w1', 'mira')).rejects.toThrow();
+    expect(revoked).toEqual([WRITE_ID]);
+  });
+
+  it("the first share keeps the write key's mint, takes back the read key only once the write key is stored, and the world leaving takes back the write key", async () => {
+    await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    const s = await readWorld();
+    const { revoked, heldAtRevoke } = await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    await takePlayerSeat(s, 'mira');
+    const rec = await db.getWorldRecord('w1');
+    expect([rec?.apiKey, rec?.keyMint, s.playerCanSend]).toEqual([PW, { id: WRITE_ID, tail: PW.slice(-8) }, true]);
+    expect([revoked, heldAtRevoke]).toEqual([[READ_ID], [PW]]);
+    expect(await takeBackDeviceKey(rec)).toBe(true);
+    expect(revoked).toEqual([READ_ID, WRITE_ID]);
+  });
+
+  it('a mint keel answers with no id keeps no mint, never the read key\'s', async () => {
+    await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    const s = await readWorld();
+    const { revoked } = await signedIn(GUEST, { role: 'guest', character: 'mira' }, { noId: true });
+    await takePlayerSeat(s, 'mira');
+    const rec = await db.getWorldRecord('w1');
+    expect([rec?.apiKey, rec?.keyMint, revoked]).toEqual([PW, undefined, [READ_ID]]);
+  });
+
+  it('a read key that came with no mint (a link, a paste) is left listed, never looked up', async () => {
+    await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    const s = await readWorld(false);
+    const { revoked } = await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    await takePlayerSeat(s, 'mira');
+    expect([(await db.getWorldRecord('w1'))?.keyMint?.id, revoked]).toEqual([WRITE_ID, []]);
+  });
+
+  it('the world removed from the phone while the key is made: the new key is taken back, and the share refused (the gate, MUST 1)', async () => {
+    await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    const s = await readWorld();
+    const { revoked } = await signedIn(GUEST, { role: 'guest', character: 'mira' }, { onMe: () => db.removeWorld('w1') });
+    await expect(takePlayerSeat(s, 'mira')).rejects.toThrow(/changed on this phone/);
+    expect([revoked, await db.getWorldRecord('w1')]).toEqual([[WRITE_ID], undefined]);
+  });
+
+  it('another tab took the seat first: its write key is adopted, nothing minted or taken back (the gate, SHOULD 2)', async () => {
+    await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    const s = await readWorld();
+    const OTHER = 'ow_w_' + 'o'.repeat(40);
+    await db.updateWorldRecord('w1', { apiKey: OTHER, keyKind: 'write', keyMint: { id: WRITE_ID, tail: OTHER.slice(-8) } });
+    const { minted, revoked } = await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    await takePlayerSeat(s, 'mira');
+    expect([minted.length, revoked, s.rec.apiKey, s.playerCanSend]).toEqual([0, [], OTHER, true]);
+  });
+
+  it('another tab stored its key while this one minted: this key goes back, the other stays (the gate, SHOULD 2)', async () => {
+    await signedIn(GUEST, { role: 'guest', character: 'mira' });
+    const s = await readWorld();
+    const OTHER = 'ow_w_' + 'o'.repeat(40);
+    const { revoked } = await signedIn(GUEST, { role: 'guest', character: 'mira' }, {
+      onMe: async () => void (await db.updateWorldRecord('w1', { apiKey: OTHER, keyKind: 'write', keyMint: undefined })),
+    });
+    await expect(takePlayerSeat(s, 'mira')).rejects.toThrow(/changed on this phone/);
+    expect([revoked, (await db.getWorldRecord('w1'))?.apiKey]).toEqual([[WRITE_ID], OTHER]);
   });
 });
 

@@ -197,14 +197,19 @@ export async function putWorldRecord(w: WorldRecord): Promise<void> {
   await done(t);
 }
 
-export async function updateWorldRecord(id: string, patch: Partial<WorldRecord>): Promise<WorldRecord | undefined> {
+/**
+ * Patch a world's record in one transaction. `when`: written only if the record as read there passes
+ * (a compare-and-set); undefined back when nothing was written (no record, or `when` said no).
+ */
+export async function updateWorldRecord(id: string, patch: Partial<WorldRecord>, when?: (cur: WorldRecord) => boolean): Promise<WorldRecord | undefined> {
   const db = await app();
   const t = db.transaction('worlds', 'readwrite');
   const s = t.objectStore('worlds');
   const cur = (await req(s.get(id))) as WorldRecord | undefined;
-  if (cur) s.put({ ...cur, ...patch });
+  const write = !!cur && (!when || when(cur));
+  if (write) s.put({ ...cur, ...patch });
   await done(t);
-  return cur ? { ...cur, ...patch } : undefined;
+  return write ? { ...cur!, ...patch } : undefined;
 }
 
 /**

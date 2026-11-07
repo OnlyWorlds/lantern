@@ -4,7 +4,7 @@
 // worlds and mints a key per world this phone opens, named for the phone and revocable on the portal.
 import { OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
 import * as db from './db';
-import { API_BASE, LANTERN_CLIENT_NAME, forgetSession } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME, forgetSession, type WorldSession } from './world';
 import { plural } from './dom';
 import { forgetAccountPin, setPin } from './pin';
 import { clearNotes } from './notes';
@@ -297,10 +297,15 @@ export async function takeBackDeviceKey(rec: db.WorldRecord | undefined): Promis
   const id = rec ? mintedTokenId(rec.apiKey, rec.keyMint) : undefined;
   const token = await accountToken();
   if (!rec || !id || !token) return false;
+  return takeBackKeyById(token, rec.id, id);
+}
+
+/** One key of a world taken back by the id kept at its mint: quiet, bounded at 8 s, true once keel answered. */
+async function takeBackKeyById(token: string, worldId: string, id: string): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      accountClient(token).request('DELETE', `/account/worlds/${rec.id}/keys/${encodeURIComponent(id)}`),
+      accountClient(token).request('DELETE', `/account/worlds/${worldId}/keys/${encodeURIComponent(id)}`),
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error('timeout')), 8000);
       }),
@@ -470,7 +475,7 @@ export async function putKeyInPlace(rec: db.WorldRecord, apiKey: string, pin?: s
  * phone reads with a read key until then, so it holds a write key only once they share. keel lets
  * a member mint one only with an account PIN set (409 pin_required).
  */
-export async function mintPlayerKey(worldId: string, characterId: string): Promise<string> {
+export async function mintPlayerKey(worldId: string, characterId: string): Promise<{ key: string; keyMint?: TokenMint; token: string }> {
   const token = await accountToken();
   if (!token) throw new Error('Sign in with the account you play with first: sharing a note goes from it.');
   const other = new Error("This phone is signed in to another account than the one you play this world with, so your note can't go from it. Sign in as yourself first.");
@@ -478,23 +483,64 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
   // player's on a friend's (the shared-notes gate, G1). Only a player's seat of this world is asked for.
   const listed = (await fetchAccountWorlds(token)).find((w) => w.id === worldId);
   if (!listed || listed.member_role !== 'guest') throw other;
-  let key: string;
+  let minted: { key: string; id?: string };
   try {
-    key = (
-      await accountClient(token).request<{ key: string }>('POST', `/account/worlds/${worldId}/keys`, {
-        body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT },
-      })
-    ).key;
+    minted = await accountClient(token).request<{ key: string; id?: string }>('POST', `/account/worlds/${worldId}/keys`, {
+      body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT },
+    });
   } catch (e) {
     if ((e as { code?: string }).code === 'pin_required') throw new Error('Set a PIN on onlyworlds.com first: sharing a note needs one.');
     if ((e as { status?: number }).status === 404) throw other;
     throw e;
   }
   // Another player of the same world is a guest too: the new key must be this Character's seat.
-  const me = await new OwV2Client({ apiKey: key, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
-  if (me.role !== 'guest' || me.character !== characterId) throw other;
-  return key;
+  // A key this phone will not keep goes back at once, by its id, so it is not left on the account.
+  const keyMint = mintOf(minted.key, minted.id);
+  let me: { role?: string; character?: string | null };
+  try {
+    me = await new OwV2Client({ apiKey: minted.key, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
+  } catch (e) {
+    if (keyMint) await takeBackKeyById(token, worldId, keyMint.id);
+    throw e;
+  }
+  if (me.role !== 'guest' || me.character !== characterId) {
+    if (keyMint) await takeBackKeyById(token, worldId, keyMint.id);
+    throw other;
+  }
+  return { key: minted.key, keyMint, token };
 }
+
+/**
+ * A player's first share: their write key in place of the read key, kept with the id of its mint so
+ * the world leaving the phone takes it back (`takeBackDeviceKey`). The read key Lantern minted goes
+ * by its own kept id, as `upgradeMemberKey` does, so the account keeps one key per phone; a read key
+ * that came from a link or a paste has no id here and stays listed.
+ *
+ * Read from the database, not the session: another tab may have taken the seat already (its key is
+ * adopted, nothing minted). The new key is stored only over the key it replaces; a world removed or
+ * changed meanwhile, or a store that throws, takes the new key back, and only then is the old one taken.
+ */
+export async function takePlayerSeat(s: WorldSession, characterId: string): Promise<void> {
+  const fresh = await db.getWorldRecord(s.id);
+  if (!fresh) throw new Error(SEAT_MOVED);
+  if (fresh.apiKey && kindCanWrite(fresh.keyKind ?? detectKeyKind(fresh.apiKey))) {
+    if (!(await s.takePlayerKey(fresh.apiKey, fresh.keyMint, fresh.apiKey))) throw new Error(SEAT_MOVED);
+    return;
+  }
+  const fromKey = fresh.apiKey;
+  const oldId = mintedTokenId(fresh.apiKey, fresh.keyMint);
+  const { key, keyMint, token } = await mintPlayerKey(s.id, characterId);
+  let stored = false;
+  try {
+    stored = await s.takePlayerKey(key, keyMint, fromKey);
+  } finally {
+    if (!stored && keyMint) await takeBackKeyById(token, s.id, keyMint.id);
+  }
+  if (!stored) throw new Error(SEAT_MOVED);
+  if (oldId) await takeBackKeyById(token, s.id, oldId);
+}
+
+const SEAT_MOVED = 'This world changed on this phone while your key was being made, so nothing was shared. Try again.';
 
 /**
  * Open a world with a key someone gave you, and its PIN, proven before anything is kept: a legacy

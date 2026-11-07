@@ -28,6 +28,8 @@ const MIRA = 'b41e0000-0000-4000-8000-000000000001';
 const PARTY = 'b41e0000-0000-4000-8000-000000000002';
 const READ = 'ow_r_' + 'p'.repeat(30);
 const WRITE = 'ow_w_' + 'q'.repeat(30);
+const READ_ID = 'b41e0000-0000-4000-8000-0000000000a1';
+const WRITE_ID = 'b41e0000-0000-4000-8000-0000000000a2';
 const zip = Buffer.from(
   writeWorldFile(
     [
@@ -86,6 +88,7 @@ async function walk(engine, deviceName, tag) {
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource|ERR_FAILED|cancelled/i.test(m.text()) && errors.push('console: ' + m.text()));
 
   const mints = [];
+  const revokes = [];
   const pinReads = [];
   const notes = [];
   let seq = 100;
@@ -116,9 +119,15 @@ async function walk(engine, deviceName, tag) {
       notes.push({ refused: true });
       return json(400, { error: { code: 'invalid_request', message: 'Link not found.', type: 'invalid_request_error', param: 'collectives' } });
     }
+    // keel's mint answers the key's row (its id) with the full key; a member revokes their own by id.
     if (req.method() === 'POST' && path === `/account/worlds/${WID}/keys`) {
       mints.push(req.postDataJSON());
-      return json(201, { key: WRITE, scope: 'write' });
+      return json(201, { id: WRITE_ID, last4: WRITE.slice(-4), name: 'Lantern on a phone', scope: 'write', revoked: false, key: WRITE });
+    }
+    const del = path.match(new RegExp(`^/account/worlds/${WID}/keys/([^/]+)$`));
+    if (req.method() === 'DELETE' && del) {
+      revokes.push(decodeURIComponent(del[1]));
+      return r.fulfill({ status: 204 });
     }
     if (req.method() === 'POST' && path === '/narrative') {
       const body = req.postDataJSON();
@@ -133,7 +142,8 @@ async function walk(engine, deviceName, tag) {
   await page.waitForSelector('input[aria-label="A world file"]', { state: 'attached' });
   await page.locator('input[aria-label="A world file"]').setInputFiles({ name: 'reach.zip', mimeType: 'application/zip', buffer: zip });
   await page.waitForSelector('[data-screen="home"]', { timeout: 30000 });
-  await patchApp(page, { kind: 'online', apiKey: READ, keyKind: 'read', role: 'collaborator', memberRole: 'guest', characterId: MIRA }, { accountToken: 'ow_a_' + 'z'.repeat(30) });
+  // The read key as Lantern minted it on opening the account world: its mint's id kept beside it.
+  await patchApp(page, { kind: 'online', apiKey: READ, keyKind: 'read', keyMint: { id: READ_ID, tail: READ.slice(-8) }, role: 'collaborator', memberRole: 'guest', characterId: MIRA }, { accountToken: 'ow_a_' + 'z'.repeat(30) });
 
   await page.goto(`${BASE}/?player#/w/${WID}/notes`);
   await page.waitForSelector('[data-screen=notes]');
@@ -170,6 +180,8 @@ async function walk(engine, deviceName, tag) {
   check(tag, JSON.stringify(sent.collectives) === JSON.stringify([PARTY]) && !('narrator' in sent), 'told to the party, no narrator (keel fills it in)');
   const rec = await record(page);
   check(tag, rec.apiKey === WRITE && rec.keyKind === 'write' && rec.memberRole === 'guest', 'the world keeps the write key, still a player');
+  check(tag, rec.keyMint?.id === WRITE_ID && rec.keyMint?.tail === WRITE.slice(-8), `the write key's mint is kept beside it, so the world leaving takes it back (${JSON.stringify(rec.keyMint)})`);
+  check(tag, JSON.stringify(revokes) === JSON.stringify([READ_ID]), `the read key Lantern minted is taken back by its id, and nothing else (${JSON.stringify(revokes)})`);
   await page.screenshot({ path: `${OUT}/sharenote-${tag}-02-shared.png` });
 
   // A second note: no PIN asked, no second key.

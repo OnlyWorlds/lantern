@@ -2,7 +2,7 @@
 // shared with the party (Titus, 2026-10-14).
 import { typeLabel, typeCount } from '../schema';
 import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
-import { mintPlayerKey } from '../account';
+import { takePlayerSeat } from '../account';
 import { h, plural } from '../dom';
 import { addNote, markShared, notes, removeNote, unmarkShared, type Note } from '../notes';
 import { circlesOf, sharedNoteValues } from '../party';
@@ -228,7 +228,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
       try {
         // The first share takes a write key for this player's seat; it is kept, so a wrong PIN
         // next does not mint another.
-        if (!s.playerCanSend) await s.takePlayerKey(await mintPlayerKey(s.id, s.rec.characterId!));
+        if (!s.playerCanSend) await takePlayerSeat(s, s.rec.characterId!);
         if (pin) {
           // /me proves it before anything is written: since SDK 4.59 a world key's other reads send
           // no PIN, so a world read let a wrong one through to fail at the write.

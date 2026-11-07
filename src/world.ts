@@ -413,12 +413,19 @@ export class WorldSession {
    * The key is the signed-in account's membership, so the PIN asked is that account's (a world
    * opened with a key had no account role until now).
    */
-  async takePlayerKey(apiKey: string): Promise<void> {
-    const rec = await db.updateWorldRecord(this.id, { apiKey, keyKind: detectKeyKind(apiKey), role: this.rec.role ?? 'collaborator' });
-    if (rec) {
-      this.rec = rec;
-      this.emit();
-    }
+  async takePlayerKey(apiKey: string, keyMint: WorldRecord['keyMint'], fromKey: string | undefined): Promise<boolean> {
+    // Only over the key the mint started from: a world removed meanwhile, or a key another tab put
+    // in, is not overwritten, and the caller takes back what it made. The old key's mint goes with
+    // it: an id counts only beside the key it came with.
+    const rec = await db.updateWorldRecord(
+      this.id,
+      { apiKey, keyKind: detectKeyKind(apiKey), keyMint, role: this.rec.role ?? 'collaborator' },
+      (cur) => cur.apiKey === fromKey,
+    );
+    if (!rec) return false;
+    this.rec = rec;
+    this.emit();
+    return true;
   }
 
   /**
