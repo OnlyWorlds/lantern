@@ -2,6 +2,8 @@
 // with their uploaded picture. Keys come from the environment and never reach a screenshot
 // (the inputs are password fields) or a log.
 //   OW_WRITE_KEY=... OW_PIN_FILE=... node walk/live-write.mjs
+// or on a throwaway world of its own, made and deleted around the run:
+//   CREW_FILE=... EXPECT_CLIENT=lantern node walk/live-ground.mjs walk/live-write.mjs
 import './guard.mjs';
 import { chromium, devices } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -48,7 +50,8 @@ try {
   await page.locator('input[aria-label="World key"]').fill(KEY);
   await page.locator('input[aria-label="PIN"]').fill(PIN);
   await page.getByRole('button', { name: 'Open the world' }).tap();
-  await page.waitForSelector('.type-tile', { timeout: 90000 });
+  // The home, not its type tiles: the walk's world is made empty for each run.
+  await page.waitForSelector('[data-screen="home"]', { timeout: 90000 });
   await page.waitForFunction(() => !document.querySelector('.banner'), null, { timeout: 90000 });
   check(true, 'opened the world with a write key and its PIN');
 

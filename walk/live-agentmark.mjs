@@ -3,6 +3,7 @@
 // then read on live Lantern: the quiet line under its kind; a person's element shows none. The
 // scratch element is deleted at the end, whatever happened. Keys never reach a screenshot or a log.
 //   OW_PIN_FILE=... node walk/live-agentmark.mjs   (LANTERN_URL defaults to the live host)
+// or on a throwaway world of its own: CREW_FILE=... node walk/live-ground.mjs walk/live-agentmark.mjs
 import './guard.mjs';
 import { chromium, devices } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -25,20 +26,23 @@ const check = (ok, what) => {
 
 if (process.env.DELETE_PROBE) {
   await person.delete('character', process.env.DELETE_PROBE).catch(() => {});
-  const gone = await person.get('character', process.env.DELETE_PROBE).then(() => false, (e) => e?.status === 404);
-  check(gone, 'the kept probe is deleted (404 after)');
+  const gone = await person.get('character', process.env.DELETE_PROBE).then(() => false, (e) => e?.status === 404 || e?.status === 410);
+  check(gone, 'the kept probe is deleted (404 or 410 after)');
   process.exit(failures ? 1 : 0);
 }
 
 let made = null;
+let plain = null; // a person's element the walk made, when the world has none
 let browser = null;
 try {
   made = await agent.create('character', { name: 'Agent mark probe, delete me', description: 'A scratch element from #347\'s live walk.' });
   const back = await person.get('character', made.id);
   check(back.changed_via === 'declared', `keel recorded the declared door (${back.changed_via})`);
   const page1 = await person.list('character', { limit: 50 });
-  const theirs = (page1.data ?? []).find((e) => e.id !== made.id && e.changed_via !== 'seat' && e.changed_via !== 'mcp' && e.changed_via !== 'declared');
-  check(Boolean(theirs), `a person's element to compare (door ${String(theirs?.changed_via)})`);
+  let theirs = (page1.data ?? []).find((e) => e.id !== made.id && e.changed_via !== 'seat' && e.changed_via !== 'mcp' && e.changed_via !== 'declared');
+  // A world made empty for the run has no person's element: the walk makes one by the plain door.
+  if (!theirs) { plain = await person.create('character', { name: 'Person probe, delete me' }); theirs = await person.get('character', plain.id); }
+  check(Boolean(theirs) && !['seat', 'mcp', 'declared'].includes(theirs.changed_via), `a person's element to compare (door ${String(theirs?.changed_via)})`);
 
   browser = await chromium.launch();
   const ctx = await browser.newContext({ ...devices['Pixel 7'] });
@@ -50,7 +54,7 @@ try {
   await page.locator('input[aria-label="World key"]').fill(KEY);
   await page.locator('input[aria-label="PIN"]').fill(PIN);
   await page.getByRole('button', { name: 'Open the world' }).tap();
-  await page.waitForSelector('.type-tile', { timeout: 90000 });
+  await page.waitForSelector('[data-screen="home"]', { timeout: 90000 });
   await page.waitForFunction(() => !document.querySelector('.banner'), null, { timeout: 90000 });
   const wid = await page.evaluate(() => location.hash.match(/#\/w\/([^/?]+)/)?.[1]);
   const mark = page.locator('[data-screen="element"] [data-role="agent-mark"]');
@@ -73,10 +77,11 @@ try {
   }
 } finally {
   if (browser) await browser.close();
+  if (plain) await person.delete('character', plain.id).then(() => console.log('[live] deleted the person probe'), (e) => { console.log('[live] person probe not deleted:', e?.message); failures++; });
   if (made) {
     await person.delete('character', made.id).catch((e) => console.log('[live] delete failed:', e?.message));
-    const gone = await person.get('character', made.id).then(() => false, (e) => e?.status === 404);
-    check(gone, 'the probe is deleted (404 after)');
+    const gone = await person.get('character', made.id).then(() => false, (e) => e?.status === 404 || e?.status === 410);
+    check(gone, 'the probe is deleted (404 or 410 after)');
   }
 }
 console.log(failures ? `${failures} FAILED` : 'all ok');
