@@ -29,6 +29,7 @@ import { joinView } from './views/join';
 import { openView } from './views/open';
 import { addressIn, afterSignInHash, openWantOf, setPendingOpen } from './opendoor';
 import { isType, setTypeWordsSource } from './schema';
+import { afterPress, pressHeld, watchPresses } from './press';
 import { elName, errorText, go, toast } from './ui';
 import { applySignInOutcome, isSignInCallback, NOT_KEPT_LINE, setSignInNotice, SIGNING_IN_HASH, startSignInCallback, takeSignedInLine, type SignInOutcome } from './signin';
 
@@ -53,6 +54,7 @@ const pulledThisLaunch = new Set<string>();
 let activeSession: WorldSession | null = null;
 // Every type word asks the open world's record for its own words (src/schema.ts typeName).
 setTypeWordsSource(() => activeSession?.rec);
+watchPresses();
 
 function mountScreen(view: View | HTMLElement, s?: WorldSession): void {
   cleanup?.();
@@ -62,11 +64,25 @@ function mountScreen(view: View | HTMLElement, s?: WorldSession): void {
   window.scrollTo(0, 0);
   // The OnlyWorlds mark's fan-out (src/views/waymark.ts): while it is open or its toast shows, a
   // world change waits and runs once after it settles; focus on a mark goes to the new mark.
+  // A press in flight holds the world's redraw too (src/press.ts), or the tap under it is lost.
   let owed = false;
-  const refresh = v.refresh
+  let live = true;
+  let afterTheTap = false;
+  const refresh: (() => void) | null = v.refresh
     ? () => {
+        if (!live) return;
         if (waymarkOpenIn(v.el)) {
           owed = true;
+          return;
+        }
+        if (pressHeld()) {
+          if (!afterTheTap) {
+            afterTheTap = true;
+            afterPress(() => {
+              afterTheTap = false;
+              refresh?.();
+            });
+          }
           return;
         }
         owed = false;
@@ -81,6 +97,7 @@ function mountScreen(view: View | HTMLElement, s?: WorldSession): void {
   v.el.addEventListener(WAYMARK_SETTLED, onSettled);
   const unsubscribe = s && refresh ? s.subscribe(refresh) : null;
   cleanup = () => {
+    live = false;
     unsubscribe?.();
     v.el.removeEventListener(WAYMARK_SETTLED, onSettled);
     v.destroy?.();

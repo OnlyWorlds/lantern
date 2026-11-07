@@ -29,6 +29,7 @@ import { OnlineSaid, PinNeeded, StartOverOffered, isPutting, putOnline, startOve
 import { errorText, go, sheet, toast, topbar } from '../ui';
 import { beginOnlyWorldsSignIn, canSignInWithOnlyWorlds, takeSignInNotice } from '../signin';
 import { installButton, onHomeScreen } from '../install';
+import { pressSettled } from '../press';
 import { applyTheme, currentTheme, fieldsShown, setFieldsShown, BUILD_ID, type FieldsShown } from '../app-state';
 
 export function welcomeView(): HTMLElement {
@@ -586,6 +587,8 @@ export function worldsView(): HTMLElement {
         .map(async (r) => waiting.set(r.id, (await db.outboxRows(r.id)).filter((x) => x.state !== 'refused').length)),
     );
     const byId = new Map(recs.map((r) => [r.id, r]));
+    // The account's list lands late over the cached one: a card or Settings pressed meanwhile keeps its tap.
+    await pressSettled();
     main.replaceChildren(
       topbar('Your worlds', undefined, h('a', { class: 'btn btn-round', href: '#/settings', 'aria-label': 'Settings' }, icon('settings', 20))),
     );
