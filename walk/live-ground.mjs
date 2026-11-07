@@ -31,6 +31,8 @@ const check = (ok, what) => { console.log(`[ground] ${ok ? 'ok  ' : 'FAIL'} ${wh
 let token = null; // { id, token }
 let world = null; // { id, name }
 const pinFile = path.join(os.tmpdir(), `lantern-ground-${process.pid}-${Date.now()}.pin`);
+// A walk may name pictures that must go with the world: each is read once after the delete (expect 404).
+const picturesFile = path.join(os.tmpdir(), `lantern-ground-${process.pid}-${Date.now()}.pictures`);
 
 try {
   if (!check(Boolean(pin), 'crew-walk-b has its PIN row')) throw new Error('stopped');
@@ -49,7 +51,7 @@ try {
   fs.writeFileSync(pinFile, pin, { mode: 0o600 });
   const run = spawnSync(process.execPath, [walk, ...rest], {
     stdio: 'inherit',
-    env: { ...process.env, OW_WRITE_KEY: j.key, OW_PIN_FILE: pinFile, LANTERN_URL: process.env.LANTERN_URL ?? 'https://lantern.onlyworlds.com' },
+    env: { ...process.env, OW_WRITE_KEY: j.key, OW_PIN_FILE: pinFile, GROUND_PICTURES_FILE: picturesFile, LANTERN_URL: process.env.LANTERN_URL ?? 'https://lantern.onlyworlds.com' },
     timeout: 360000,
   });
   check(run.status === 0, `${walk} exited ${run.status ?? run.signal}`);
@@ -57,6 +59,7 @@ try {
   if (e.message !== 'stopped') check(false, `threw: ${String(e).slice(0, 200)}`);
 } finally {
   fs.rmSync(pinFile, { force: true });
+  process.on('exit', () => fs.rmSync(picturesFile, { force: true }));
   if (world) {
     const b = await chromium.launch();
     try {
@@ -80,6 +83,12 @@ try {
         await page.waitForLoadState('networkidle');
         const listed = await (await fetch(`${API}/account/worlds`, { headers: { Authorization: `Bearer ${token.token}` }, ...limit() })).json().catch(() => null);
         check(Boolean(listed) && !(listed.data ?? []).some((x) => x.id === world.id), `teardown: the walk's world ${world.id} deleted on the site by its recorded id, then not on the account's list`);
+        const pictures = fs.existsSync(picturesFile) ? fs.readFileSync(picturesFile, 'utf8').split('\n').filter(Boolean) : [];
+        if (pictures.length) await new Promise((r) => setTimeout(r, 5000));
+        for (const u of pictures) {
+          const s = (await fetch(u, limit()).catch(() => null))?.status;
+          check(s === 404, `the world's picture went with it: ${u.replace(/u\/[0-9a-f-]+\//, 'u/<world>/')} answers ${s ?? 'nothing'} (first read after the delete)`);
+        }
       }
     } finally { await b.close(); }
   }
