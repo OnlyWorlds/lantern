@@ -8,6 +8,7 @@ import { markWords } from '../hidden';
 import { movedFields, type WorldSession } from '../world';
 import type { OutboxRow } from '../db';
 import { askPin, pinSheet, type View } from './world';
+import { afterPress } from '../press';
 
 function show(s: WorldSession, type: string, field: string, v: unknown): string {
   if (isEmptyValue(v)) return '(empty)';
@@ -115,7 +116,7 @@ export function outboxView(s: WorldSession): View {
       if (!navigator.onLine) return toast('No signal. Your changes send by themselves when the phone has it.');
       sendNow.disabled = true;
       sendNow.textContent = 'Sending…';
-      void s.flush().finally(() => refresh());
+      void s.flush().finally(() => afterPress(refresh));
     });
     const when = waiting.length
       ? h('p', { class: 'muted small', style: 'margin:0' }, pinBtn ? 'They send as soon as the PIN is in.' : 'They send by themselves whenever the phone has signal.')

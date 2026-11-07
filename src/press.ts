@@ -55,6 +55,29 @@ function install(): void {
   // becomes a drag (a link dragged with a mouse) can end with neither, so a drag frees it too.
   window.addEventListener('pointercancel', release, true);
   window.addEventListener('dragstart', release, true);
+  // Space on a button clicks on its keyup: a redraw between the two would leave no click at all.
+  // (Enter clicks on its keydown, before anything can redraw.)
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== ' ' || e.repeat) return;
+      const t = e.target;
+      if (!(t instanceof Element) || !t.closest('button, [role="button"], input[type="checkbox"], input[type="radio"]')) return;
+      pressing = true;
+      clearTimeout(fallback);
+      capHold();
+    },
+    true,
+  );
+  window.addEventListener(
+    'keyup',
+    (e) => {
+      if (e.key !== ' ' || !pressing) return;
+      clearTimeout(fallback);
+      fallback = window.setTimeout(release, 300);
+    },
+    true,
+  );
 }
 
 /** True while a press is down or has not yet become its click. */

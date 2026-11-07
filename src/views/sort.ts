@@ -16,6 +16,7 @@ import { errorText, go, tabbar, toast, topbar, typeChip } from '../ui';
 import type { WorldSession } from '../world';
 import type { View } from './world';
 import { heldBackSortLine } from '../hidden';
+import { afterPress } from '../press';
 
 /** A card's state: ticked, a make's edits, an ask's pick. */
 interface RowState {
@@ -164,7 +165,7 @@ export function sortView(s: WorldSession): View {
     if (refusals.has(s.id) && refusals.get(s.id)!.token !== t) refusals.delete(s.id);
     if (s.rec.kind === 'online' && mine.some((w) => w.id === s.id)) accountWorld = true;
     known = true;
-    render();
+    afterPress(render);
   });
 
   const whyNot = (): string => {
@@ -214,7 +215,8 @@ export function sortView(s: WorldSession): View {
     inFlight.set(s.id, job);
     await job;
     inFlight.delete(s.id);
-    render();
+    // The ask takes seconds: a press on the screen meanwhile keeps its tap.
+    afterPress(render);
   };
 
   const chooseScreen = (): (Node | string)[] => {

@@ -597,7 +597,9 @@ export function worldsView(): HTMLElement {
     const pinned = readPinned();
     const pinnedCards = new Map<string, HTMLElement>();
     const place = (id: string, card: HTMLElement, into: HTMLElement[]) => {
-      const row = pinRow(id, card, pinned.includes(id), () => void render(acct));
+      // Drawn again from the store, never from this draw's list: a pin pressed while the account's
+      // list lands runs on this (kept) card, after that list is drawn and cached.
+      const row = pinRow(id, card, pinned.includes(id), () => void render());
       if (pinned.includes(id)) pinnedCards.set(id, row);
       else into.push(row);
     };
@@ -773,6 +775,8 @@ export function settingsView(): HTMLElement {
       void render();
       void saySignedOut(revoking, `${plural(mine.length, 'world')} removed from this phone.`);
     });
+    // Settings draws again after a sign-out, a key or the storage ask lands: a second press keeps its tap.
+    await pressSettled();
     main.replaceChildren(
       topbar('Settings', '#/worlds'),
       h('p', { class: 'section-label' }, 'Look'),

@@ -4,11 +4,11 @@
 // did nothing (a slow phone's lost tap).
 //   Your worlds: the cached list draws, then the account's list lands and redraws it (Settings pressed).
 //   An element page: its trail read lands after it opens and redraws it (a friend's link chip pressed).
-// Run: npm run build && (npx vite preview --port 5181 --host 127.0.0.1 &) && node walk/tap-during-load.mjs [webkit|chromium]
+// Run: npm run build && (npx vite preview --port 5181 &) && node walk/tap-during-load.mjs [webkit|chromium]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 
-const BASE = process.env.LANTERN_URL ?? 'http://127.0.0.1:5181';
+const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
 const VIEWPORT_KEY = /Viewport argument key "interactive-widget" not recognized/;
 const only = process.argv[2];
 let failures = 0;
@@ -21,6 +21,7 @@ const TOR = '0ccc0000-0000-4000-8000-0000000000cc';
 const ANA = '0ccc0000-0000-4000-8000-0000000000ad';
 const KEY = 'ow_r_' + 'q'.repeat(30);
 const TOR_EL = { id: TOR, type: 'character', name: 'Tor', description: 'A ferryman.', supertype: '', subtype: '', image_url: '', physicality: 'Broad', friends: [ANA], species: [], created_at: '2026-10-20T10:00:00Z', updated_at: '2026-10-20T10:00:00Z', change_seq: 2, created_by: null, changed_by: null, changed_via: null };
+const OLD = '0ddd0000-0000-4000-8000-0000000000dd';
 const ANA_EL = { ...TOR_EL, id: ANA, name: 'Ana', description: 'Sells mules.', friends: [], change_seq: 1 };
 
 /** A gate: the first request matching `re` waits until `open()`; `landed` resolves when its answer is back. */
@@ -52,11 +53,9 @@ async function walk(engine, deviceName, tag) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/ERR_FAILED|cancelled/i.test(m.text()) && errors.push(m.text()));
 
-  // Your worlds is visited three times (two in Chromium): each visit's account read gets its own hold.
-  const dragHold = holdFirst(); // a press on the heading moved off: no click on a control
-  const linkDragHold = holdFirst(); // WebKit: Settings dragged as a link
-  const worldsHold = holdFirst(); // Settings tapped
-  const worldsHolds = tag === 'webkit' ? [dragHold, linkDragHold, worldsHold] : [dragHold, worldsHold];
+  // Each visit to Your worlds arms its own hold for the account's list (none armed: answered at once).
+  let armed = null;
+  const arm = (body = FRESH) => (armed = Object.assign(holdFirst(), { body }));
   const trailHold = holdFirst();
   const FRESH = { data: [{ id: '0bbb0000-0000-4000-8000-0000000000bb', name: 'Fresh world', role: 'owner' }] };
   // keel's API host only: the page itself may be lantern.onlyworlds.com.
@@ -71,7 +70,11 @@ async function walk(engine, deviceName, tag) {
       await json(status, body);
       hold.answered();
     };
-    if (req.method() === 'GET' && path === '/account/worlds') return held(worldsHolds.find((x) => !x.used) ?? worldsHold, 200, FRESH);
+    if (req.method() === 'GET' && path === '/account/worlds') {
+      const hold = armed;
+      armed = null;
+      return hold ? held(hold, 200, hold.body) : json(200, FRESH);
+    }
     if (req.method() === 'GET' && path === '/account/me') return json(200, { id: 7, username: 'walker' });
     if (req.method() === 'POST' && path === '/join/preview') {
       return json(200, { reader: 'player', world: { name: 'The Reach', description: 'Salt and debts.' }, invited_by: 'Ada', owner_character: null, role: 'guest', with_character: true, expires_at: '2027-10-27T00:00:00+00:00' });
@@ -108,18 +111,20 @@ async function walk(engine, deviceName, tag) {
         t.onerror = () => rej(t.error);
       };
     }));
+    // The cached list each visit starts from (a visit caches the account's list it read).
+    const setCache = (list) => page.evaluate((list) => new Promise((res) => {
+      const r = indexedDB.open('lantern');
+      r.onsuccess = () => {
+        const t = r.result.transaction(['kv'], 'readwrite');
+        t.objectStore('kv').put(list, 'accountWorlds');
+        t.oncomplete = () => { r.result.close(); res(true); };
+      };
+    }), list);
     // A press that ends without its click (moved off, or a link dragged): the held redraw still lands.
-    const noClick = async (hold, target, what) => {
-      // The visit before cached the account's list: put the empty cache back.
-      await page.evaluate(() => new Promise((res) => {
-        const r = indexedDB.open('lantern');
-        r.onsuccess = () => {
-          const t = r.result.transaction(['kv'], 'readwrite');
-          t.objectStore('kv').put([], 'accountWorlds');
-          t.oncomplete = () => { r.result.close(); res(true); };
-        };
-      }));
-      await page.goto(`${BASE}/?${hold === dragHold ? 'off' : 'linkdrag'}#/worlds`);
+    const noClick = async (target, what, q) => {
+      await setCache([]);
+      const hold = arm();
+      await page.goto(`${BASE}/?${q}#/worlds`);
       const loc = page.locator(target).first();
       await loc.waitFor({ timeout: 15000 });
       const first = (await page.locator('[data-screen="worlds"]', { hasText: 'Fresh world' }).count()) === 0;
@@ -135,11 +140,52 @@ async function walk(engine, deviceName, tag) {
       const hashNow = await page.evaluate(() => location.hash);
       check(tag, first && drawn && hashNow === '#/worlds', `${what}: the cached list first, then the account's list draws once the finger is up (first ${first}, drawn ${drawn}, ${hashNow})`);
     };
-    await noClick(dragHold, '[data-screen="worlds"] h1', 'a press on the heading moved off');
+    await noClick('[data-screen="worlds"] h1', 'a press on the heading moved off', 'off');
     // A link dragged with a mouse becomes a native drag in WebKit: no pointerup, no click, no cancel.
     // (Playwright's Chromium intercepts drags and stalls on a dragged node rebuilt, so WebKit's alone.)
-    if (tag === 'webkit') await noClick(linkDragHold, '[data-screen="worlds"] a[aria-label="Settings"]', 'Settings dragged off as a link');
+    if (tag === 'webkit') await noClick('[data-screen="worlds"] a[aria-label="Settings"]', 'Settings dragged off as a link', 'linkdrag');
 
+    // A pin pressed while the account's list lands runs on the card it was pressed on: the list it
+    // draws next is the account's, never the cached one the card was built from.
+    await setCache([{ id: OLD, name: 'Old world', role: 'owner' }]);
+    const pinHold = arm();
+    await page.goto(`${BASE}/?pin#/worlds`);
+    await pressThrough(page, page.locator(`[data-pin="${OLD}"]`), pinHold, () => true);
+    await page.waitForTimeout(1200);
+    const pinText = await page.locator('[data-screen="worlds"]').innerText();
+    check(tag, pinText.includes('Fresh world') && !pinText.includes('Old world'), `a pin pressed while the account's list lands leaves the account's list showing (${JSON.stringify(pinText.split('\n').filter(Boolean).slice(0, 6).join(' | '))})`);
+
+    // A real touch (Chromium's touch events): three worlds arrive above the card under the finger.
+    // Without the hold the lift lands on whatever the redraw put there (a mis-tap, not only a lost one).
+    if (tag === 'chromium') {
+      await setCache([{ id: OLD, name: 'Old world', role: 'owner' }]);
+      const fresh = [1, 2, 3].map((n) => ({ id: `0bbb0000-0000-4000-8000-00000000000${n}`, name: `New arrival ${n}`, role: 'owner' }));
+      const touchHold = arm({ data: [...fresh, { id: OLD, name: 'Old world', role: 'owner' }] });
+      await page.goto(`${BASE}/?touch#/worlds`);
+      const card = page.locator('[data-screen="worlds"]').getByText('Old world', { exact: true }).first();
+      await card.waitFor({ timeout: 15000 });
+      const cb = await card.boundingBox();
+      const pt = { x: cb.x + cb.width / 2, y: cb.y + cb.height / 2 };
+      await page.evaluate(() => {
+        window.__clicked = [];
+        addEventListener('click', (e) => window.__clicked.push((e.target.closest('a, button, [role="button"]') ?? e.target).innerText.replace(/\s+/g, ' ').slice(0, 40)), true);
+      });
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pt] });
+      touchHold.open();
+      await touchHold.landed;
+      await page.waitForTimeout(600);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForTimeout(400);
+      const clicked = await page.evaluate(() => window.__clicked);
+      // The tapped card starts opening an account world the fake keel does not serve: its 404 is this
+      // case's own, not an error of the screen under test.
+      for (let i = errors.length - 1; i >= 0; i--) if (/status of 404/.test(errors[i])) errors.splice(i, 1);
+      check(tag, clicked.length === 1 && clicked[0].includes('Old world'), `a touch on Old world while three worlds arrive above it lands on Old world (${JSON.stringify(clicked)})`);
+    }
+
+    await setCache([]);
+    const worldsHold = arm();
     await page.goto(`${BASE}/?worlds#/worlds`);
     const settings = page.locator('[data-screen="worlds"] a[aria-label="Settings"]');
     const a = await pressThrough(page, settings, worldsHold, () => location.hash === '#/settings');
