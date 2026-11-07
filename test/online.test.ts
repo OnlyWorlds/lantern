@@ -15,7 +15,8 @@ Object.assign(globalThis, {
 });
 
 const db = await import('../src/db');
-const { putOnline, PinNeeded } = await import('../src/online');
+const { putOnline, PinNeeded, StartOverOffered, startOver, isPutting } = await import('../src/online');
+const { openWorld, forgetSession } = await import('../src/world');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
 
@@ -30,7 +31,23 @@ function reorder(v: unknown): unknown {
 
 class FakeAccountKeel {
   accountPin: string | null = null;
-  worlds = new Map<string, { name: string; key: string; els: Map<string, El>; meta: Record<string, unknown> }>();
+  worlds = new Map<string, { name: string; key: string; keys: string[]; els: Map<string, El>; meta: Record<string, unknown> }>();
+  /** keel since 2026-11-07: the create and the hand-over replay an Idempotency-Key in the account's scope. Off: a keel before it, or rolled back. */
+  replay = true;
+  /** The account's replay store: route and key to the body sent and the answer given. */
+  acctIdem = new Map<string, { sent: string; status: number; answer: Record<string, unknown> }>();
+  /** The next hand-over or create commits and then its answer is lost. */
+  loseHandoverAnswer = false;
+  loseCreateAnswer = false;
+  handovers: Record<string, unknown>[] = [];
+  handoverClient: string | null = null;
+  mints: Record<string, unknown>[] = [];
+  /** Ids keel refuses in its first phase (a field it will not take): every item linking to one fails invalid_link. */
+  refuseIds = new Set<string>();
+  /** The hidden mark switched off on the server (keel's create_hidden: 422 param hidden). */
+  hiddenOff = false;
+  /** The account token another sign-in holds: it owns none of these worlds. */
+  otherToken = 'ow_a_other';
   creates: Record<string, unknown>[] = [];
   patches: Record<string, unknown>[] = [];
   refuseProducer = false;
@@ -61,7 +78,20 @@ class FakeAccountKeel {
     return this.json(status, { error: { code, message: code, param } });
   }
   worldOfKey(key: string | null) {
-    return [...this.worlds.entries()].find(([, w]) => w.key === key);
+    return [...this.worlds.entries()].find(([, w]) => !!key && w.keys.includes(key));
+  }
+  /** Ids held anywhere: keel's ids are global, so an id in any world answers id_conflict elsewhere. */
+  held(id: string, but?: string) {
+    if (this.otherWorldIds.has(id)) return true;
+    return [...this.worlds.entries()].some(([wid, w]) => wid !== but && w.els.has(id));
+  }
+  /** keel's core/idempotency once(): a stored answer for the same body is replayed, another body is 409. */
+  idemCheck(route: string, key: string | null, raw: string): Response | { replay: Record<string, unknown>; status: number } | null {
+    if (!this.replay || !key) return null;
+    const got = this.acctIdem.get(`${route}:${key}`);
+    if (!got) return null;
+    if (got.sent !== raw) return this.err(409, 'idempotency_error');
+    return { replay: got.answer, status: got.status };
   }
 
   fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
@@ -99,13 +129,118 @@ class FakeAccountKeel {
       const ext: Record<string, unknown> = {};
       if (!this.oldCreate) for (const [k, v] of Object.entries(body)) if (/^(x_|atlas_|shadow_)/.test(k) && v !== null) ext[k] = v;
       if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
+      // keel since 2026-11-07: the create's checks run before once(); a replay answers the world without its key.
+      const seen = this.idemCheck('create', headers.get('Idempotency-Key'), String(init.body));
+      if (seen instanceof Response) return seen;
+      if (seen) return this.json(seen.status, seen.replay, { 'Idempotent-Replay': 'true' });
       this.creates.push(body);
       if (!this.accountPin) this.accountPin = body.pin;
       // Unique across the file's tests: the phone's store outlives each test's fake.
       const id = `0w${++madeWorlds}000000-0000-4000-8000-000000000000`;
       const key = `ow_w_${'k'.repeat(30)}${this.worlds.size}`;
-      this.worlds.set(id, { name: body.name, key, els: new Map(), meta: { ...ext } });
-      return this.json(201, { id, name: body.name, role: 'owner', ...ext, key });
+      this.worlds.set(id, { name: body.name, key, keys: [key], els: new Map(), meta: { ...ext } });
+      const row = { id, name: body.name, role: 'owner', ...ext };
+      const k = headers.get('Idempotency-Key');
+      if (this.replay && k) this.acctIdem.set(`create:${k}`, { sent: String(init.body), status: 201, answer: row });
+      if (this.loseCreateAnswer) {
+        this.loseCreateAnswer = false;
+        throw new TypeError('Failed to fetch');
+      }
+      return this.json(201, { ...row, key });
+    }
+    if (path === '/account/worlds/handover' && method === 'POST') {
+      const auth = headers.get('Authorization');
+      if (auth !== 'Bearer ow_a_test' && auth !== `Bearer ${this.otherToken}`) return this.err(401, 'invalid_credentials');
+      // keel's body cap (DATA_UPLOAD_MAX_MEMORY_SIZE, 2.5 MB): 413 before anything is read.
+      if (String(init.body).length > 2_500_000) return this.json(413, { error: { code: 'payload_too_large', message: 'Request body too large.' } });
+      const w = body.world;
+      const items = body.items as { type: string; element: Record<string, unknown> }[];
+      if (!w || typeof w !== 'object') return this.err(422, 'invalid_request', 'world');
+      if (!Array.isArray(items) || !items.length) return this.err(422, 'invalid_request', 'items');
+      // keel since 2026-11-07: once() wraps the write, so the key is read before the world's own checks.
+      const seen = this.idemCheck(`handover:${auth}`, headers.get('Idempotency-Key'), String(init.body));
+      if (seen instanceof Response) return seen;
+      if (seen) return this.json(seen.status, seen.replay, { 'Idempotent-Replay': 'true' });
+      // _clean_new_world's order (accounts/api.py): the maker's line, the prefixed keys, then the PIN.
+      if (w.producer !== undefined && this.refuseProducer) return this.err(422, 'invalid', 'producer');
+      const ext: Record<string, unknown> = {};
+      if (!this.oldCreate) for (const [k, v] of Object.entries(w)) if (/^(x_|atlas_|shadow_)/.test(k) && v !== null) ext[k] = v;
+      if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
+      if (this.accountPin && w.pin !== undefined) {
+        if (this.pinOmitOnly) return this.err(422, 'invalid_request', 'pin');
+        if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
+        if (String(w.pin) !== this.accountPin) {
+          this.pinTriesLeft--;
+          return this.err(401, 'invalid_credentials', 'pin');
+        }
+      }
+      if (!this.accountPin && !/^[1-9]\d{3}$/.test(String(w.pin ?? ''))) return this.err(422, 'invalid_request', 'pin');
+      this.handovers.push(body);
+      this.handoverClient = headers.get('X-OW-Client');
+      // The world's body, as the create's tests read it.
+      this.creates.push(w);
+      for (const it of items) this.sentBodies.push(it.element);
+      // process_bulk(atomic) with actor None: phase 1 refuses what it will not take and, to a fixpoint,
+      // every item linking to a refused one (invalid_link); apply finds an id held in another world.
+      const first = new Set<string>();
+      const slots: Record<string, unknown>[] = items.map((it) => {
+        const el = it.element;
+        if ('known_of' in el) return { status: 422, error: { code: 'invalid_request', message: 'Unknown field: known_of' } };
+        if ('x_served_trimmed' in el) return { status: 422, error: { code: 'served_trimmed_not_writable', message: 'x_served_trimmed is served only.' } };
+        if (this.hiddenOff && el.hidden === true) return { status: 422, error: { code: 'invalid_request', message: 'Hiding is off on this server.', param: 'hidden' } };
+        if (this.refuseIds.has(el.id as string)) return { status: 422, error: { code: 'invalid_request', message: `Unknown field on ${el.name}` } };
+        return null;
+      }) as Record<string, unknown>[];
+      slots.forEach((s, i) => s && first.add(items[i].element.id as string));
+      const linksTo = (el: Record<string, unknown>) =>
+        Object.entries(el).some(([k, v]) => k !== 'id' && (Array.isArray(v) ? v.some((x) => first.has(x as string)) : first.has(v as string)));
+      for (let round = 0; round < items.length; round++) {
+        let moved = false;
+        items.forEach((it, i) => {
+          if (!slots[i] && linksTo(it.element)) {
+            slots[i] = { status: 400, error: { code: 'invalid_link', message: 'A link names an element that is not there.' } };
+            first.add(it.element.id as string);
+            moved = true;
+          }
+        });
+        if (!moved) break;
+      }
+      items.forEach((it, i) => {
+        if (!slots[i]) slots[i] = this.held(it.element.id as string) ? { status: 409, error: { code: 'id_conflict', message: 'id' } } : { status: 201, id: it.element.id };
+      });
+      const refusedSlots = slots.filter((s) => (s.status as number) >= 400);
+      if (refusedSlots.length) {
+        const conflict = refusedSlots.some((s) => (s.error as { code: string }).code === 'id_conflict');
+        return this.json(conflict ? 409 : 422, {
+          error: { code: 'handover_refused', message: `Nothing was written: ${refusedSlots.length} of ${slots.length} items were refused.` },
+          items: slots,
+        });
+      }
+      if (!this.accountPin) this.accountPin = String(w.pin);
+      const id = `0w${++madeWorlds}000000-0000-4000-8000-000000000000`;
+      const els = new Map<string, El>();
+      for (const it of items) els.set(it.element.id as string, { ...it.element, id: it.element.id as string, type: it.type, change_seq: ++this.seq });
+      this.worlds.set(id, { name: w.name, key: '', keys: [], els, meta: { ...ext }, owner: auth } as never);
+      const answer = { world: { id, name: w.name, role: 'owner', ...ext }, items: slots, door: `/worlds/${id}/` };
+      const k = headers.get('Idempotency-Key');
+      if (this.replay && k) this.acctIdem.set(`handover:${auth}:${k}`, { sent: String(init.body), status: 201, answer });
+      if (this.loseHandoverAnswer) {
+        this.loseHandoverAnswer = false;
+        throw new TypeError('Failed to fetch');
+      }
+      return this.json(201, answer);
+    }
+    const mint = path.match(/^\/account\/worlds\/([^/]+)\/keys$/);
+    if (mint && method === 'POST') {
+      const auth = headers.get('Authorization');
+      if (auth !== 'Bearer ow_a_test' && auth !== `Bearer ${this.otherToken}`) return this.err(401, 'invalid_credentials');
+      const w = this.worlds.get(mint[1]) as unknown as { keys: string[]; owner?: string } | undefined;
+      // _owned_or_member_world: a world this account neither owns nor sits in is a 404.
+      if (!w || (w.owner ?? 'Bearer ow_a_test') !== auth) return this.err(404, 'not_found');
+      this.mints.push(body);
+      const key = `ow_w_${'m'.repeat(30)}${this.mints.length}`;
+      w.keys.push(key);
+      return this.json(201, { id: `00000000-0000-4000-8000-${String(this.mints.length).padStart(12, '0')}`, key, scope: body?.scope ?? 'write' });
     }
     const found = this.worldOfKey(headers.get('API-Key'));
     if (!found) return this.err(401, 'invalid_credentials');
@@ -282,22 +417,25 @@ describe('put it online', () => {
     expect(keel.worlds.get(id)!.els.size).toBe(2);
   });
 
-  it("a key keel will not take a hidden element from: said, nothing sent, the phone copy stays", async () => {
+  it("a server with hiding switched off: said by the element's name, no world made, the phone copy stays and can be changed", async () => {
     keel.accountPin = '4321';
-    keel.cannotHide = true;
+    keel.hiddenOff = true;
     const local = await localWorld([...ELS, { id: 'e1000000-0000-7000-8000-000000000015', type: 'character', name: 'Wren', hidden: true }]);
-    await expect(putOnline(local, '4321')).rejects.toThrow(/would not take a hidden element/);
-    expect([...keel.worlds.values()][0].els.size).toBe(0);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/would not take Wren \(Hiding is off on this server\.\)\. Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
     expect((await db.allElements(local)).length).toBe(3);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
   });
 
-  it('ids that live in another world: nothing is sent and the phone copy stays', async () => {
+  it('ids that live in another world: no world is made on the account, nothing sent, and the phone copy stays (2026-11-07)', async () => {
     keel.accountPin = '4321';
     keel.otherWorldIds.add(ELS[0].id);
     const local = await localWorld(ELS);
-    await expect(putOnline(local, '4321')).rejects.toThrow(/another world online/);
-    expect([...keel.worlds.values()][0].els.size).toBe(0);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/another world online \(a world file of an online world\?\)\. Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
+    expect(keel.uploads).toBe(0);
     expect((await db.allElements(local)).length).toBe(2);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
   });
 
   it('a wrong PIN: refused at the create, no world made on the account, and the phone copy stays', async () => {
@@ -482,5 +620,181 @@ describe("put it online keeps the World's own keys", () => {
     expect(keel.worlds.size).toBe(1);
     expect(keel.worlds.get(id)!.els.size).toBe(2);
     expect(keel.worlds.get(id)!.meta.description).toBe('Ideas at the bus stop');
+  });
+});
+
+// Since 2026-11-07: the world and its elements in one write, keel's hand-over, under an Idempotency-Key
+// the account replays; the phone copy holds still while the put is under way.
+describe('put it online on the hand-over', () => {
+  const PICS = Array.from({ length: 3 }, (_, i) => ({
+    id: `e1000000-0000-7000-8000-00000000003${i}`,
+    type: 'character',
+    name: `Face ${i}`,
+    image_url: 'data:image/png;base64,iVBORw0KGgo=',
+  }));
+
+  it('one write: the world and every element, no picture data sent; then a kept key, the pictures by one bulk, Lantern named as the client', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld([...ELS, ...PICS]);
+    const id = await putOnline(local, '4321');
+    expect(keel.handovers).toHaveLength(1);
+    const sent = (keel.handovers[0].items as { element: Record<string, unknown> }[]).map((x) => x.element);
+    expect(sent.some((e) => typeof e.image_url === 'string' && String(e.image_url).startsWith('data:'))).toBe(false);
+    expect(keel.handoverClient).toBe('lantern');
+    expect(keel.mints).toEqual([expect.objectContaining({ scope: 'write', keep: true })]);
+    expect(keel.uploads).toBe(4);
+    expect(keel.bulks).toBe(1);
+    const w = keel.worlds.get(id)!;
+    expect(w.els.size).toBe(5);
+    for (const p of [ELS[1], ...PICS]) expect(w.els.get(p.id)?.image_url).toMatch(/^https:\/\/media\.onlyworlds\.com\//);
+    const rec = await db.getWorldRecord(id);
+    expect(rec?.keyMint?.id).toMatch(/^00000000-/);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it('the phone copy holds still while a put is under way: no edit, no catch, no now, and it is no notes world', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer from OnlyWorlds/);
+    const rec = await db.getWorldRecord(local);
+    expect(isPutting(rec)).toBe(true);
+    forgetSession(local);
+    const s = await openWorld(local);
+    expect(s.canWrite).toBe(false);
+    expect(s.takesNotes).toBe(false);
+    expect(s.canMoveNow).toBe(false);
+    await expect(s.edit(ELS[0].id, { name: 'Changed' })).rejects.toThrow(/read-only/);
+    await expect(s.create('character', { name: 'New' })).rejects.toThrow(/read-only/);
+    await expect(s.remove(ELS[0].id)).rejects.toThrow(/read-only/);
+    await expect(s.setNow(5)).rejects.toThrow(/read-only/);
+  });
+
+  it('a lost answer: the retry under the same key gets the first world back, one world, whole', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld([...ELS, ...PICS]);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    expect(keel.worlds.size).toBe(1);
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.handovers).toHaveLength(1);
+    expect(keel.worlds.get(id)!.els.size).toBe(5);
+    expect(await db.getWorldRecord(local)).toBeUndefined();
+  });
+
+  it('a lost answer on a keel that does not replay: Start over is offered, the copy stays held; Start over lets it go', async () => {
+    keel.accountPin = '4321';
+    keel.replay = false;
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await expect(putOnline(local, '4321')).rejects.toBeInstanceOf(StartOverOffered);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/may already have put this world online/);
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+    expect(keel.worlds.size).toBe(1);
+    await startOver(local);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+    expect((await db.allElements(local)).length).toBe(2);
+  });
+
+  it('a PIN typed differently on the retry: asked for the one from the last try, the copy held, then finished with it', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await expect(putOnline(local, '9999')).rejects.toThrow(/Type the PIN you used on the last try/);
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
+  });
+
+  it('a first world whose answer was lost set the PIN: a retry with other digits never says nothing was made', async () => {
+    const local = await localWorld(ELS);
+    keel.replay = false;
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    const e = await putOnline(local, '5555').catch((x) => x as Error);
+    expect(e.message).not.toMatch(/Nothing was made/);
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+  });
+
+  it('under another sign-in a held put is refused before anything is sent, and Start over too', async () => {
+    keel.accountPin = '4321';
+    await db.kvSet('accountId', 'acct-a');
+    await db.kvSet('accountName', 'ada');
+    const local = await localWorld(ELS);
+    keel.loseHandoverAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    await db.kvSet('accountId', 'acct-b');
+    await db.kvSet('accountToken', keel.otherToken);
+    const sends = keel.handovers.length;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/being put online under ada\. Sign in as it to finish\./);
+    await expect(startOver(local)).rejects.toThrow(/under ada/);
+    expect(keel.handovers.length).toBe(sends);
+    expect(keel.mints).toHaveLength(0);
+    await db.kvSet('accountId', undefined);
+    await db.kvSet('accountName', undefined);
+  });
+
+  it("a refusal is said by the refused element's name, not by one that only links to it", async () => {
+    keel.accountPin = '4321';
+    const moss = { id: 'e1000000-0000-7000-8000-000000000041', type: 'character', name: 'Moss' };
+    const ash = { id: 'e1000000-0000-7000-8000-000000000040', type: 'character', name: 'Ash', friends: [moss.id] };
+    keel.refuseIds.add(moss.id);
+    const local = await localWorld([ash, moss]);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/would not take Moss \(Unknown field on Moss\)\. Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
+  });
+
+  it('more pictures than keel takes for a new world in a day, or more text than one write: said before anything is made', async () => {
+    keel.accountPin = '4321';
+    const many = Array.from({ length: 201 }, (_, i) => ({ id: `e2000000-0000-7000-8000-${String(i).padStart(12, '0')}`, type: 'character', name: `P${i}`, image_url: 'data:image/png;base64,iVBORw0KGgo=' }));
+    const a = await localWorld(many);
+    await expect(putOnline(a, '4321')).rejects.toThrow(/holds 201 pictures; OnlyWorlds takes 200 .* Nothing was made\./);
+    const b = await localWorld([{ id: 'e3000000-0000-7000-8000-000000000001', type: 'character', name: 'Long', description: 'x'.repeat(2_500_000) }]);
+    await expect(putOnline(b, '4321')).rejects.toThrow(/more than OnlyWorlds takes in one go .* Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
+    expect((await db.getWorldRecord(a))?.pendingOnline).toBeUndefined();
+  });
+
+  it('a world with no elements goes by the create under a kept key: a lost answer replays the world without its key, and the phone mints one', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld([]);
+    keel.loseCreateAnswer = true;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/No answer/);
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.creates).toHaveLength(1);
+    expect(keel.mints).toHaveLength(1);
+    expect((await db.getWorldRecord(id))?.apiKey).toMatch(/^ow_w_m/);
+  });
+
+  it('a put an earlier Lantern began (its world made, its key kept) finishes on the old path, no second world', async () => {
+    keel.accountPin = '4321';
+    const wid = '0w9999000000-0000-4000-8000-000000000000';
+    keel.worlds.set(wid, { name: 'Bus stop ideas', key: 'ow_w_old', keys: ['ow_w_old'], els: new Map(), meta: {} });
+    const local = await localWorld(ELS);
+    await db.updateWorldRecord(local, { pendingOnline: { serverId: wid, key: 'ow_w_old', bulkKey: 'b-1' } });
+    const id = await putOnline(local, '4321');
+    expect(id).toBe(wid);
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.handovers).toHaveLength(0);
+    expect(keel.worlds.get(wid)!.els.size).toBe(2);
+  });
+
+  it('an earlier put whose elements another world holds: Start over is offered, naming the empty world it left', async () => {
+    keel.accountPin = '4321';
+    const wid = '0w9998000000-0000-4000-8000-000000000000';
+    keel.worlds.set(wid, { name: 'Bus stop ideas', key: 'ow_w_old2', keys: ['ow_w_old2'], els: new Map(), meta: {} });
+    keel.otherWorldIds.add(ELS[0].id);
+    const local = await localWorld(ELS);
+    await db.updateWorldRecord(local, { pendingOnline: { serverId: wid, key: 'ow_w_old2', bulkKey: 'b-2' } });
+    const e = await putOnline(local, '4321').catch((x) => x);
+    expect(e).toBeInstanceOf(StartOverOffered);
+    expect(String(e.message)).toMatch(/An empty world of this name stays on your account/);
+    await startOver(local);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
   });
 });

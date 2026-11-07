@@ -68,7 +68,8 @@ describe('every mint asks keel to keep the key', () => {
         expect(m[0], `${f}: ${m[0].slice(0, 80)}`).toContain('...KEPT');
       }
     }
-    expect(mints).toBe(5);
+    // The sixth: Put it online's key for the phone after keel's hand-over, which makes none.
+    expect(mints).toBe(6);
   });
 
   it('on the wire: opening an account world sends keep: true', async () => {

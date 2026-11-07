@@ -4,6 +4,32 @@ import type { OwElement, OwKeyKind } from '@onlyworlds/sdk';
 
 export type WorldKind = 'online' | 'local' | 'demo';
 
+/** A put an earlier Lantern began: the account world made by the create, its key, and the bulk's key. */
+export interface PendingOnlineV1 {
+  serverId: string;
+  key: string;
+  bulkKey: string;
+}
+
+/** A put by keel's hand-over (src/online.ts). While it is held the phone copy is read only (`isPutting`). */
+export interface PendingOnlineV2 {
+  v: 2;
+  /** The account the put runs under (its id, '' when unknown), and its name for the sentence that refuses another. */
+  account: string;
+  accountName?: string;
+  route: 'handover' | 'create';
+  /** The Idempotency-Key the hand-over or the create goes under, kept before the first send. */
+  sendKey: string;
+  /** A send went out and no answer came: the next send is its retry. */
+  unanswered?: boolean;
+  serverId?: string;
+  key?: string;
+  keyMint?: { id: string; tail: string };
+  /** The pictures' /bulk key, and the address each held picture got at the edge. */
+  picturesKey: string;
+  pictures?: Record<string, string>;
+}
+
 export interface WorldRecord {
   id: string;
   name: string;
@@ -57,8 +83,8 @@ export interface WorldRecord {
    * unknown on an older copy, which costs its next poll one walk. */
   appliedEpoch?: number | null;
   lastSync?: string;
-  /** Put it online, under way: the account world already made, and the bulk's key, so a retry repeats nothing. */
-  pendingOnline?: { serverId: string; key: string; bulkKey: string };
+  /** Put it online, under way (src/online.ts): a retry repeats nothing. */
+  pendingOnline?: PendingOnlineV1 | PendingOnlineV2;
   /** A world on this phone only: when a world file was last saved from it. */
   lastCopy?: string;
   addedAt: string;

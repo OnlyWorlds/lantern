@@ -13,6 +13,9 @@
 // A wrong PIN goes first: nothing is made, and the sheet says so; the right PIN then makes one world.
 // The control is the live build before (9a0e88f): it must FAIL at the key checks and still delete its world.
 // For the wrong PIN, a3679cb is the control: it makes the world empty and FAILs at those two checks.
+// Then a second world file holding an id the first world now holds is put online: nothing may be made
+// (keel's hand-over, one write). a331c51 is that control: it makes the world, the bulk is refused, an
+// empty world stays (recorded from the account's list by this run's name, and torn down).
 // Secrets are never printed.
 // Run from tools/lantern:
 //   CREW_FILE=<crew-walk-accounts.txt> [SERVE_DIST=dist] node walk/live-online.mjs [url] [chromium|webkit|firefox] [tag]
@@ -53,6 +56,8 @@ const KEYS = {
   shadow_note: 'kept as given',
 };
 const PRODUCER = { tool: 'lantern-walk', version: '1', input: 'bare' };
+// A 1x1 picture the phone holds: it goes up after the world exists, on the phone's own key.
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const world = { id: id(99), name: WORLD_NAME, description: 'A walk of Put it online.', time_current: 1204, time_basic_unit: 'Year', producer: PRODUCER, ...KEYS };
 const enc = new TextEncoder();
 const el = (type, slug, body) => ({ path: `elements/${type}/${slug}--${body.id.slice(-6)}.json`, data: enc.encode(JSON.stringify(body)) });
@@ -61,8 +66,18 @@ const file = writeWorldFile([
   el('narrative', 'the-long-thaw', { id: STORY, name: 'The Long Thaw', events: [HAPPENING], protagonist: HERO }),
   el('event', 'the-ice-breaks', { id: HAPPENING, name: 'The Ice Breaks', locations: [PLACE] }),
   el('location', 'the-harbour', { id: PLACE, name: 'The harbour' }),
-  el('character', 'ada', { id: HERO, name: 'Ada', location: PLACE }),
+  el('character', 'ada', { id: HERO, name: 'Ada', location: PLACE, image_url: `data:image/png;base64,${PNG}` }),
 ], `online-keys-${run}`);
+
+// Since 2026-11-07: a second world file holding an element whose id the first world now holds (a world file of an
+// online world, opened as a new world): keel refuses it, and Put it online must leave no world on the
+// account. The build before (a331c51) made the world, then the bulk refused: an empty world left.
+const REFUSED_NAME = `${WORLD_NAME} refused`;
+const refusedFile = writeWorldFile([
+  { path: 'world.json', data: enc.encode(JSON.stringify({ id: id(98), name: REFUSED_NAME })) },
+  el('narrative', 'the-long-thaw', { id: STORY, name: 'The Long Thaw again' }),
+  el('character', 'bram', { id: id(5), name: 'Bram' }),
+], `online-refused-${run}`);
 
 // The record: what this run minted, by id. Only these are revoked or deleted.
 const tokens = []; // { id, token, by }
@@ -80,7 +95,7 @@ function teardown(why) {
       try {
         const page = await b.newPage({ viewport: { width: 1280, height: 900 } });
         for (const w of worlds) {
-          if (w.name !== WORLD_NAME) { check(false, `teardown: world ${w.id} is named ${JSON.stringify(w.name)}, not this run's: left alone`); continue; }
+          if (w.name !== WORLD_NAME && w.name !== REFUSED_NAME) { check(false, `teardown: world ${w.id} is named ${JSON.stringify(w.name)}, not this run's: left alone`); continue; }
           const del = `https://www.onlyworlds.com/account/worlds/${w.id}/delete`;
           await page.goto(del);
           await page.waitForLoadState('networkidle');
@@ -148,9 +163,22 @@ p.on('response', (r) => {
         const j = await r.json();
         if (j?.id) { tokens.push({ id: j.id, token: j.token, by: 'Lantern' }); console.log(`${T}      Lantern minted token ${j.id} (recorded)`); }
       }
-      if (/\/account\/worlds\/?$/.test(new URL(r.url()).pathname)) {
+      const path = new URL(r.url()).pathname;
+      if (/\/account\/worlds\/?$/.test(path)) {
         const j = await r.json();
         if (j?.id) { worlds.push({ id: j.id, name: j.name, key: j.key }); console.log(`${T}      keel made world ${j.id} (recorded)`); }
+      }
+      // keel's hand-over (since 2026-11-07): the world and its elements in one write, no key in it.
+      if (/\/account\/worlds\/handover\/?$/.test(path)) {
+        const j = await r.json();
+        if (j?.world?.id) { worlds.push({ id: j.world.id, name: j.world.name }); console.log(`${T}      keel made world ${j.world.id} by the hand-over (recorded)`); }
+      }
+      // The key Lantern mints for the phone after a hand-over: the walk reads the world with it.
+      const minted = path.match(/\/account\/worlds\/([0-9a-f-]{36})\/keys\/?$/);
+      if (minted) {
+        const j = await r.json();
+        const w = worlds.find((x) => x.id === minted[1]);
+        if (w && j?.key) { w.key = j.key; console.log(`${T}      Lantern minted key ${j.id} for world ${w.id} (it goes with the world)`); }
       }
     } catch { /* not json */ }
   })());
@@ -219,6 +247,30 @@ try {
   check(canon(got.origin?.producer ?? null) === canon(PRODUCER), `keel holds the file's maker line (${JSON.stringify(got.origin ?? null)})`);
   const els = await (await fetch(`${API}/changes?limit=100`, { headers: { 'API-Key': W.key, 'API-Pin': pin }, ...limit() })).json().catch(() => ({}));
   check((els.changes ?? []).length === 4, `keel holds the four elements (${(els.changes ?? []).length})`);
+  const ada = (els.changes ?? []).find((c) => c.id === HERO)?.element ?? {};
+  check(/^https:\/\//.test(String(ada.image_url ?? '')), `keel holds Ada's picture as an address on the media host (${String(ada.image_url ?? null).slice(0, 60)})`);
+
+  // ---- 5. A world file holding an id the first world now holds: no world made ----
+  await p.goto(new URL('/#/worlds', url).href);
+  await p.locator('input[aria-label="A world file"]').waitFor({ state: 'attached', timeout: 15000 });
+  await p.locator('input[aria-label="A world file"]').setInputFiles({ name: 'refused.owworld', mimeType: 'application/zip', buffer: Buffer.from(refusedFile) });
+  need(await p.waitForSelector('[data-screen="home"]', { timeout: 15000 }).then(() => true, () => false), 'the second world file opens on the phone');
+  await p.goto(new URL('/#/worlds', url).href);
+  const g2 = p.locator('.local-group', { hasText: REFUSED_NAME });
+  await g2.waitFor({ timeout: 15000 });
+  await g2.getByRole('button', { name: 'Put it online' }).tap();
+  await p.locator('.sheet input[aria-label="PIN"]').fill(pin);
+  await p.locator('.sheet button[type="submit"]').tap();
+  const refusedSaid = await p.locator('.sheet .error').filter({ hasText: /\S/ }).first().innerText({ timeout: 60000 }).catch(() => '');
+  await p.waitForTimeout(1500);
+  await Promise.allSettled(pending);
+  const listed2 = ((await (await fetch(`${API}/account/worlds`, { headers: { Authorization: `Bearer ${own.token}` }, ...limit() })).json().catch(() => ({}))).data ?? []);
+  // A world of this run's refused name that the recorder missed is recorded now, from keel's list, so it is torn down.
+  for (const w of listed2.filter((x) => x.name === REFUSED_NAME)) if (!worlds.some((x) => x.id === w.id)) worlds.push({ id: w.id, name: w.name });
+  check(/another world online.*Nothing was made\./.test(refusedSaid), `an id another world holds is said with nothing made (${JSON.stringify(refusedSaid.trim())})`);
+  check(listed2.filter((x) => x.name === REFUSED_NAME).length === 0 && worlds.filter((x) => x.name === REFUSED_NAME).length === 0,
+    `the refused put leaves no world on the account (listed ${listed2.filter((x) => x.name === REFUSED_NAME).length}, recorded ${worlds.filter((x) => x.name === REFUSED_NAME).length})`);
+  await p.screenshot({ path: `${OUT}/live-online-${engine}-${tag}-2-refused.png` });
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } catch (e) {
   if (!String(e.message).startsWith('stopped:')) { console.log(`${T} FAIL threw: ${String(e).slice(0, 200)}`); failures++; }

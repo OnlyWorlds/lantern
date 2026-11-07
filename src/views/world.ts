@@ -313,6 +313,8 @@ function headPill(s: WorldSession): HTMLElement | null {
     return b;
   }
   if (waiting) return h('a', { class: 'pill', href: `#/w/${s.id}/outbox` }, `${waiting} waiting to send`);
+  // A put online under way holds the phone copy still; it is finished from Your worlds.
+  if (s.isLocal && !s.canWrite) return h('a', { class: 'pill', href: '#/worlds' }, 'Putting it online · finish');
   if (s.isLocal) return h('span', { class: 'pill quiet' }, 'On this phone');
   if (s.rec.memberRole === 'guest') return h('span', { class: 'pill quiet' }, 'Player');
   if (!s.canWrite && readsForWantOfPin(s.rec)) {

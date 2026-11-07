@@ -25,7 +25,7 @@ import { afterSignInHash } from '../opendoor';
 import { SIGNUP_URL } from '../invite';
 import { uuid7 } from '../uuid7';
 import { lanternProducer, openWorldFile, saveFile, worldCopy, type CopyQuestion } from '../worldfile';
-import { OnlineSaid, PinNeeded, putOnline } from '../online';
+import { OnlineSaid, PinNeeded, StartOverOffered, isPutting, putOnline, startOver } from '../online';
 import { errorText, go, sheet, toast, topbar } from '../ui';
 import { beginOnlyWorldsSignIn, canSignInWithOnlyWorlds, takeSignInNotice } from '../signin';
 import { installButton, onHomeScreen } from '../install';
@@ -459,7 +459,9 @@ function privateRecordsSheet(
 }
 
 function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
-  const b = h('button', { class: 'btn btn-standard', type: 'button' }, 'Put it online');
+  // A put under way holds the phone copy still until it is finished here, or started over.
+  const putting = isPutting(rec);
+  const b = h('button', { class: 'btn btn-standard', type: 'button' }, putting ? 'Finish putting it online' : 'Put it online');
   b.addEventListener('click', () => {
     if (!signedIn) {
       toast('Sign in first, then put it online.');
@@ -471,7 +473,27 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
       const step = h('p', { class: 'muted small', role: 'status', style: 'margin:0' });
       const err = h('p', { class: 'error', role: 'alert' });
       const go1 = h('button', { class: 'btn btn-standard', type: 'submit' }, 'Put it online');
-      const form = h('form', { class: 'stack' }, h('label', { class: 'field-label' }, 'Your PIN', pin), step, err, go1);
+      // Start over lets go of a put this phone cannot finish; a second tap does it.
+      const again = h('button', { class: 'btn btn-quiet', type: 'button', hidden: '' }, 'Start over');
+      let armed = false;
+      again.addEventListener('click', async () => {
+        if (!armed) {
+          armed = true;
+          again.textContent = 'Tap again to start over';
+          return;
+        }
+        again.disabled = true;
+        try {
+          await startOver(rec.id);
+          close();
+          toast(`${rec.name} can be changed on this phone again. Put it online makes a new world.`);
+          go('#/worlds', true);
+        } catch (ex) {
+          err.textContent = errorText(ex);
+          again.disabled = false;
+        }
+      });
+      const form = h('form', { class: 'stack' }, h('label', { class: 'field-label' }, 'Your PIN', pin), step, err, go1, again);
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         err.textContent = '';
@@ -487,6 +509,7 @@ function putOnlineButton(rec: db.WorldRecord, signedIn: boolean): HTMLElement {
           go(`#/w/${id}`, true);
         } catch (ex) {
           step.textContent = '';
+          again.hidden = !(ex instanceof StartOverOffered);
           err.textContent =
             ex instanceof PinNeeded
               ? 'Your account has no PIN yet: these four digits become it (from 1000 to 9999).'

@@ -78,8 +78,13 @@ export function headBehind(head: unknown, applied: unknown): boolean {
  * Whether this phone can change the world: one on this phone, or a write key (not the demo). A
  * player never does, whatever their key: a player's write key is only for sharing a note.
  */
+/** A put online under way (src/online.ts): the phone copy holds still until it is finished or started over. */
+export function putHolds(rec: WorldRecord): boolean {
+  return rec.kind === 'local' && (rec.pendingOnline as { v?: number } | undefined)?.v === 2;
+}
+
 export function recordCanWrite(rec: WorldRecord): boolean {
-  if (rec.kind === 'local') return true;
+  if (rec.kind === 'local') return !putHolds(rec);
   if (rec.kind === 'demo' || !rec.apiKey || isDemoKey(rec.apiKey)) return false;
   if (rec.memberRole === 'guest') return false;
   return kindCanWrite(rec.keyKind ?? detectKeyKind(rec.apiKey));
@@ -193,7 +198,7 @@ export class WorldSession {
 
   /** A world this key only reads (a player's, a lent read key), not the demo: notes stay on the phone. */
   get takesNotes(): boolean {
-    return !this.canWrite && this.rec.kind !== 'demo';
+    return !this.canWrite && this.rec.kind !== 'demo' && !putHolds(this.rec);
   }
 
   private rosterRows: OwMember[] | null = null;
@@ -669,7 +674,7 @@ export class WorldSession {
    * it is let try, and keel's answer is said.
    */
   get canMoveNow(): boolean {
-    if (this.isLocal) return true;
+    if (this.isLocal) return this.canWrite;
     if (!this.canWrite) return false;
     // The member role, from the account list or learned from /me for a key.
     if (this.rec.memberRole) return this.rec.memberRole === 'co_builder';
@@ -683,6 +688,7 @@ export class WorldSession {
    */
   async setNow(n: number): Promise<void> {
     if (!Number.isInteger(n)) throw new Error('A whole number, please.');
+    if (this.isLocal && !this.canWrite) throw new Error('This world is read-only here.');
     if (!this.isLocal) {
       if (!navigator.onLine) throw new Error('Moving now needs signal. Try again when you have it.');
       try {
