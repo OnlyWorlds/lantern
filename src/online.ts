@@ -145,17 +145,38 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
         return acct.request('POST', '/account/worlds', { body: body() });
       }
     };
+    // The PIN goes with the create, so keel checks it before the world exists (keel, 2026-11-07): a wrong
+    // one is refused with nothing made, never an empty world left behind on the account. An account
+    // with no PIN yet takes it as its PIN. A keel that refuses a pinned account's `pin` (422, as before
+    // 2026-11-07, or after a rollback) gets the create without it, as Lantern sent it then.
+    const refusedForPin = (e: unknown): Error | null => {
+      if (!(e instanceof OwApiError)) return null;
+      if (e.status === 401 && e.param === 'pin') return new OnlineSaid('That PIN does not match your account. Nothing was made.');
+      // Any other 401 here is the account token's own: the create carries no world key.
+      if (e.status === 401) return new OnlineSaid('OnlyWorlds no longer takes this phone\'s sign-in. Sign in again, then put it online. Nothing was made.');
+      if (e.status === 429) {
+        const mins = Math.max(1, Math.ceil((e.retryAfter ?? 60) / 60));
+        return new OnlineSaid(`Too many wrong PINs: OnlyWorlds waits before taking another. Try again in ${mins} minute${mins === 1 ? '' : 's'}. Nothing was made.`);
+      }
+      return null;
+    };
     let made: { id: string; key: string };
     try {
-      made = await create();
+      made = await create(pin || undefined);
     } catch (e) {
+      const said = refusedForPin(e);
+      if (said) throw said;
       if (e instanceof OwApiError && e.status === 422 && e.param === 'extensions') {
         throw new OnlineSaid(`OnlyWorlds would not take this world's own settings (${e.message}). Nothing was sent.`);
       }
-      // An account without a PIN needs one with its first world; one that has a PIN refuses a new one.
       if (!(e instanceof OwApiError && e.status === 422 && e.param === 'pin')) throw e;
-      if (!/^[1-9]\d{3}$/.test(pin)) throw new PinNeeded();
-      made = await create(pin);
+      // An account without a PIN needs a valid one with its first world; an older keel refuses a sent one.
+      try {
+        made = await create();
+      } catch (e2) {
+        if (e2 instanceof OwApiError && e2.status === 422 && e2.param === 'pin') throw new PinNeeded();
+        throw e2;
+      }
     }
     pending = { serverId: made.id, key: made.key, bulkKey: uuid7() };
     rec = (await db.updateWorldRecord(localId, { pendingOnline: pending })) ?? rec;

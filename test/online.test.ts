@@ -36,6 +36,10 @@ class FakeAccountKeel {
   refuseProducer = false;
   /** keel before d98ba65: the create kept no prefixed key. */
   oldCreate = false;
+  /** keel before 2026-11-07 (or rolled back): a pinned account's `pin` on the create is a 422, never checked. */
+  pinOmitOnly = false;
+  /** Wrong PINs before the account's lock answers 429 (core/auth's wall; the count here is the fake's). */
+  pinTriesLeft = 5;
   /** A server that answers a PATCH 200 and keeps none of its prefixed keys: the read is the only witness. */
   losePatchedKeys = false;
   refuseSettings = false;
@@ -50,8 +54,8 @@ class FakeAccountKeel {
   uploads = 0;
   uploaded: { type: string; bytes: Uint8Array }[] = [];
 
-  json(status: number, body: unknown) {
-    return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  json(status: number, body: unknown, extra: Record<string, string> = {}) {
+    return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...extra } });
   }
   err(status: number, code: string, param?: string) {
     return this.json(status, { error: { code, message: code, param } });
@@ -77,8 +81,18 @@ class FakeAccountKeel {
     }
     if (path === '/account/worlds' && method === 'POST') {
       if (headers.get('Authorization') !== 'Bearer ow_a_test') return this.err(401, 'invalid_credentials');
-      if (this.accountPin && body.pin) return this.err(422, 'invalid', 'pin');
-      if (!this.accountPin && !body.pin) return this.err(422, 'required', 'pin');
+      // keel since 2026-11-07 (_clean_new_world, core.auth.enforce_account_pin): a pinned account's sent pin is
+      // checked before anything is written, a malformed one counting as wrong (401 param pin); past the
+      // lock, 429 with Retry-After. An account with no PIN needs a valid new one (1000-9999), else 422.
+      if (this.accountPin && body.pin !== undefined) {
+        if (this.pinOmitOnly) return this.err(422, 'invalid_request', 'pin');
+        if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
+        if (String(body.pin) !== this.accountPin) {
+          this.pinTriesLeft--;
+          return this.err(401, 'invalid_credentials', 'pin');
+        }
+      }
+      if (!this.accountPin && !/^[1-9]\d{3}$/.test(String(body.pin ?? ''))) return this.err(422, 'invalid_request', 'pin');
       if (body.producer !== undefined && this.refuseProducer) return this.err(422, 'invalid', 'producer');
       // keel d98ba65 (accounts/api.py _clean_new_world): the prefixed keys are taken as given, a null is
       // no key, an unprefixed stray is ignored; the store under the cap (422 param extensions), echoed on the row.
@@ -86,7 +100,7 @@ class FakeAccountKeel {
       if (!this.oldCreate) for (const [k, v] of Object.entries(body)) if (/^(x_|atlas_|shadow_)/.test(k) && v !== null) ext[k] = v;
       if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
       this.creates.push(body);
-      if (body.pin) this.accountPin = body.pin;
+      if (!this.accountPin) this.accountPin = body.pin;
       // Unique across the file's tests: the phone's store outlives each test's fake.
       const id = `0w${++madeWorlds}000000-0000-4000-8000-000000000000`;
       const key = `ow_w_${'k'.repeat(30)}${this.worlds.size}`;
@@ -286,12 +300,58 @@ describe('put it online', () => {
     expect((await db.allElements(local)).length).toBe(2);
   });
 
-  it('a wrong PIN: refused, and the phone copy stays', async () => {
+  it('a wrong PIN: refused at the create, no world made on the account, and the phone copy stays', async () => {
     keel.accountPin = '4321';
     const local = await localWorld(ELS);
-    await expect(putOnline(local, '1111')).rejects.toThrow();
+    await expect(putOnline(local, '1111')).rejects.toThrow(/That PIN does not match your account\. Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
+    expect(keel.creates).toHaveLength(0);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
     expect((await db.allElements(local)).length).toBe(2);
-    expect(await db.getWorldRecord(local)).toBeTruthy();
+    // The right PIN then makes one world, whole.
+    const id = await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
+  });
+
+  it("the PIN goes with every create, and a pinned account's right PIN makes the world at once", async () => {
+    keel.accountPin = '4321';
+    const id = await putOnline(await localWorld(ELS), '4321');
+    expect(keel.creates).toHaveLength(1);
+    expect(keel.creates[0].pin).toBe('4321');
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
+  });
+
+  it("a sign-in keel no longer takes: said as the sign-in, never as the PIN, nothing made", async () => {
+    keel.accountPin = '4321';
+    await db.kvSet('accountToken', 'ow_a_gone');
+    const local = await localWorld(ELS);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/no longer takes this phone's sign-in/);
+    expect(keel.worlds.size).toBe(0);
+  });
+
+  it('too many wrong PINs: said with the wait, nothing made', async () => {
+    keel.accountPin = '4321';
+    keel.pinTriesLeft = 0;
+    const local = await localWorld(ELS);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/Too many wrong PINs.*Try again in 5 minutes\. Nothing was made\./);
+    expect(keel.worlds.size).toBe(0);
+    expect((await db.allElements(local)).length).toBe(2);
+  });
+
+  it('a keel that refuses a pinned account its PIN on the create (before 2026-11-07, or rolled back): the create goes without it, as before', async () => {
+    keel.accountPin = '4321';
+    keel.pinOmitOnly = true;
+    const id = await putOnline(await localWorld(ELS), '4321');
+    expect(keel.creates).toHaveLength(1);
+    expect(keel.creates[0]).not.toHaveProperty('pin');
+    expect(keel.worlds.get(id)!.els.size).toBe(2);
+  });
+
+  it('an account with no PIN and digits keel will not take as one (0123): asks for a PIN from 1000, nothing made', async () => {
+    const local = await localWorld(ELS);
+    await expect(putOnline(local, '0123')).rejects.toBeInstanceOf(PinNeeded);
+    expect(keel.worlds.size).toBe(0);
   });
 });
 
