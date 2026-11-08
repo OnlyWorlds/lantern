@@ -62,8 +62,12 @@ describe('every mint asks keel to keep the key', () => {
     let mints = 0;
     for (const f of files) {
       const src = readFileSync(f, 'utf8');
-      // A mint is a POST whose path ends in /keys; its body follows within the statement.
-      for (const m of src.matchAll(/'POST',\s*`\/account\/worlds\/\$\{[^}]+\}\/keys`[\s\S]{0,160}?\}\s*\)/g)) {
+      // The one POST to a world's keys is mints.ts's (under a kept Idempotency-Key); every other
+      // file mints through it.
+      const posts = [...src.matchAll(/'POST',\s*`\/account\/worlds\/\$\{[^}]+\}\/keys`/g)].length;
+      expect(posts, f).toBe(f.endsWith('mints.ts') ? 1 : 0);
+      // A mint is a mintKey call; its body follows within the statement.
+      for (const m of src.matchAll(/mintKey(?:<[^>]*>)?\(token,[\s\S]{0,160}?\}\s*\)/g)) {
         mints++;
         expect(m[0], `${f}: ${m[0].slice(0, 80)}`).toContain('...KEPT');
       }

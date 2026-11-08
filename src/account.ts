@@ -9,6 +9,7 @@ import { plural } from './dom';
 import { forgetAccountPin, setPin } from './pin';
 import { clearNotes } from './notes';
 import { mintOf, mintedTokenId, revokeToken, type RevokeOutcome, type TokenMint } from './revoke';
+import { mintKey } from './mints';
 
 export interface AccountWorld {
   id: string;
@@ -328,17 +329,16 @@ export async function openAccountWorld(w: AccountWorld, askedFor?: string): Prom
   if (askedFor !== undefined && token !== askedFor) throw new Error('This phone is signed in with another account now. Open the world again from onlyworlds.com.');
   // Before a key is minted: a refusal leaves nothing behind on keel.
   await takeOver(await db.getWorldRecord(w.id));
-  const c = accountClient(token);
   const name = `Lantern on ${deviceName()}`;
   // Guests read; everyone else writes. A member without an account PIN gets 409 pin_required
   // on a write key, and then this phone reads until they set one on onlyworlds.com.
   let key: { key: string; scope: string; id?: string };
   const scope = w.member_role === 'guest' ? 'read' : 'write';
   try {
-    key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope, name, ...KEPT } });
+    key = await mintKey(token, w.id, { scope, name, ...KEPT });
   } catch (e) {
     if (scope === 'write' && (e as { code?: string }).code === 'pin_required') {
-      key = await c.request('POST', `/account/worlds/${w.id}/keys`, { body: { scope: 'read', name, ...KEPT } });
+      key = await mintKey(token, w.id, { scope: 'read', name, ...KEPT });
     } else throw e;
   }
   const rec: db.WorldRecord = {
@@ -390,7 +390,7 @@ export async function upgradeMemberKey(rec: db.WorldRecord): Promise<void> {
   const c = accountClient(token);
   let key: { key: string; id?: string };
   try {
-    key = await c.request('POST', `/account/worlds/${rec.id}/keys`, { body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT } });
+    key = await mintKey(token, rec.id, { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT });
   } catch (e) {
     if ((e as { code?: string }).code === 'pin_required') throw new Error(NO_PIN_YET);
     throw e;
@@ -426,8 +426,7 @@ export async function renewWorldKey(rec: db.WorldRecord, cause: 'key_revoked' | 
       ? `${rec.name} is no longer on your OnlyWorlds account: it was deleted there, or you were removed from it. What is on this phone stays.`
       : `${rec.name} is not on the account this phone is signed in to, so Lantern can't make its key. Put in a key from the world's page on onlyworlds.com.`);
   }
-  const c = accountClient(token);
-  const mint = (scope: 'write' | 'read') => c.request<{ key: string; id?: string }>('POST', `/account/worlds/${rec.id}/keys`, { body: { scope, name: `Lantern on ${deviceName()}`, ...KEPT } });
+  const mint = (scope: 'write' | 'read') => mintKey<{ key: string; id?: string }>(token, rec.id, { scope, name: `Lantern on ${deviceName()}`, ...KEPT });
   let key: { key: string; id?: string };
   if (listed.member_role === 'guest') key = await mint('read');
   else {
@@ -485,9 +484,7 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
   if (!listed || listed.member_role !== 'guest') throw other;
   let minted: { key: string; id?: string };
   try {
-    minted = await accountClient(token).request<{ key: string; id?: string }>('POST', `/account/worlds/${worldId}/keys`, {
-      body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT },
-    });
+    minted = await mintKey<{ key: string; id?: string }>(token, worldId, { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT });
   } catch (e) {
     if ((e as { code?: string }).code === 'pin_required') throw new Error('Set a PIN on onlyworlds.com first: sharing a note needs one.');
     if ((e as { status?: number }).status === 404) throw other;

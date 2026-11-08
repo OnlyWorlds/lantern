@@ -30,6 +30,7 @@ import { openView } from './views/open';
 import { addressIn, afterSignInHash, openWantOf, setPendingOpen } from './opendoor';
 import { isType, setTypeWordsSource } from './schema';
 import { afterPress, pressHeld, watchPresses } from './press';
+import { sweepLostMints, watchLostMints } from './mints';
 import { elName, errorText, go, toast } from './ui';
 import { applySignInOutcome, isSignInCallback, NOT_KEPT_LINE, setSignInNotice, SIGNING_IN_HASH, startSignInCallback, takeSignedInLine, type SignInOutcome } from './signin';
 
@@ -258,6 +259,10 @@ if (takeShared()) {
   history.replaceState(null, '', code ? '/#/join' : '/#/share');
 }
 void route();
+// A key mint whose answer was lost, or cut off by a reload, is asked for and taken back
+// (src/mints.ts): now, and again when the phone is back online or in view; quiet.
+void sweepLostMints().catch(() => undefined);
+watchLostMints();
 
 // ---------- staying in step ----------
 

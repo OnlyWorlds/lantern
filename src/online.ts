@@ -12,6 +12,7 @@ import { KEPT, accountName, accountToken, deviceName, whoAmI } from './account';
 import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession } from './world';
 import { setPin } from './pin';
 import { uuid7 } from './uuid7';
+import { mintKey } from './mints';
 import { moveDraft } from './draft';
 import { isKnownOf } from './knownof';
 import { withHiddenForCreate } from './hidden';
@@ -430,11 +431,8 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   const p = pending!;
   if (!p.key) {
     onStep('Making a key for this phone');
-    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
     try {
-      const k = await acct.request<{ key: string; id?: string }>('POST', `/account/worlds/${p.serverId}/keys`, {
-        body: { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT },
-      });
+      const k = await mintKey<{ key: string; id?: string }>(token, p.serverId!, { scope: 'write', name: `Lantern on ${deviceName()}`, ...KEPT });
       p.key = k.key;
       p.keyMint = mintOf(k.key, k.id);
       await db.updateWorldRecord(localId, { pendingOnline: { ...p } });

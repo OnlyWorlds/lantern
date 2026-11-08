@@ -260,6 +260,14 @@ export async function kvGet<T>(key: string): Promise<T | undefined> {
   return req(db.transaction('kv').objectStore('kv').get(key) as IDBRequest<T | undefined>);
 }
 
+/** Every kv value whose key starts with `prefix`, in key order: a list kept one row per entry, so two
+ * writers never lose each other's entry to a read-modify-write. */
+export async function kvList<T>(prefix: string): Promise<T[]> {
+  const db = await app();
+  const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
+  return req(db.transaction('kv').objectStore('kv').getAll(range) as IDBRequest<T[]>);
+}
+
 export async function kvSet(key: string, value: unknown): Promise<void> {
   const db = await app();
   const t = db.transaction('kv', 'readwrite');
