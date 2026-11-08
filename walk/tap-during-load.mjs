@@ -34,8 +34,14 @@ function holdFirst() {
 
 /** Press `loc`, let the held read go while the finger is down, lift after it lands; true if `opened()` comes true. */
 async function pressThrough(page, loc, hold, opened, arg = null) {
-  await loc.waitFor({ timeout: 15000 });
-  const box = await loc.boundingBox();
+  // A redraw before the press (no finger down, so nothing holds it) can replace the node between
+  // the find and the measure: find it again (WebKit, about 2 runs in 5 on the element page).
+  let box = null;
+  for (let i = 0; i < 5 && !box; i++) {
+    await loc.waitFor({ timeout: 15000 });
+    box = await loc.boundingBox();
+  }
+  if (!box) throw new Error('the pressed node kept being replaced before the press');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   hold.open();

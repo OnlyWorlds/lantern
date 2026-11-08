@@ -3,9 +3,11 @@
  * become its click (or ended without one), then runs once.
  *
  * A screen rebuilt between pointerdown and click loses the tap: the pressed node is gone, so no
- * click lands, and Chromium drops it even when the same node is put back in place. Late answers
- * (the account's worlds, an element's trail, a pull, the poll) redraw at any moment, so every
- * redraw driven by data rather than by the person waits here.
+ * click lands, and Chromium drops it even when the same node is put back in place; on a touch
+ * screen whose rows moved, the lift lands on whatever moved under it. Late answers (the account's
+ * worlds, an element's trail, a pull, the poll) redraw at any moment, so every redraw driven by
+ * data rather than by the person waits here. (The same module runs in the OnlyWorlds dashboard,
+ * parlor and Little Lens, and in Tactical Tangle.)
  */
 
 let pressing = false;
@@ -17,14 +19,22 @@ let installed = false;
 /** The longest a redraw waits on one press, timed from the pointerdown: a lost pointerup must not hold the screen still. */
 const MAX_HOLD_MS = 5000;
 
+function runWaiters(): void {
+  if (pressing) return; // a new press began before the turn came: its own release runs them
+  const ws = [...waiters];
+  waiters.clear();
+  // One waiter that throws never keeps the others from running.
+  for (const w of ws) {
+    try { w(); } catch (err) { setTimeout(() => { throw err; }, 0); }
+  }
+}
+
 function release(): void {
   if (!pressing) return;
   pressing = false;
   clearTimeout(fallback);
   clearTimeout(cap);
-  const ws = [...waiters];
-  waiters.clear();
-  for (const w of ws) w();
+  runWaiters();
 }
 
 function install(): void {
@@ -49,8 +59,16 @@ function install(): void {
     },
     true,
   );
-  // The click's own handlers and its default (a link's navigation) run first: free on the next turn.
-  window.addEventListener('click', () => { if (pressing) setTimeout(release, 0); }, true);
+  // The click has landed: a redraw its own handlers ask for runs at once, as it always did; the
+  // redraws held during the press run on the next turn, after the handlers and the click's default
+  // (a link removed before its default runs no longer navigates).
+  window.addEventListener('click', () => {
+    if (!pressing) return;
+    pressing = false;
+    clearTimeout(fallback);
+    clearTimeout(cap);
+    setTimeout(runWaiters, 0);
+  }, true);
   // A touch that becomes a scroll ends in pointercancel, with no pointerup and no click; a press that
   // becomes a drag (a link dragged with a mouse) can end with neither, so a drag frees it too.
   window.addEventListener('pointercancel', release, true);
