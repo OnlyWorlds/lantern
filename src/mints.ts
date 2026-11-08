@@ -9,7 +9,7 @@
 // comes back online or into view, and one a reload cut off by the sweep at the next start. Nothing is
 // ever taken back by a name or a list.
 
-import { OwV2Client, type OwMintedKey } from '@onlyworlds/sdk';
+import { OwV2Client, type OwMintedKey, type OwWorldKeyRow } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import { uuid7 } from './uuid7';
@@ -116,7 +116,7 @@ export async function mintKey<T extends { key: string; id?: string } = OwMintedK
  */
 async function settle(token: string, ask: MintAsk, held?: Set<string>): Promise<'gone' | 'none' | 'unknown'> {
   const c = client(token);
-  let row: Awaited<ReturnType<OwV2Client["madeWorldKey"]>>;
+  let row: OwWorldKeyRow | null;
   try {
     // null: keel made no key by it (its 404), or a keel from before the lookup (405).
     row = await bounded(c.madeWorldKey(ask.worldId, ask.key));
