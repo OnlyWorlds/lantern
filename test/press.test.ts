@@ -15,7 +15,12 @@ async function fresh(): Promise<Press> {
   return p;
 }
 
-const fire = (type: string) => win.dispatchEvent(new Event(type));
+/** A person's event (the browser's own); `trusted: false` is a script's `el.click()`. */
+const fire = (type: string, trusted = true) => {
+  const e = new Event(type);
+  Object.defineProperty(e, 'isTrusted', { value: trusted });
+  win.dispatchEvent(e);
+};
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -53,6 +58,21 @@ describe('press guard', () => {
     fire('click');
     expect(own).toHaveBeenCalledTimes(1);
     expect(p.pressHeld()).toBe(false);
+  });
+
+  it("a script's click during a press ends nothing (a file's link landing)", async () => {
+    const p = await fresh();
+    fire('pointerdown');
+    const held = vi.fn();
+    p.afterPress(held);
+    fire('click', false);
+    vi.advanceTimersByTime(0);
+    expect(held).not.toHaveBeenCalled();
+    expect(p.pressHeld()).toBe(true);
+    fire('pointerup');
+    fire('click');
+    vi.advanceTimersByTime(0);
+    expect(held).toHaveBeenCalledTimes(1);
   });
 
   it('keeps running the held redraws when one throws', async () => {

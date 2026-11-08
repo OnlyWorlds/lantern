@@ -62,8 +62,10 @@ function install(): void {
   // The click has landed: a redraw its own handlers ask for runs at once, as it always did; the
   // redraws held during the press run on the next turn, after the handlers and the click's default
   // (a link removed before its default runs no longer navigates).
-  window.addEventListener('click', () => {
-    if (!pressing) return;
+  // Only a person's click: a script's `a.click()` (a download's link landing) during another press
+  // must not end that press's hold.
+  window.addEventListener('click', (e) => {
+    if (!pressing || !e.isTrusted) return;
     pressing = false;
     clearTimeout(fallback);
     clearTimeout(cap);
