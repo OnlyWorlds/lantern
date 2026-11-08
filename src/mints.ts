@@ -9,7 +9,7 @@
 // comes back online or into view, and one a reload cut off by the sweep at the next start. Nothing is
 // ever taken back by a name or a list.
 
-import { OwV2Client } from '@onlyworlds/sdk';
+import { OwV2Client, type OwMintedKey } from '@onlyworlds/sdk';
 import * as db from './db';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import { uuid7 } from './uuid7';
@@ -35,8 +35,8 @@ export const MINT_LIMIT_MS = 60_000;
 /** Any ask is dropped after this long: for an account no longer signed in here, or a keel that can't say. */
 export const FORGET_AFTER_MS = 7 * 24 * 60 * 60_000;
 const LIMIT_MS = 8000;
-/** keel answering one of these to the lookup made no key by it: none found (404), or a keel before the
- * lookup existed (its path is the revoke's, which answers a GET 405). */
+/** keel made no key by it: the SDK's lookup reads keel's 404 (none found) and 405 (a keel before the
+ * lookup) as null; a 501 says the same and still arrives as an error. */
 const NONE_MADE = new Set([404, 405, 501]);
 
 /** This tab's own asks whose lookup failed: asked again at once when the phone is back, never left to the age rule. */
@@ -80,14 +80,16 @@ function statusOf(e: unknown): number | undefined {
  * call made is asked for and taken back before the error goes on. The ask is dropped once the answer
  * is in: the caller stores the key in the same turn, and no sweep reads an ask that young.
  */
-export async function mintKey<T extends { key: string; id?: string }>(token: string, worldId: string, body: Record<string, unknown>): Promise<T> {
+export async function mintKey<T extends { key: string; id?: string } = OwMintedKey>(
+  token: string, worldId: string, body: { scope?: 'read' | 'write'; name?: string; keep?: boolean },
+): Promise<T> {
   const ask: MintAsk = { worldId, key: uuid7(), account: (await db.kvGet<string>('accountId')) ?? '', tail: token.slice(-6), at: new Date().toISOString() };
   await db.kvSet(ASK + ask.key, ask);
   let minted: T;
   try {
-    minted = await client(token).request<T>('POST', `/account/worlds/${worldId}/keys`, {
-      body, idempotencyKey: ask.key, signal: AbortSignal.timeout(MINT_LIMIT_MS),
-    });
+    minted = (await client(token).mintWorldKey(worldId, {
+      ...body, idempotencyKey: ask.key, signal: AbortSignal.timeout(MINT_LIMIT_MS),
+    })) as unknown as T;
   } catch (e) {
     const s = statusOf(e);
     if (s !== undefined && s >= 400 && s < 500) await dropAsk(ask.key);
@@ -114,13 +116,15 @@ export async function mintKey<T extends { key: string; id?: string }>(token: str
  */
 async function settle(token: string, ask: MintAsk, held?: Set<string>): Promise<'gone' | 'none' | 'unknown'> {
   const c = client(token);
-  let row: { id?: string; revoked?: boolean };
+  let row: Awaited<ReturnType<OwV2Client["madeWorldKey"]>>;
   try {
-    row = await bounded(c.request<{ id?: string; revoked?: boolean }>('GET', `/account/worlds/${ask.worldId}/keys/made?key=${encodeURIComponent(ask.key)}`));
+    // null: keel made no key by it (its 404), or a keel from before the lookup (405).
+    row = await bounded(c.madeWorldKey(ask.worldId, ask.key));
   } catch (e) {
     const s = statusOf(e);
     return s !== undefined && NONE_MADE.has(s) ? 'none' : 'unknown';
   }
+  if (row === null) return 'none';
   if (!row?.id) return 'unknown';
   if (row.revoked === true) return 'gone'; // keel keeps a revoked key's row: already taken back
   if (held?.has(row.id)) return 'gone'; // the phone holds this key: its answer landed after all
