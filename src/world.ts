@@ -1457,6 +1457,11 @@ const PICTURE_REFUSED: Record<string, string> = {
   too_large: 'This picture is too large to send.',
 };
 
+/** The sentence for a refusal about a picture itself (storage, the day's limit, its size), or undefined for any other failure. */
+export function pictureRefusalText(e: unknown): string | undefined {
+  return e instanceof OwApiError ? PICTURE_REFUSED[e.code ?? ''] : undefined;
+}
+
 /** One object URL per queued photo for the life of the page (a photo is a few hundred KB, and few wait). */
 const photoUrls = new WeakMap<Blob, string>();
 function photoUrl(b: Blob): string {

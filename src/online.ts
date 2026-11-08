@@ -9,7 +9,7 @@
 import { OwApiError, OwV2Client } from '@onlyworlds/sdk';
 import * as db from './db';
 import { KEPT, accountName, accountToken, deviceName, whoAmI } from './account';
-import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession } from './world';
+import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession, pictureRefusalText } from './world';
 import { setPin } from './pin';
 import { uuid7 } from './uuid7';
 import { mintKey } from './mints';
@@ -473,6 +473,10 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       }
       // A PIN refusal keeps its kind, so the sheet says the PIN.
       if (e instanceof OwApiError && e.status === 401) throw e;
+      // A refusal about the pictures themselves (the day's limit, a full store) is said as the outbox says
+      // it: a plain "try again" would send a person into the same refusal all day.
+      const why = pictureRefusalText(e);
+      if (why) throw new OnlineSaid(`The world is online, but its pictures did not arrive: ${why[0].toLowerCase()}${why.slice(1)} Your phone copy is kept.`);
       throw new OnlineSaid(`The world is online, but its pictures did not arrive (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);
     }
   }

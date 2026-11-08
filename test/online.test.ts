@@ -51,6 +51,7 @@ class FakeAccountKeel {
   addAfterHandover = false;
   /** The next media ticket fails (a 503), once. */
   failTicketOnce = false;
+  ticketQuotaReached = false;
   mints: Record<string, unknown>[] = [];
   /** Ids keel refuses in its first phase (a field it will not take): every item linking to one fails invalid_link. */
   refuseIds = new Set<string>();
@@ -297,6 +298,10 @@ class FakeAccountKeel {
     if (!found) return this.err(401, 'invalid_credentials');
     const [worldId, world] = found;
     if (method !== 'GET' && headers.get('API-Pin') !== this.accountPin) return this.err(401, 'invalid_credentials', 'API-Pin');
+    // keel's daily ticket cap (media/api.py _check_quota): 429 quota_exceeded with a Retry-After.
+    if (path === '/media/ticket' && this.ticketQuotaReached) {
+      return this.json(429, { error: { code: 'quota_exceeded', type: 'rate_limit_error', message: 'Too many uploads today.' } });
+    }
     if (path === '/media/ticket' && this.failTicketOnce) {
       this.failTicketOnce = false;
       return this.json(503, { error: { code: 'server_busy', message: 'Busy.' } });
@@ -973,6 +978,19 @@ describe('put it online on the hand-over', () => {
     await expect(putOnline(local, '4321')).rejects.toThrow(/key for it no longer works\. Try again: a new key is made\./);
     const id = await putOnline(local, '4321');
     expect(keel.mints).toHaveLength(2);
+    expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+  });
+
+  it("the world's picture limit for the day: said as tomorrow, not as a plain try again; the copy kept and the put held", async () => {
+    keel.accountPin = '4321';
+    keel.ticketQuotaReached = true;
+    const local = await localWorld(ELS);
+    await expect(putOnline(local, '4321')).rejects.toThrow(
+      "The world is online, but its pictures did not arrive: today's picture limit for this world is reached. Try again tomorrow. Your phone copy is kept.",
+    );
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
+    keel.ticketQuotaReached = false;
+    const id = await putOnline(local, '4321');
     expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
   });
 
