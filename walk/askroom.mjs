@@ -34,7 +34,7 @@ async function walk(engine, tag) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && !VIEWPORT_KEY.test(m.text()) && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
   const asked = [];
-  await page.route('**/api/v2/account/ask', (r) => {
+  await page.route('**/api/v2/account/ai/ask', (r) => {
     asked.push(JSON.parse(r.request().postData()));
     return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ answer: 'Someone asked to rename Bo.', model: 'claude-haiku-5-5', stop_reason: 'end_turn', usage: { input_tokens: 90, output_tokens: 9 }, remaining: 49 }) });
   });

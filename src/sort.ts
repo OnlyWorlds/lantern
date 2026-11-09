@@ -1,9 +1,12 @@
-// The morning after's call: keel's sorting route (Skeld, 2026-10-12, POST /account/sort), on the
-// same account check, model and allowance as Ask. The notes and the world's slice go in; rows in
-// Simmer's shape come back (src/sortplan.ts). The key and the meter are keel's. The call is the
-// SDK's `sort()` (4.18, Kael, 2026-10-12); its rows are checked again on arrival (`sanitizeRows`).
+// The morning after's call: keel's AI door (POST /account/ai/sort, the `sort` use; the route was
+// /account/sort from 2026-10-12), on the same account check, model and allowance as Ask. The notes and
+// the world's slice go in; rows in Simmer's shape come back (src/sortplan.ts). The key and the meter
+// are keel's. The call is the SDK's `ai('sort')` (4.137) under a key kept until its answer
+// lands (src/ai-key.ts), so sorting again after a lost answer is free; its rows are checked again on
+// arrival (`sanitizeRows`).
 import { OwApiError, OwNetworkError, OwV2Client, type OwPaidBy } from '@onlyworlds/sdk';
 import { accountToken } from './account';
+import { aiAnswered, aiKey } from './ai-key';
 import { OWN_KEY_REFUSED } from './own-key';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import type { SliceItem, SortRow } from './sortplan';
@@ -36,12 +39,17 @@ export class SortRefused extends Error {
 export async function sortNotes(worldId: string, notes: SortNote[], slice: SliceItem[]): Promise<Sorted> {
   const token = await accountToken();
   if (!token) throw new SortRefused('Sign in to sort with OnlyWorlds.');
+  const body = { world_id: worldId, notes, slice };
   try {
-    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).sort({ worldId, notes, slice });
+    const r = await new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).ai('sort', body, {
+      idempotencyKey: aiKey('sort', body),
+    });
+    aiAnswered('sort', body);
     return {
       rows: Array.isArray(r?.rows) ? (r.rows as SortRow[]) : [],
       not_proposed: Array.isArray(r?.not_proposed) ? r.not_proposed : [],
-      remaining: r?.remaining,
+      // A replay is the first sort, billed nothing: its count is from then, so none is said.
+      remaining: r?.wasReplay ? undefined : r?.remaining,
       paidBy: r?.paid_by,
       usage: r?.usage,
     };
@@ -49,8 +57,9 @@ export async function sortNotes(worldId: string, notes: SortNote[], slice: Slice
     if (e instanceof OwNetworkError) throw new SortRefused('No connection. Your notes wait here; sort them when you have signal.');
     if (!(e instanceof OwApiError)) throw new SortRefused('Nothing came back. Try again.');
     if (e.isOwnKeyRefused) throw new SortRefused(OWN_KEY_REFUSED, undefined, true);
-    if (e.isQuotaExceeded) throw new SortRefused("Today's AI answers are used up. Your notes wait here until tomorrow.");
-    if (e.isAskUnavailable) throw new SortRefused('Sorting is paused for now. Your notes wait here.');
+    if (e.isQuotaExceeded || e.isUseCeiling) throw new SortRefused("Today's AI answers are used up. Your notes wait here until tomorrow.");
+    if (e.isAskUnavailable || (e.status === 404 && e.param === 'use')) throw new SortRefused('Sorting is paused for now. Your notes wait here.');
+    if (e.isIdempotencyInFlight || e.isUseInFlight) throw new SortRefused('That sort is still on its way. Try again in a moment.');
     if (e.isAskFailed) throw new SortRefused('Nothing came back. Try again; nothing was counted.', 502);
     if (e.status === 404 || e.status === 403) throw new SortRefused('Your account is not in this world any more.');
     if (e.status === 401) throw new SortRefused('Sign in again to sort.');

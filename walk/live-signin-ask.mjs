@@ -1,6 +1,6 @@
 // Live receipts for Ask in a sentence and the password sign-in: on the live lantern.onlyworlds.com,
 // a crew account signs in with email and password (keel's app login), opens a scratch world
-// of its own, and asks it one question through keel's /account/ask. The scratch world and
+// of its own, and asks it one question through keel's /account/ai/ask. The scratch world and
 // its two elements are made over the API first. Every token and world key made here is recorded by the
 // id keel answered its mint with, in walk/shots/live-signin-ask/minted.json (ids only, never a secret),
 // and the cleanup step (`--cleanup`) revokes those ids alone and reads each back; it never picks a row
@@ -95,7 +95,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 const asked = [];
 page.on('response', async (r) => {
-  if (r.url().endsWith('/account/ask')) asked.push(r.status());
+  if (r.url().endsWith('/account/ai/ask')) asked.push(r.status());
   if (r.request().method() !== 'POST' || r.status() !== 201) return;
   const key = r.url().match(/\/account\/worlds\/([^/]+)\/keys\/?$/);
   if (!key && !r.url().startsWith(`${API}/account/tokens`)) return;
@@ -130,7 +130,7 @@ await page.waitForSelector('[data-answer]', { timeout: 30000 });
 const answer = await page.locator('[data-answer]').first();
 console.log('answer kind:', await answer.getAttribute('data-answer'));
 console.log('answer:', await answer.textContent());
-console.log('/account/ask statuses:', asked.join(', ') || 'none');
+console.log('/account/ai/ask statuses:', asked.join(', ') || 'none');
 await shot('ask');
 console.log('page errors:', errors.length ? errors.join(' | ') : 'none');
 console.log('at', new Date().toISOString());

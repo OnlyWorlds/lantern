@@ -111,7 +111,7 @@ async function walk(engine, deviceName, tag) {
     tag === 'webkit'
       ? json(502, { error: { code: 'ask_failed', message: 'The notes could not be sorted; try again in a moment.', type: 'api_error' } })
       : json(422, { error: { code: 'validation_error', message: 'notes.0.image_url: not under this world', type: 'invalid_request_error' } });
-  await page.route('**/api/v2/account/sort', (r) => {
+  await page.route('**/api/v2/account/ai/sort', (r) => {
     const body = JSON.parse(r.request().postData());
     sent.push(body);
     if (refusePictureOnce && body.notes.some((n) => typeof n !== 'string')) {

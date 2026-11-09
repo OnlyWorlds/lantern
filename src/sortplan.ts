@@ -1,7 +1,7 @@
 // The morning after, the pure part: the world's slice a sort sends with its notes, and the rows a
 // person ticked turned into writes. The rows' shape is Simmer's contract (2026-10-12); the
 // route is Skeld's (2026-10-12,
-// POST /account/sort). Nothing here writes: the screen hands the plan to the outbox.
+// POST /account/ai/sort). Nothing here writes: the screen hands the plan to the outbox.
 import { isKnownOf, lookupWorld, type OwElement, type OwWorldIndex } from '@onlyworlds/sdk';
 import { BASE_FIELDS, fieldInfo, isType } from './schema';
 import { handsOnAsProposed } from './review';

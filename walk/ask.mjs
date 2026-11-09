@@ -32,7 +32,7 @@ async function walk(engine, deviceName, tag) {
   const shot = (name) => page.screenshot({ path: `${OUT}/ask-${tag}-${String(++n).padStart(2, '0')}-${name}.png` });
   let answer = json(200, { answer: 'Admiral Fluffington commands the Puddle Navy from the USS Fuzzball.', model: 'claude-haiku-5-5', stop_reason: 'end_turn', usage: { input_tokens: 812, output_tokens: 19 }, remaining: 49 });
   const asked = [];
-  await page.route('**/api/v2/account/ask', (r) => {
+  await page.route('**/api/v2/account/ai/ask', (r) => {
     asked.push(JSON.parse(r.request().postData()));
     return r.fulfill(answer);
   });
@@ -101,8 +101,8 @@ async function walk(engine, deviceName, tag) {
   // 4b. A redraw while it is asking picks up the same box: no second tap, no second spend (the third gate)
   let release;
   const held = new Promise((r) => (release = r));
-  await page.unroute('**/api/v2/account/ask');
-  await page.route('**/api/v2/account/ask', async (r) => {
+  await page.unroute('**/api/v2/account/ai/ask');
+  await page.route('**/api/v2/account/ai/ask', async (r) => {
     asked.push(JSON.parse(r.request().postData()));
     await held;
     return r.fulfill(json(200, { answer: 'The USS Fuzzball floats in the Eternal Drip.', remaining: 48 }));
@@ -118,8 +118,8 @@ async function walk(engine, deviceName, tag) {
   release();
   await page.waitForSelector('[data-answer="sentence"]');
   check(tag, asked.length === before + 1 && /Eternal Drip/.test(await page.locator('[data-answer="sentence"]').innerText()), `one question sent (${asked.length - before}), and its answer is the one on screen`);
-  await page.unroute('**/api/v2/account/ask');
-  await page.route('**/api/v2/account/ask', (r) => {
+  await page.unroute('**/api/v2/account/ai/ask');
+  await page.route('**/api/v2/account/ai/ask', (r) => {
     asked.push(JSON.parse(r.request().postData()));
     return r.fulfill(answer);
   });
@@ -165,6 +165,42 @@ async function walk(engine, deviceName, tag) {
   check(tag, /refused by its provider\. Nothing was counted\./.test(await refused.innerText()) && href === 'https://www.onlyworlds.com/account/settings#own-ai-key', `the refusal: its sentence and the key's page (${href})`);
   check(tag, asked.length === sentBefore + 1, `the refused key asked once, never again (${asked.length - sentBefore})`);
   check(tag, !(await page.locator('[data-sentence] button').first().isEnabled().catch(() => false)), 'no button to send it again');
+
+  // 7. A lost answer, asked again (keel's AI door, accounts/ai_api.py: a 200 kept 24 h under its
+  // Idempotency-Key, replayed with `Idempotent-Replay: true` and billed nothing; any failure releases the key).
+  const keys = [];
+  let lose = true;
+  let next = json(200, { answer: 'The Puddle Navy sails the Eternal Drip.', remaining: 30, paid_by: 'rating' });
+  await page.unroute('**/api/v2/account/ai/ask');
+  await page.route('**/api/v2/account/ai/ask', (r) => {
+    asked.push(JSON.parse(r.request().postData()));
+    keys.push(r.request().headers()['idempotency-key']);
+    if (lose) {
+      lose = false;
+      return r.abort('internetdisconnected');
+    }
+    return r.fulfill(next);
+  });
+  await askAnew('Where does the Puddle Navy sail?');
+  await btn.tap();
+  await page.waitForFunction(() => /No connection/.test(document.querySelector('[data-sentence]')?.textContent ?? ''), null, { timeout: 10000 });
+  next = { ...json(200, { answer: 'The Puddle Navy sails the Eternal Drip.', remaining: 30, paid_by: 'rating' }), headers: { 'Idempotent-Replay': 'true', 'Access-Control-Expose-Headers': 'Idempotent-Replay' } };
+  await btn.tap();
+  await page.waitForSelector('[data-answer="sentence"]', { timeout: 10000 });
+  check(tag, /^lantern-ask-[0-9a-f-]{36}$/.test(keys[0] ?? ''), `the question carries a key (${keys[0]})`);
+  check(tag, keys.length === 2 && keys[1] === keys[0], 'asked again after a lost answer: the same key, so keel answers the first answer and bills nothing');
+  check(tag, /Eternal Drip/.test(await page.locator('[data-answer="sentence"]').innerText()) && !/left today/.test(await page.locator('[data-sentence]').innerText()), 'the replayed answer shows, with no count from before');
+  next = json(200, { answer: 'Admiral Fluffington is the Puddle Navy’s admiral.', remaining: 29, paid_by: 'rating' });
+  await askAnew('Who leads the Puddle Navy?');
+  await btn.tap();
+  await page.waitForSelector('[data-answer="sentence"]', { timeout: 10000 });
+  check(tag, keys.length === 3 && /^lantern-ask-[0-9a-f-]{36}$/.test(keys[2]) && keys[2] !== keys[0], 'a new question: a new key');
+  check(tag, /29 left today/.test(await page.locator('[data-sentence]').innerText()), 'a fresh answer says its count');
+  next = json(409, { error: { type: 'invalid_request_error', code: 'idempotency_in_flight', message: 'in flight' } });
+  await askAnew('What does the Puddle Navy guard?');
+  await btn.tap();
+  await page.waitForFunction(() => /still on its way/.test(document.querySelector('[data-sentence]')?.textContent ?? ''), null, { timeout: 10000 });
+  check(tag, true, 'an answer still running: its own sentence');
 
   check(tag, errors.length === 0, `no errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
   await browser.close();

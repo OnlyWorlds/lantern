@@ -81,3 +81,72 @@ describe("keel's answers", () => {
     expect(sent).toBeNull();
   });
 });
+
+// keel's AI door (accounts/ai_api.py): a 200 is kept 24 h under its Idempotency-Key and replayed with
+// `Idempotent-Replay: true`, billed nothing; any failure releases the key.
+describe('the AI door and its key', () => {
+  let calls: { url: string; key: string | null }[];
+  let replies: (() => Response | Promise<Response>)[];
+  const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
+  beforeEach(async () => {
+    calls = [];
+    await db.kvSet('accountToken', 'ow_a_test');
+    globalThis.fetch = (async (u: RequestInfo | URL, init: RequestInit = {}) => {
+      calls.push({ url: String(u), key: new Headers(init.headers).get('Idempotency-Key') });
+      return replies.shift()!();
+    }) as typeof fetch;
+  });
+  const lost = () => Promise.reject(new TypeError('Failed to fetch'));
+
+  it('Ask goes through the ask use; a lost answer asked again keeps its key, and the replay says no count', async () => {
+    replies = [lost, () => json(200, { answer: 'Mira Thel holds Balkonon.', remaining: 40 }, { 'Idempotent-Replay': 'true' })];
+    await expect(askInASentence('w-key', 'Who holds Balkonon?', ['Mira Thel (character)'])).rejects.toThrow(/No connection/);
+    const a = await askInASentence('w-key', 'Who holds Balkonon?', ['Mira Thel (character)']);
+    expect(calls.map((c) => new URL(c.url).pathname)).toEqual(['/api/v2/account/ai/ask', '/api/v2/account/ai/ask']);
+    expect(calls[0].key).toMatch(/^lantern-ask-[0-9a-f-]{36}$/);
+    expect(calls[1].key).toBe(calls[0].key);
+    expect(a.answer).toBe('Mira Thel holds Balkonon.');
+    expect(a.remaining).toBeUndefined();
+  });
+
+  it('once an answer lands its key is spent: the same call again is a new call', async () => {
+    replies = [() => json(200, { answer: 'One.', remaining: 9 }), () => json(200, { answer: 'Two.', remaining: 8 })];
+    expect((await askInASentence('w-spent', 'q', ['x'])).remaining).toBe(9);
+    expect((await askInASentence('w-spent', 'q', ['x'])).remaining).toBe(8);
+    expect(calls[1].key).not.toBe(calls[0].key);
+  });
+
+  it('another question is another key', async () => {
+    replies = [lost, () => json(200, { answer: 'x', remaining: 3 })];
+    await expect(askInASentence('w-two', 'first', ['x'])).rejects.toThrow(/No connection/);
+    await askInASentence('w-two', 'second', ['x']);
+    expect(calls[1].key).not.toBe(calls[0].key);
+  });
+
+  it('an answer still running and a use with no calls left are each said', async () => {
+    replies = [
+      () => json(409, { error: { code: 'idempotency_in_flight', message: 'in flight' } }),
+      () => json(429, { error: { code: 'use_in_flight', message: 'busy', param: 'use' } }),
+      () => json(429, { error: { code: 'use_ceiling', message: 'done for today', param: 'use' } }),
+      () => json(404, { error: { code: 'not_found', message: 'no such use', param: 'use' } }),
+    ];
+    await expect(askInASentence('w-say', 'a', ['x'])).rejects.toThrow(/still on its way/);
+    await expect(askInASentence('w-say', 'b', ['x'])).rejects.toThrow(/still on its way/);
+    await expect(askInASentence('w-say', 'c', ['x'])).rejects.toThrow(/used up/);
+    await expect(askInASentence('w-say', 'd', ['x'])).rejects.toThrow(/paused/);
+  });
+
+  it('Sort goes through the sort use under the same rule', async () => {
+    replies = [lost, () => json(200, { rows: [], not_proposed: [], remaining: 5 }, { 'Idempotent-Replay': 'true' }), () => json(200, { rows: [], not_proposed: [], remaining: 4 })];
+    await expect(sortNotes('w-sort', ['a note'], [])).rejects.toThrow(/No connection/);
+    const replayed = await sortNotes('w-sort', ['a note'], []);
+    const fresh = await sortNotes('w-sort', ['a note'], []);
+    expect(new URL(calls[0].url).pathname).toBe('/api/v2/account/ai/sort');
+    expect(calls[0].key).toMatch(/^lantern-sort-[0-9a-f-]{36}$/);
+    expect(calls[1].key).toBe(calls[0].key);
+    expect(replayed.remaining).toBeUndefined();
+    expect(calls[2].key).not.toBe(calls[0].key);
+    expect(fresh.remaining).toBe(4);
+  });
+});
