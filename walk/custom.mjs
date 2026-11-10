@@ -180,12 +180,12 @@ async function walk(engine, tag) {
   await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
   const spine = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
   check(tag, /spine/.test(spine) && (await page.locator('.frow[data-field=x_spine_status]').count()) === 0, `a spine key's name is refused (${JSON.stringify(spine)})`);
-  // A lens's recipe (dist.74) and the charter profile's mark (dist.83).
-  for (const [name, key] of [['Lens', 'x_lens'], ['Charter of', 'x_charter_of']]) {
+  // A lens's recipe (dist.74), the charter profile's mark (dist.83) and a report's answers (dist.112).
+  for (const [name, key] of [['Lens', 'x_lens'], ['Charter of', 'x_charter_of'], ['Report answers', 'x_report_answers']]) {
     await page.locator('.sheet input[aria-label="Field name"]').fill(name);
     await page.locator('.sheet').getByRole('button', { name: 'Add' }).tap();
     const said = await page.locator('.sheet .error').innerText({ timeout: 3000 }).catch(() => '(no refusal: the field was added)');
-    check(tag, /lens or a charter/.test(said) && (await page.locator(`.frow[data-field=${key}]`).count()) === 0, `${key}'s name is refused (${JSON.stringify(said)})`);
+    check(tag, /a lens, a charter's mark or a report's answers/.test(said) && (await page.locator(`.frow[data-field=${key}]`).count()) === 0, `${key}'s name is refused (${JSON.stringify(said)})`);
   }
   // keel's trimmed mark is OnlyWorlds' word, never a field to add.
   await page.locator('.sheet input[aria-label="Field name"]').fill('Served trimmed');
