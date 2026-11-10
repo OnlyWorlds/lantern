@@ -116,5 +116,9 @@ describe('custom fields', () => {
     expect(customFieldProblem({ id: '1', type: 'law' }, customFieldKey('Charter of'))).toMatch(/charter/i);
     expect(isProfileField('x_charter_of')).toBe(true);
     expect(isProfileField('x_charters')).toBe(false);
+    // And a report's answers (dist.112's report profile).
+    expect(customFieldProblem({ id: '1', type: 'narrative' }, customFieldKey('Report answers'))).toMatch(/report/i);
+    expect(isProfileField('x_report_answers')).toBe(true);
+    expect(isProfileField('x_reports')).toBe(false);
   });
 });
