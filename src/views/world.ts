@@ -65,8 +65,8 @@ function roomChoice(s: WorldSession, redraw: () => void): HTMLElement | '' {
       'span',
       null,
       shown
-        ? 'Its messages, votes and work items are in the lists and search. Tap to keep them out.'
-        : 'Its messages, votes and work items stay out of the lists and search. Tap to show them.',
+        ? 'Its messages, votes, work items and reports are in the lists and search. Tap to keep them out.'
+        : 'Its messages, votes, work items and reports stay out of the lists and search. Tap to show them.',
     ),
   );
   b.addEventListener('click', () => {

@@ -43,6 +43,9 @@ const zip = Buffer.from(
       // A take on the work item (the ninth pair, dist.66, SDK 4.75.0), and a Relation called Take that no parlor made.
       file('relation', { id: id(10), name: "Taken: Fix Ada's age", supertype: 'Take', x_room_of: wid, x_room_item: id(6) }),
       file('relation', { id: id(11), name: 'The harbour take', supertype: 'Take', description: "The ferry's share of the catch." }),
+      // A report the room left (serial 112's tenth pair) and a lore Narrative that happens to be called a Report.
+      file('narrative', { id: id(12), name: 'Sitting one, reported', supertype: 'Report', subtype: 'completed', x_room_of: wid }),
+      file('narrative', { id: id(13), name: 'The harbourmaster report', supertype: 'Report', description: 'Filed in 1841.' }),
     ],
     'room-walk',
   ),
@@ -85,13 +88,15 @@ async function walk(engine, tag) {
 
   // Hidden, as it opens.
   let t = await tiles();
-  check(tag, t.Characters === '2' && t.Narratives === '2' && t.Laws === '1' && t.Relations === '1' && !t.Events, `the tiles read the lore, the harbour take with it: ${JSON.stringify(t)}`);
-  check(tag, (await card.count()) === 1 && (await card.innerText()).includes("The parlor's room · 5"), `the home says the room holds 5, the take with it (${(await card.count()) ? await card.innerText() : 'no card'})`);
+  check(tag, t.Characters === '2' && t.Narratives === '3' && t.Laws === '1' && t.Relations === '1' && !t.Events, `the tiles read the lore, the harbour take and the lore report with it: ${JSON.stringify(t)}`);
+  check(tag, (await card.count()) === 1 && (await card.innerText()).includes("The parlor's room · 6"), `the home says the room holds 6, the report with it (${(await card.count()) ? await card.innerText() : 'no card'})`);
   check(tag, (await beforeNow.count()) === 0, 'Before now is not offered for the sitting alone');
   let hits = await search('rename');
   check(tag, hits.length === 0, `search leaves the message out (${JSON.stringify(hits)})`);
   hits = await search('letter');
   check(tag, hits.some((x) => x.includes('A letter from Bo')), `a lore letter (a Message with no mark) is found (${JSON.stringify(hits)})`);
+  hits = await search('report');
+  check(tag, hits.some((x) => x.includes('harbourmaster report')) && !hits.some((x) => x.includes('reported')), `search finds the lore report, not the room's (${JSON.stringify(hits)})`);
   hits = await search('Ada');
   check(tag, hits.some((x) => x.includes('Ada')) && !hits.some((x) => x.includes('age')), `search for Ada finds her, not the work item (${JSON.stringify(hits)})`);
   check(tag, !(await adaPage()).includes("Fix Ada's age"), "Ada's page does not list the work item about her");
@@ -101,7 +106,7 @@ async function walk(engine, tag) {
   await card.tap();
   await page.waitForTimeout(400);
   t = await tiles();
-  check(tag, t.Narratives === '3' && t.Relations === '4' && t.Events === '1', `shown, the tiles count the room: ${JSON.stringify(t)}`);
+  check(tag, t.Narratives === '5' && t.Relations === '4' && t.Events === '1', `shown, the tiles count the room: ${JSON.stringify(t)}`);
   check(tag, (await card.getAttribute('aria-pressed')) === 'true' && (await card.innerText()).includes('Tap to keep them out'), 'the card says the room is shown');
   check(tag, (await beforeNow.count()) === 1, 'Before now is offered for the sitting');
   hits = await search('rename');
@@ -116,7 +121,7 @@ async function walk(engine, tag) {
   await card.tap();
   await page.waitForTimeout(400);
   t = await tiles();
-  check(tag, t.Relations === '1' && t.Narratives === '2', `a second tap hides it again: ${JSON.stringify(t)}`);
+  check(tag, t.Relations === '1' && t.Narratives === '3', `a second tap hides it again: ${JSON.stringify(t)}`);
 
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ')})`);
   await browser.close();
