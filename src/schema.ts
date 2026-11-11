@@ -8,8 +8,10 @@ import {
   elementColor,
   fieldLabel as houseFieldLabel,
   getElementLabel,
+  isMessage,
   type ElementType,
   type FieldInfo,
+  type OwElement,
   typeWord,
 } from '@onlyworlds/sdk';
 import { plural } from './dom';
@@ -73,6 +75,17 @@ export function typeFields(type: string): FieldRow[] {
     if (!seen.has(f)) rows.push({ field: f, info, section: 'Other' });
   }
   return rows;
+}
+
+/**
+ * A message's words are its story (the message profile; the views file's message row leads with
+ * `story`): on a message the story row leads, right after the description, and every other row
+ * keeps the schema's order. Anything else is all rest, unchanged.
+ */
+export function leadAndRest(el: OwElement): { lead: FieldRow[]; rest: FieldRow[] } {
+  const rows = typeFields(el.type);
+  if (!isMessage(el)) return { lead: [], rest: rows };
+  return { lead: rows.filter((r) => r.field === 'story'), rest: rows.filter((r) => r.field !== 'story') };
 }
 
 // A world's own words for the types (the names profile, schema-dist dist.48 `profiles/names.md`):

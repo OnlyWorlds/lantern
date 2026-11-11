@@ -17,7 +17,7 @@ import {
   isProfileField,
   typeColor,
   typeCount,
-  typeFields,
+  leadAndRest,
   typeLabel,
   typeName,
   typePlural,
@@ -868,18 +868,22 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
     const shown = fieldsShown();
     const rows: HTMLElement[] = [];
     const empty: string[] = [];
-    // The head already says the kind; the rows are only there to tap and change it.
-    for (const f of editable ? ['supertype', 'subtype'] : []) {
-      const v = el[f];
-      if (isEmptyValue(v)) empty.push(f);
-      else rows.push(tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f), wait(f)), h('span', { class: 'v' }, String(v)))));
-    }
-    for (const { field, info } of typeFields(el.type)) {
+    // A message's story leads, right after the description (leadAndRest); then the kind, then the rest.
+    const { lead, rest } = leadAndRest(el);
+    const kindRows = () => {
+      // The head already says the kind; the rows are only there to tap and change it.
+      for (const f of editable ? ['supertype', 'subtype'] : []) {
+        const v = el[f];
+        if (isEmptyValue(v)) empty.push(f);
+        else rows.push(tapRow(f, h('div', { class: 'frow', 'data-field': f }, h('span', { class: 'k' }, fieldLabel(f), wait(f)), h('span', { class: 'v' }, String(v)))));
+      }
+    };
+    const fieldRow = ({ field, info }: (typeof rest)[number]) => {
       const v = el[field];
       if (isEmptyValue(v)) {
         // A stub's unset field is unknown, not empty: never offered behind the toggle.
         if (!stub) empty.push(field);
-        continue;
+        return;
       }
       // A single link takes the multi link's layout: label, its marks and the pencil on one line, the chip under it (Titus's walk, 2026-10-12).
       const isBlock = info.type === 'multi_link' || info.type === 'single_link' || (info.type === 'text' && String(v).length > 28);
@@ -895,7 +899,10 @@ export function elementView(s: WorldSession, id: string, fill = false): View {
           ),
         ),
       );
-    }
+    };
+    lead.forEach(fieldRow);
+    kindRows();
+    rest.forEach(fieldRow);
     // The world maker's own fields (Atlas's custom fields, x_mood), after the schema's, under their own label.
     // A list or a group of values reads here and is changed in Atlas; an empty one waits with the empty rows.
     const customRows: HTMLElement[] = [];
