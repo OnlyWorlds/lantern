@@ -45,6 +45,21 @@ export function slugify(name: string): string {
   return s.length <= 40 ? s : s.slice(0, 40).replace(/-+$/g, '');
 }
 
+/**
+ * Two ids in code point order (serial 123 point 4): which of two same-named elements keeps the short file
+ * name. Never `localeCompare`, which folds case, so an upper-case id took the other one's name.
+ */
+function byCodePoint(a: string, b: string): number {
+  if (a === b) return 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n;) {
+    const x = a.codePointAt(i)!, y = b.codePointAt(i)!;
+    if (x !== y) return x < y ? -1 : 1;
+    i += x > 0xffff ? 2 : 1;
+  }
+  return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
+}
+
 function fileName(id: string, name: string | undefined, used: Set<string>): string {
   const slug = slugify(name ?? '');
   if (!slug) return `${id}.json`;
@@ -129,7 +144,7 @@ export function toWorldFile(
   if (rec.producer) world.producer = rec.producer;
   const files: OwWorldFileEntry[] = [{ path: 'world.json', data: enc.encode(JSON.stringify(world, null, 2) + '\n') }];
   const used = new Map<string, Set<string>>();
-  for (const el of [...elements].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const el of [...elements].sort((a, b) => byCodePoint(a.id, b.id))) {
     const { type, ...body } = el;
     const dir = used.get(type) ?? new Set<string>();
     used.set(type, dir);

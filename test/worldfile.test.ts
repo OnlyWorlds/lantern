@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { readWorldFile, writeWorldFile } from '@onlyworlds/sdk';
+import { readWorldFile, writeWorldFile, type OwElement } from '@onlyworlds/sdk';
 import { lanternProducer, openWorldFile, slugify, toWorldFile, worldCopy } from '../src/worldfile';
 import * as db from '../src/db';
 
@@ -245,5 +245,19 @@ describe('world files', () => {
     ]);
     const paths = readWorldFile(bytes).files.map((f) => f.path).sort();
     expect(paths).toEqual(['elements/location/port--00000003.json', 'spatial/map/sea--00000001.json', 'spatial/pin/port--00000002.json', 'world.json']);
+  });
+});
+
+describe('two same-named elements in a world file (serial 123 point 4)', () => {
+  it('the id first by code point keeps the short name: an upper-case id before a lower-case one', () => {
+    const rec = { id: 'w0000000-0000-4000-8000-0000000000c1', name: 'Ties', kind: 'local', addedAt: '' } as db.WorldRecord;
+    const els = [
+      { id: 'a0000000-0000-4000-8000-00000000abcd', type: 'character', name: 'Ada' },
+      { id: 'B0000000-0000-4000-8000-00000000abcd', type: 'character', name: 'Ada' },
+    ] as OwElement[];
+    for (const order of [els, [...els].reverse()]) {
+      const short = readWorldFile(toWorldFile(rec, order).bytes).files.find((f) => f.path.endsWith('ada--0000abcd.json'))!;
+      expect(JSON.parse(new TextDecoder().decode(short.data)).id).toBe('B0000000-0000-4000-8000-00000000abcd');
+    }
   });
 });
