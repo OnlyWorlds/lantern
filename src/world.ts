@@ -51,7 +51,8 @@ export function setBuildBehind(v: boolean): void {
 function sameValue(a: unknown, b: unknown): boolean {
   const norm = (v: unknown) => {
     if (isEmptyValue(v)) return null;
-    if (Array.isArray(v)) return [...v].map(String).sort();
+    // A multi-link is a set: order and a repeat say nothing (OnlyWorlds keeps each element of a multi-link once).
+    if (Array.isArray(v)) return [...new Set(v.map(String))].sort();
     return v;
   };
   return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
