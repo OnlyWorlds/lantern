@@ -106,10 +106,10 @@ describe('zones', () => {
     const m = (id: string, order: number | null, x: number, created: string) =>
       el({ id, type: 'marker', order: order as number, x, y: 0, created_at: created });
     const pts = zonePoints([
-      m('d', null, 40, '2026-01-02'),
-      m('b', 1, 20, '2026-01-01'),
-      m('c', null, 30, '2026-01-01'),
-      m('a', 0, 10, '2026-01-03'),
+      m('d', null, 40, '2026-01-02T09:00:00+00:00'),
+      m('b', 1, 20, '2026-01-01T09:00:00+00:00'),
+      m('c', null, 30, '2026-01-01T09:00:00+00:00'),
+      m('a', 0, 10, '2026-01-03T09:00:00+00:00'),
       el({ id: 'e', type: 'marker', order: 2, x: 99 }),
     ]);
     expect(pts.map(([x]) => x)).toEqual([10, 20, 30, 40]);

@@ -11,7 +11,7 @@
 // (`WorldSession.doors`), and the trail is the newest of the two records, whole: never a merge,
 // since keel moves `updated_at` without a door when it scrubs a link to a deleted element, and a
 // copy's last write read at that time would name a door keel never recorded (the S523 gate's M1).
-import { doorsOf, doorWhere, isKnownOf, type OwElement } from '@onlyworlds/sdk';
+import { compareInstants, doorsOf, doorWhere, instantOf, isKnownOf, type OwElement } from '@onlyworlds/sdk';
 import { ago } from './dom';
 
 export interface TrailStep {
@@ -31,8 +31,11 @@ export interface DoorRead {
 /** Is this read at least as new as the copy? (A copy with no time is older than any read.) */
 export function readCovers(read: DoorRead | null | undefined, copyUpdated: unknown): boolean {
   if (!read || !read.updated_at) return false;
-  const copy = typeof copyUpdated === 'string' ? Date.parse(copyUpdated) : NaN;
-  return !Number.isFinite(copy) || Date.parse(read.updated_at) >= copy;
+  // Read as instants (the message profile's reader): Date.parse drops microseconds and reads no offset as local.
+  const copy = instantOf(copyUpdated);
+  if (copy === null) return true;
+  const at = instantOf(read.updated_at);
+  return at !== null && compareInstants(at, copy) >= 0;
 }
 
 /** The element's trail, newest first, one step per phrase; empty when OnlyWorlds has said nothing of it, or on a stub. */

@@ -3,6 +3,7 @@
 // what is ticked goes to the outbox like any edit, and the sorted notes are filed as Sorted (kept:
 // every row points at its note).
 import type { OwElement } from '@onlyworlds/sdk';
+import { newestFirst } from '../when';
 import { h, plural } from '../dom';
 import { icon } from '../icons';
 import { accountToken, cachedAccountWorlds } from '../account';
@@ -81,11 +82,10 @@ function writeKept(worldId: string, k: Kept | null): boolean {
 }
 
 function unsortedNotes(s: WorldSession): OwElement[] {
-  const stamp = (e: OwElement) => String(e.created_at ?? e.updated_at ?? '');
   return s
     .elements()
     .filter((e) => e.type === 'narrative' && e.supertype === 'Unsorted')
-    .sort((a, b) => stamp(b).localeCompare(stamp(a)));
+    .sort((a, b) => newestFirst(a.created_at ?? a.updated_at, b.created_at ?? b.updated_at));
 }
 
 function snippet(t: string, n = 90): string {

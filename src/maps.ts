@@ -3,6 +3,7 @@
 // phone (2026-10-12); coordinates are the schema's: x and y
 // from the map's bottom left, which is Leaflet CRS.Simple's lng and lat with no conversion.
 import type { OwElement } from '@onlyworlds/sdk';
+import { earlierFirst } from './when';
 
 /** A map is shown only with a picture online: pins on a blank canvas are not a map. */
 /** Types that live on a map's picture: Lantern reads maps and never draws one, so it makes none of these. */
@@ -80,7 +81,7 @@ export function zonePoints(markers: OwElement[]): [number, number][] {
     .sort((a, b) => {
       const oa = ord(a);
       const ob = ord(b);
-      if (oa === null || ob === null) return oa === ob ? String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')) : oa === null ? 1 : -1;
+      if (oa === null || ob === null) return oa === ob ? earlierFirst(a.created_at, b.created_at) : oa === null ? 1 : -1;
       return oa - ob;
     })
     .map((m) => [m.x as number, m.y as number]);

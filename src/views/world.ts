@@ -1,5 +1,6 @@
 // Inside a world: its home (find, the types), a type's list, an element's page.
 import { OwApiError, OwV2Client, type OwElement, type OwFileRow } from '@onlyworlds/sdk';
+import { newestFirst } from '../when';
 import { fileLine } from '../files';
 import { h, plural } from '../dom';
 import { icon, typeIcon } from '../icons';
@@ -1039,8 +1040,7 @@ function playerHome(s: WorldSession): (Node | string)[] {
   // Pins and markers are map furniture, mostly unnamed: not what a player reads.
   // The lore (src/room.ts): a parlor's room stays out of a player's list as out of the builder's.
   const els = s.lore().filter((e) => e.type !== 'pin' && e.type !== 'marker');
-  const stamp = (e: { updated_at?: string; created_at?: string }) => e.updated_at ?? e.created_at ?? '';
-  const newest = [...els].sort((a, b) => stamp(b).localeCompare(stamp(a))).slice(0, 3);
+  const newest = [...els].sort((a, b) => newestFirst(a.updated_at ?? a.created_at, b.updated_at ?? b.created_at)).slice(0, 3);
   const all = [...els].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
   // Named by name, never a pronoun: the player chose who their Character is.
   const me = s.rec.characterId ? s.get(s.rec.characterId) : undefined;
