@@ -11,7 +11,8 @@ Object.assign(globalThis, {
   },
 });
 
-const { isRoomElement, roomShown, setRoomShown, ROOM_SUPERTYPES } = await import('../src/room');
+const { isRoomElement, roomShown, setRoomShown } = await import('../src/room');
+const { ROOM_PAIRS } = await import('@onlyworlds/sdk');
 
 const MARK = '0199c3a1-7b2e-7c3d-8e4f-5a6b7c8d9e0f';
 const el = (type: string, supertype?: unknown, mark: unknown = MARK): OwElement =>
@@ -19,7 +20,7 @@ const el = (type: string, supertype?: unknown, mark: unknown = MARK): OwElement 
 
 describe('the room', () => {
   it("is the sheet's type and supertype pairs, in any case, trimmed", () => {
-    for (const [type, word] of ROOM_SUPERTYPES) expect(isRoomElement(el(type, word))).toBe(true);
+    for (const p of ROOM_PAIRS) expect(isRoomElement(el(p.type, p.supertype.toLowerCase()))).toBe(true);
     expect(isRoomElement(el('narrative', 'Message'))).toBe(true);
     expect(isRoomElement(el('relation', ' Work item '))).toBe(true);
     expect(isRoomElement(el('event', 'SITTING'))).toBe(true);
@@ -57,14 +58,14 @@ describe('the room', () => {
   });
 });
 
-// schema-dist's room profile (v0.34.0-dist.112, profiles/room.fixture.json, copied whole): the
+// schema-dist's room profile (v0.34.1-dist.131, profiles/room.fixture.json, copied whole, 48 cases): the
 // conformance cases every reader of the room answers, until the SDK's export replaces this copy.
 import fixture from './fixtures/room.fixture.json';
 
-describe("the room profile's cases (dist.112)", () => {
+describe("the room profile's cases (dist.131)", () => {
   it('holds the profile pairs, no more, no less', () => {
-    const want = fixture.pairs.map((p) => `${p.type}/${p.supertype.toLowerCase()}`).sort();
-    expect(ROOM_SUPERTYPES.map(([t, w]) => `${t}/${w}`).sort()).toEqual(want);
+    const want = fixture.pairs.map((p) => `${p.type}/${p.supertype}`).sort();
+    expect(ROOM_PAIRS.map((p) => `${p.type}/${p.supertype}`).sort()).toEqual(want);
   });
   for (const c of fixture.cases) {
     it(`${c.name}: ${c.in_room ? 'in the room' : 'lore'}`, () => {

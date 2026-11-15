@@ -10,13 +10,11 @@
 // supertype Message is lore (a novel's letters, the Manifest's Wire) and stays in view. A pair, never a
 // supertype alone: a Location called Board is a place. The charter (a Law, supertype Charter) is never the
 // room's: marked, it is a reading aid with its own switch (src/aids.ts); unmarked, it is lore. Type and supertype match in any case, trimmed. Per phone and per world, like Tonight; it never travels and never changes the world.
-import { ROOM_PAIRS, isRoomElement as sdkIsRoomElement, type OwElement } from '@onlyworlds/sdk';
+import { isRoomElement as sdkIsRoomElement, type OwElement } from '@onlyworlds/sdk';
 
-/** The room profile's pairs as the SDK carries them (4.55.0, generated from the profile), lower-cased. */
-export const ROOM_SUPERTYPES: ReadonlyArray<readonly [string, string]> = ROOM_PAIRS.map((p) => [p.type, p.supertype.toLowerCase()] as const);
-
-/** The SDK's rule (4.100.0, serial 83): the pair, trimmed and case-folded, AND the mark by presence (not null, a string only when something is left after trimming, any other value present). A body whose type or supertype is not a string is lore. */
+/** The SDK's rule (4.100.0, serial 83): the pair, trimmed and case-folded, AND the mark by presence (not null, a string only when something is left after trimming, any other value present). A body whose type or supertype is not a string is lore, and so is a value that is no object (null, a list, a string: serial 131). */
 export function isRoomElement(el: OwElement): boolean {
+  if (el === null || typeof el !== 'object' || Array.isArray(el)) return false;
   const r = el as Record<string, unknown>;
   if (typeof r.type !== 'string' || typeof r.supertype !== 'string') return false;
   return sdkIsRoomElement({ type: r.type, supertype: r.supertype, x_room_of: r.x_room_of });
