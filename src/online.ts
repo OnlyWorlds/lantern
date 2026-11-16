@@ -18,6 +18,7 @@ import { isKnownOf } from './knownof';
 import { withHiddenForCreate } from './hidden';
 import { SERVED_TRIMMED } from './schema';
 import { mintOf } from './revoke';
+import { hostRefusalText, isHostRefusal } from './hostrefusal';
 
 export const BULK_MAX = 1000;
 /** keel's media tickets for one world in a day (KEEL_MEDIA_TICKETS_PER_DAY) and the size of one picture. */
@@ -412,6 +413,8 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
           throw new PinNeeded();
         }
         await settle(null);
+        // The web host refused the world's text before keel saw it: nothing was made, the sign-in is fine.
+        if (isHostRefusal(err)) throw new OnlineSaid(hostRefusalText(err, 'this world', 'Nothing was made; your phone copy is kept.'));
         if (err.status === 401) throw new OnlineSaid('That PIN does not match your account. Nothing was made.');
         if (err.code === 'handover_refused') throw new OnlineSaid(refusalLine(err, items));
         if (err.status === 413) throw new OnlineSaid('This world is more than OnlyWorlds takes in one go. Save a copy and open it in Atlas. Nothing was made.');
@@ -439,6 +442,9 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
     } catch (e) {
       if (e instanceof OwApiError && e.status === 401) {
         throw new OnlineSaid("The world is online, but OnlyWorlds no longer takes this phone's sign-in. Sign in again, then finish putting it online.");
+      }
+      if (isHostRefusal(e)) {
+        throw new OnlineSaid(`The world is online, but ${hostRefusalText(e, "this phone's ask for its key", 'Your phone copy is kept; try again.').replace(/^The web host/, 'the web host')}`);
       }
       throw new OnlineSaid(`The world is online, but this phone could not get its key (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);
     }
@@ -519,6 +525,10 @@ async function sendSettings(client: OwV2Client, rec: db.WorldRecord): Promise<vo
 
 /** A PIN refusal keeps its kind, so the sheet says the PIN; any other refusal is said in its own words. */
 function settingsRefused(e: unknown): Error {
+  if (isHostRefusal(e)) {
+    // Its description is the only text it sends; the phone cannot change it (notSendable's note).
+    return new OnlineSaid(`The world is online, but ${hostRefusalText(e, "its settings (its description)", 'Your phone copy is kept.', true).replace(/^The web host/, 'the web host')}`);
+  }
   return e instanceof OwApiError && e.status === 401
     ? e
     : new OnlineSaid(`The world is online, but OnlyWorlds would not take its settings (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);

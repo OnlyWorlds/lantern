@@ -74,6 +74,26 @@ describe("keel's answers", () => {
     expect((await sortNotes('w1', ['a note'], [])).paidBy).toBe('own_key');
   });
 
+  // The web host in front of keel: a 403 page of its own, before keel sees the text.
+  const hostPage = (title: string) => () => new Response(`<!DOCTYPE html><html><head><title>${title}</title></head><body>Sorry, you have been blocked</body></html>`, { status: 403, headers: { 'content-type': 'text/html' } });
+
+  it("Ask and the sort: the host's refusal is the host's, never the account; keel's own 403 still is", async () => {
+    reply = hostPage('Blocked');
+    const a = await askInASentence('w1', 'What does `python -m http.server` do?', ['x']).catch((x: unknown) => x);
+    expect(a).toBeInstanceOf(AskRefused);
+    expect((a as Error).message).toMatch(/^The web host in front of OnlyWorlds refused this question \(with the elements sent beside it\) before it reached OnlyWorlds\. A command written between code marks/);
+    expect((a as Error).message).toMatch(/Your question is kept; nothing was counted\.$/);
+    const s = await sortNotes('w1', [{ text: '`python -m`', image_url: 'https://media.onlyworlds.com/u/w1/a.webp' }], []).catch((x: unknown) => x);
+    expect(s).toBeInstanceOf(SortRefused);
+    expect((s as Error).message).toMatch(/^The web host in front of OnlyWorlds refused these notes \(with the elements sent beside them\) before they reached OnlyWorlds\. A command/);
+    expect((s as InstanceType<typeof SortRefused>).status).toBeUndefined();
+    reply = hostPage('Access denied');
+    expect(((await askInASentence('w1', 'q', ['x']).catch((x: unknown) => x)) as Error).message).toBe('The web host in front of OnlyWorlds refused this question (with the elements sent beside it) before it reached OnlyWorlds. Your question is kept; nothing was counted.');
+    reply = () => json(403, { error: { code: 'permission_denied', type: 'x' } });
+    await expect(askInASentence('w1', 'q', ['x'])).rejects.toThrow(/not in this world any more/);
+    await expect(sortNotes('w1', ['a note'], [])).rejects.toThrow(/not in this world any more/);
+  });
+
   it('no sign-in: nothing is sent', async () => {
     await db.kvSet('accountToken', undefined);
     reply = () => json(200, { answer: 'x' });

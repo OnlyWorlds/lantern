@@ -22,6 +22,7 @@ import { uuid7 } from './uuid7';
 import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
+import { hostRefusalText, isHostRefusal } from './hostrefusal';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
@@ -465,7 +466,8 @@ export class WorldSession {
     this.view = new Map(this.truth);
     const gone = new Set(this.deletedHere);
     for (const row of [...this.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
-      if (row.state === 'refused') continue;
+      // A row the web host refused stays on the screen: the person's own text, to change and send again.
+      if (row.state === 'refused' && !row.hostRefused) continue;
       if (row.op === 'delete') {
         gone.add(row.id);
         continue;
@@ -628,7 +630,8 @@ export class WorldSession {
   pending(id: string): Map<string, OutboxRow> {
     const m = new Map<string, OutboxRow>();
     for (const row of this.outbox) {
-      if (row.id !== id || row.state === 'refused') continue;
+      // A row the web host refused is on the screen, so its fields say "not sent" (and the page why).
+      if (row.id !== id || (row.state === 'refused' && !row.hostRefused)) continue;
       for (const f of Object.keys(row.values)) m.set(f, row);
       if (row.photo) m.set('image_url', row);
       if (row.op === 'create') m.set('*', row);
@@ -922,9 +925,13 @@ export class WorldSession {
   keyRefusal: KeyRefusal | null = null;
 
   private setError(e: unknown): void {
-    this.keyRefused = e instanceof OwApiError && (e.status === 401 || e.status === 403);
+    // The web host's refusal is not the key's: nothing stops asking for it.
+    this.keyRefused = e instanceof OwApiError && (e.status === 401 || e.status === 403) && !isHostRefusal(e);
     this.keyRefusal = this.keyRefused ? keyRefusalOf(e) : null;
-    if (e instanceof OwNetworkError || (e instanceof TypeError && /fetch|network/i.test(e.message))) {
+    if (isHostRefusal(e)) {
+      this.status = 'error';
+      this.statusText = hostRefusalText(e, 'a read of this world', 'What this phone has is shown.');
+    } else if (e instanceof OwNetworkError || (e instanceof TypeError && /fetch|network/i.test(e.message))) {
       this.status = 'offline';
       this.statusText = 'No connection: showing what this phone has';
     } else if (e instanceof OwApiError) {
@@ -962,16 +969,30 @@ export class WorldSession {
       this.emit();
       return;
     }
-    const open = this.outbox.find((r) => r.id === id && r.state === 'waiting');
+    // The element's row the web host refused, wherever it sits: this edit merges into it and sends it
+    // again, with any edits queued behind it folded in first (all in memory before any await, so an
+    // edit saved meanwhile meets one consistent outbox).
+    const hostRow = this.outbox.find((r) => r.id === id && r.state === 'refused' && r.hostRefused);
+    const taken = hostRow ? this.foldBehind(hostRow) : [];
+    // This edit's own picture is the newest: an older picture refused on its own goes with it, or its
+    // Try again would land it after this one.
+    if (hostRow && (photo || 'image_url' in values)) {
+      const pics = this.outbox.filter((r) => r.id === id && isLonePicture(r));
+      taken.push(...pics);
+      this.outbox = this.outbox.filter((r) => !pics.includes(r));
+    }
+    // Otherwise only the element's last row takes an edit, and only while it waits: an older row put
+    // back to waiting (a 412 retry) must never carry a newer value ahead of rows behind it.
+    const last = this.lastRowFor(id);
+    const open = hostRow ?? (last?.state === 'waiting' ? last : undefined);
     if (open) {
-      open.values = { ...open.values, ...values };
-      // The newest picture wins: a photo replaces a picture set or cleared before it, and the
-      // reverse (sent as image_url once the photo is uploaded, send()).
-      if (photo) {
-        open.photo = photo;
-        delete open.values.image_url;
-      } else if ('image_url' in values) delete open.photo;
-      await db.putOutboxRow(this.id, open);
+      if (hostRow) {
+        hostRow.state = 'waiting';
+        hostRow.error = undefined;
+        hostRow.hostRefused = undefined;
+      }
+      mergeInto(open, values, photo);
+      await db.putOutboxRowFolding(this.id, open, taken.map((r) => r.seq!));
     } else {
       const el = this.view.get(id);
       if (!el) throw new Error('That element is not on this phone.');
@@ -1080,7 +1101,9 @@ export class WorldSession {
     const settledFirst = !!create && create.tried === false && create.state === 'waiting';
     for (const r of rows) {
       if (r.state === 'sending') continue;
-      if (r === create && !settledFirst) continue; // a create that may have reached keel is sent, then deleted
+      // A create that may have reached keel is sent, then deleted. One the web host refused is let go and
+      // the delete sent: keel answers 404 if it never made it, and deletes it if an earlier send did.
+      if (r === create && !settledFirst && !r.hostRefused) continue;
       await db.settleOutboxRow(this.id, r.seq!, null);
       this.outbox = this.outbox.filter((x) => x !== r);
     }
@@ -1151,6 +1174,8 @@ export class WorldSession {
     const blocked = new Set<string>();
     for (const row of [...this.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
       if (buildBehind) break;
+      // Gone while an earlier send ran: settled, or folded into another row by an edit (never sent twice).
+      if (!this.outbox.includes(row)) continue;
       if (row.state !== 'waiting' || blocked.has(row.id)) {
         blocked.add(row.id);
         continue;
@@ -1203,20 +1228,26 @@ export class WorldSession {
           const why = e instanceof OwApiError ? PICTURE_REFUSED[e.code ?? ''] : undefined;
           if (!why) throw e;
           // The picture alone becomes the refused row (tried again on its own, its base taken then);
-          // the rest of this row (a caught note, an edit) still goes now.
-          const photoRow: OutboxRow = {
-            op: 'patch',
-            type: row.type,
-            id: row.id,
-            lateBase: true,
-            values: {},
-            photo: row.photo,
-            state: 'refused',
-            error: why,
-            createdAt: new Date().toISOString(),
-          };
-          photoRow.seq = await db.putOutboxRow(this.id, photoRow);
-          this.outbox.push(photoRow);
+          // the rest of this row (a caught note, an edit) still goes now. Unless it is moot (a newer
+          // picture, a clear or a delete waits behind it): split off, it would take a newer place than
+          // those and land last. Asked again after the write, with no await between the answer and
+          // the push, since an edit saved meanwhile can be the newer picture.
+          if (!this.pictureSuperseded(row)) {
+            const photoRow: OutboxRow = {
+              op: 'patch',
+              type: row.type,
+              id: row.id,
+              lateBase: true,
+              values: {},
+              photo: row.photo,
+              state: 'refused',
+              error: why,
+              createdAt: new Date().toISOString(),
+            };
+            photoRow.seq = await db.putOutboxRow(this.id, photoRow);
+            if (this.pictureSuperseded(row)) await db.settleOutboxRow(this.id, photoRow.seq, null);
+            else this.outbox.push(photoRow);
+          }
           delete row.photo;
           await db.putOutboxRow(this.id, { ...row, state: 'waiting' });
           if (row.op === 'patch' && !Object.keys(row.values).length) {
@@ -1280,6 +1311,13 @@ export class WorldSession {
       if (e.status === 404 && row.op === 'patch') {
         await keep('gone', 'Deleted elsewhere');
         return false;
+      }
+      if (isHostRefusal(e)) {
+        // The web host refused this one write before keel saw it: never the key, the PIN or the
+        // account. This row is refused in the host's words and every other element goes on; it is
+        // not sent again by itself (the same text meets the same refusal), only on a changed text or
+        // Try again.
+        return this.hostRefused(row, e);
       }
       if (row.op === 'create' && (e.isIdConflict || e.isIdempotencyConflict) && attempt < 3) {
         // The create reached the server before (its answer was lost). Edits merged into the row
@@ -1382,6 +1420,62 @@ export class WorldSession {
     return true;
   }
 
+  /** The element's newest outbox row. */
+  private lastRowFor(id: string): OutboxRow | undefined {
+    let last: OutboxRow | undefined;
+    for (const r of this.outbox) if (r.id === id && (!last || (r.seq ?? 0) > (last.seq ?? 0))) last = r;
+    return last;
+  }
+
+  /** A newer picture, a clear or a delete waits behind `row` for its element: `row`'s own picture is moot. */
+  private pictureSuperseded(row: OutboxRow): boolean {
+    return this.outbox.some(
+      (r) => r !== row && r.id === row.id && (r.seq ?? 0) > (row.seq ?? 0) && (r.photo || 'image_url' in r.values || (r.op === 'delete' && r.state === 'waiting')),
+    );
+  }
+
+  /**
+   * Fold the waiting edits queued behind `row` for its element into it, oldest first so the newest
+   * wins, and take them out of the outbox. Synchronous: the caller writes `row` and removes the rows
+   * returned in one transaction (`db.putOutboxRowFolding`). A newer picture also takes out a picture refused on its own between them (the newest
+   * picture wins, as in edit()), so an older picture can never land after it.
+   */
+  private foldBehind(row: OutboxRow): OutboxRow[] {
+    const after = this.outbox.filter((r) => r !== row && r.id === row.id && (r.seq ?? 0) > (row.seq ?? 0)).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+    const taken: OutboxRow[] = [];
+    for (const r of after) {
+      if (r.op !== 'patch' || r.state !== 'waiting') continue;
+      if (r.photo || 'image_url' in r.values) {
+        for (const p of after) if ((p.seq ?? 0) < (r.seq ?? 0) && isLonePicture(p) && !taken.includes(p)) taken.push(p);
+      }
+      mergeInto(row, r.values, r.photo);
+      taken.push(r);
+    }
+    this.outbox = this.outbox.filter((r) => !taken.includes(r));
+    return taken;
+  }
+
+  /**
+   * A row the web host refused. A delete queued behind it makes it moot: it is let go and the delete
+   * goes. Edits queued behind it fold into it (newest wins), and the element's next edit finds it
+   * (edit()). A delete refused is refused like any other (nothing to show, nothing to fix). Every
+   * change in memory happens before the first await; the merged row and the removal of the rows
+   * folded into it are one transaction.
+   */
+  private async hostRefused(row: OutboxRow, e: OwApiError): Promise<boolean> {
+    if (row.op !== 'delete' && this.outbox.some((r) => r !== row && r.id === row.id && (r.seq ?? 0) > (row.seq ?? 0) && r.op === 'delete' && r.state === 'waiting')) {
+      this.outbox = this.outbox.filter((r) => r !== row);
+      await db.settleOutboxRow(this.id, row.seq!, null);
+      return false;
+    }
+    const taken = row.op === 'delete' ? [] : this.foldBehind(row);
+    if (row.op !== 'delete') row.hostRefused = true;
+    row.state = 'refused';
+    row.error = hostRefusalText(e, row.op === 'delete' ? 'this delete' : 'this change', 'Nothing is lost: it waits on this phone.');
+    await db.putOutboxRowFolding(this.id, row, taken.map((r) => r.seq!));
+    return false;
+  }
+
   private retryLater(ms: number): void {
     clearTimeout(this.retryTimer);
     this.retryTimer = window.setTimeout(() => void this.flush(), Math.min(Math.max(ms, 1000), 60000));
@@ -1444,11 +1538,29 @@ export class WorldSession {
   async retryRefused(row: OutboxRow): Promise<void> {
     row.state = 'waiting';
     row.error = undefined;
+    row.hostRefused = undefined;
     await db.putOutboxRow(this.id, row);
     this.rebuild();
     this.emit();
     void this.flush();
   }
+}
+
+/** A picture keel or the media edge refused on its own (a full store, the day's limit): its own row, nothing else in it. */
+function isLonePicture(r: OutboxRow): boolean {
+  return r.state === 'refused' && !r.hostRefused && !!r.photo && !Object.keys(r.values).length;
+}
+
+/**
+ * An edit's values merged into an outbox row. The newest picture wins: a photo replaces a picture set
+ * or cleared before it, and the reverse (sent as image_url once the photo is uploaded, send()).
+ */
+function mergeInto(row: OutboxRow, values: Record<string, unknown>, photo?: Blob): void {
+  row.values = { ...row.values, ...values };
+  if (photo) {
+    row.photo = photo;
+    delete row.values.image_url;
+  } else if ('image_url' in values) delete row.photo;
 }
 
 /** keel's and the media edge's refusals of a picture, said in a sentence; the row can be tried again or let go. */

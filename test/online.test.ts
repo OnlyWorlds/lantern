@@ -71,6 +71,8 @@ class FakeAccountKeel {
   /** A server that answers a PATCH 200 and keeps none of its prefixed keys: the read is the only witness. */
   losePatchedKeys = false;
   refuseSettings = false;
+  /** Set: the web host refuses a write whose body matches, before keel sees it. */
+  hostBlock: RegExp | null = null;
   extMax = 65536;
   otherWorldIds = new Set<string>();
   idem = new Map<string, string>();
@@ -117,6 +119,10 @@ class FakeAccountKeel {
     const headers = new Headers(init.headers);
     const path = url.pathname.replace('/api/v2', '').replace(/\/+$/, '');
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : null;
+    // The web host in front of keel: its own 403 page on a write whose text matches.
+    if (this.hostBlock && method !== 'GET' && typeof init.body === 'string' && this.hostBlock.test(init.body)) {
+      return new Response('<!DOCTYPE html><html><head><title>Blocked</title></head><body>Sorry, you have been blocked</body></html>', { status: 403, headers: { 'content-type': 'text/html' } });
+    }
 
     // The live host's connect-src names only https origins: a fetch of a data: address is refused
     // there in both engines.
@@ -498,6 +504,17 @@ describe('put it online', () => {
     expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
   });
 
+  it("the web host's refusal of the world's text: said as the host, never the PIN or the sign-in, nothing made, the copy stays", async () => {
+    keel.accountPin = '4321';
+    keel.hostBlock = /python -m/;
+    const local = await localWorld([{ ...ELS[0], description: 'Runs `python -m http.server`' }, ...ELS.slice(1)]);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/^The web host in front of OnlyWorlds refused this world before it reached OnlyWorlds\. A command written between code marks.* Nothing was made; your phone copy is kept\.$/);
+    expect(keel.worlds.size).toBe(0);
+    expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+    expect((await db.getWorldRecord(local))?.kind).toBe('local');
+    keel.hostBlock = null;
+  });
+
   it('a wrong PIN: refused at the create, no world made on the account, and the phone copy stays', async () => {
     keel.accountPin = '4321';
     const local = await localWorld(ELS);
@@ -680,6 +697,16 @@ describe("put it online keeps the World's own keys", () => {
     expect(keel.worlds.size).toBe(1);
     expect(keel.worlds.get(id)!.els.size).toBe(2);
     expect(keel.worlds.get(id)!.meta.description).toBe('Ideas at the bus stop');
+  });
+
+  it("settings the web host refuses: said as the host, naming the description, the phone copy stays", async () => {
+    keel.accountPin = '4321';
+    const local = await keyedWorld();
+    await db.updateWorldRecord(local, { description: 'Run `python -m http.server` first' });
+    keel.hostBlock = /python -m/;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/^The world is online, but the web host in front of OnlyWorlds refused its settings \(its description\) before they reached OnlyWorlds\. A command written between code marks.* Your phone copy is kept\.$/);
+    expect((await db.getWorldRecord(local))?.kind).toBe('local');
+    keel.hostBlock = null;
   });
 });
 

@@ -121,6 +121,11 @@ export interface OutboxRow {
   /** needs-you: the server's copy when it refused (412). */
   current?: OwElement;
   error?: string;
+  /**
+   * refused: the web host refused it before keel saw it (`isHostRefusal`). Its values stay on the
+   * screen, and the element's next edit merges into it and sends it again (a changed text goes up).
+   */
+  hostRefused?: boolean;
   createdAt: string;
 }
 
@@ -335,6 +340,16 @@ export async function putOutboxRow(worldId: string, row: OutboxRow): Promise<num
   const key = await req(t.objectStore('outbox').put(row));
   await done(t);
   return key as number;
+}
+
+/** A row written and the rows merged into it removed, in one transaction: a crash keeps all or none. */
+export async function putOutboxRowFolding(worldId: string, row: OutboxRow, folded: number[]): Promise<void> {
+  const db = await world(worldId);
+  const t = db.transaction('outbox', 'readwrite');
+  const st = t.objectStore('outbox');
+  st.put(row);
+  for (const seq of folded) st.delete(seq);
+  await done(t);
 }
 
 export async function deleteOutboxRow(worldId: string, seq: number): Promise<void> {

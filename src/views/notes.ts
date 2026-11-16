@@ -97,6 +97,9 @@ function noteCard(s: WorldSession, n: Note, refresh: () => void): HTMLElement {
  */
 function sharedLine(s: WorldSession, shared: NonNullable<Note['shared']>): { el: HTMLElement; open: boolean } {
   const line = (...parts: (Node | string)[]) => h('span', { class: 'small', 'data-part': 'share-state' }, ...parts);
+  // Refused first: a share the web host refused stays on the screen and among the pending rows.
+  const refused = s.refusedRow(shared.id);
+  if (refused) return { el: line(`Not shared: ${refused.error ?? 'refused'} `, h('a', { href: `#/w/${s.id}/outbox` }, 'See it')), open: true };
   if (s.pending(shared.id).get('*')) {
     if (s.pinKnown()) return { el: line(`Waiting to send to ${shared.to}`), open: false };
     const enter = h('button', { class: 'btn btn-quiet', type: 'button' }, 'Enter your PIN');
@@ -104,8 +107,6 @@ function sharedLine(s: WorldSession, shared: NonNullable<Note['shared']>): { el:
     return { el: line(`Waiting for your PIN to send to ${shared.to}. `, enter), open: false };
   }
   if (s.get(shared.id)) return { el: line(`Shared with ${shared.to} · `, h('a', { href: `#/w/${s.id}/e/${shared.id}` }, 'Open it')), open: false };
-  const refused = s.refusedRow(shared.id);
-  if (refused) return { el: line(`Not shared: ${refused.error ?? 'refused'} `, h('a', { href: `#/w/${s.id}/outbox` }, 'See it')), open: true };
   return { el: line(`Not with ${shared.to} now.`), open: true };
 }
 

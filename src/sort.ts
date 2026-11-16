@@ -8,6 +8,7 @@ import { OwApiError, OwNetworkError, OwV2Client, type OwPaidBy } from '@onlyworl
 import { accountToken } from './account';
 import { aiAnswered, aiKey } from './ai-key';
 import { OWN_KEY_REFUSED } from './own-key';
+import { hostRefusalText, isHostRefusal } from './hostrefusal';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 import type { SliceItem, SortRow } from './sortplan';
 
@@ -61,6 +62,8 @@ export async function sortNotes(worldId: string, notes: SortNote[], slice: Slice
     if (e.isAskUnavailable || (e.status === 404 && e.param === 'use')) throw new SortRefused('Sorting is paused for now. Your notes wait here.');
     if (e.isIdempotencyInFlight || e.isUseInFlight) throw new SortRefused('That sort is still on its way. Try again in a moment.');
     if (e.isAskFailed) throw new SortRefused('Nothing came back. Try again; nothing was counted.', 502);
+    // The web host refused the notes' text before keel saw it: not the account, and no status, so no photo fallback.
+    if (isHostRefusal(e)) throw new SortRefused(hostRefusalText(e, 'these notes (with the elements sent beside them)', 'Your notes wait here; nothing was counted.', true));
     if (e.status === 404 || e.status === 403) throw new SortRefused('Your account is not in this world any more.');
     if (e.status === 401) throw new SortRefused('Sign in again to sort.');
     if (e.status === 422) throw new SortRefused(`The notes were not taken: ${e.message}`, 422);

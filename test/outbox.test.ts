@@ -16,6 +16,7 @@ Object.assign(globalThis, {
 const { openWorld, forgetSession, setBuildBehind } = await import('../src/world');
 const { setPin } = await import('../src/pin');
 const db = await import('../src/db');
+type OutboxRowT = import('../src/db').OutboxRow;
 const { HIDDEN_REFUSAL } = await import('../src/hidden');
 
 type El = Record<string, unknown> & { id: string; type: string; change_seq: number };
@@ -63,6 +64,19 @@ class FakeKeel {
     return this.json(status, { error: { code, message: code, type: 'x', param }, ...extra });
   }
 
+  /** Set: the web host in front of keel refuses a write whose body matches, before keel sees it. */
+  hostBlock: RegExp | null = null;
+  /** Set: the host refuses the feed's reads too. */
+  hostBlockReads = false;
+  /** The host's page title: its "Blocked" page, or another page of its own. */
+  hostTitle = 'Blocked';
+
+  /** The host's own answer: 403, text/html, no keel envelope, as the live host serves it. */
+  hostPage(): Response {
+    const html = `<!DOCTYPE html><html><head><title>${this.hostTitle}</title></head><body><h1>Sorry, you have been blocked</h1></body></html>`;
+    return new Response(html, { status: 403, headers: { 'content-type': 'text/html; charset=UTF-8' } });
+  }
+
   fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
     if (this.offline) throw new TypeError('Failed to fetch');
     const url = new URL(String(input));
@@ -70,6 +84,11 @@ class FakeKeel {
     const headers = new Headers(init.headers);
     const path = url.pathname.replace('/api/v2', '').replace(/\/+$/, '');
     this.calls.push(`${method} ${path}`);
+    if (this.hostBlock && method !== 'GET' && this.hostBlock.test(String(init.body ?? ''))) {
+      if (this.gate) await this.gate;
+      return this.hostPage();
+    }
+    if (this.hostBlockReads && method === 'GET' && path.startsWith('/changes')) return this.hostPage();
     // The media edge (its own host, the ticket is its pass) and, below, keel's ticket for it, as
     // test/online.test.ts fakes them.
     if (url.host === 'edge.test') {
@@ -84,7 +103,11 @@ class FakeKeel {
     if (sentPin && sentPin !== this.pin) return this.err(401, 'invalid_credentials', {}, 'API-Pin');
     if (method !== 'GET' && !sentPin) return this.err(401, 'invalid_credentials', {}, 'API-Pin');
 
-    if (path === '/media/ticket' && this.refuseTicket) return this.err(this.refuseTicket.status, this.refuseTicket.code);
+    if (path === '/media/ticket' && this.refuseTicket) {
+      const refusal = this.refuseTicket; // as keel decided when the ask arrived
+      if (this.gate) await this.gate;
+      return this.err(refusal.status, refusal.code);
+    }
     if (path === '/media/ticket') return this.json(200, { ticket: 't', upload_url: 'https://edge.test/up', prefix: 'w/', max_bytes: 15e6, exp: 0 });
     if (path === '/world') return this.json(200, { id: 'w1', name: 'Fake world' });
     if (path === '/changes') {
@@ -956,5 +979,372 @@ describe('a key keel no longer takes (as in Atlas)', () => {
     expect(s.keyRefusal).toBe('key_unknown');
     expect(s.statusText).toMatch(/deleted there, or you were removed from it/);
     keel.keyGone = null;
+  });
+});
+
+describe("the web host's refusal: one write refused in the host's words, never the key", () => {
+  const BAD = 'Runs `python -m http.server` at dusk';
+  const patches = (id: string) => keel.calls.filter((c) => c === `PATCH /character/${id}`).length;
+
+  it('a refused edit is said as the host, stays on the screen, and every other element still goes', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    await s.edit('a', { description: BAD });
+    await s.edit('b', { name: 'Bo Vell' });
+    await s.flush();
+    expect(keel.els.get('b')?.name).toBe('Bo Vell');
+    const row = s.outbox.find((r) => r.id === 'a');
+    expect(row).toMatchObject({ state: 'refused', hostRefused: true });
+    expect(row?.error).toMatch(/^The web host in front of OnlyWorlds refused this change before it reached OnlyWorlds\. A command written between code marks/);
+    expect(row?.error).toMatch(/Nothing is lost: it waits on this phone\.$/);
+    expect(row?.error).not.toMatch(/key|PIN|sign/i);
+    // The key, the PIN and the screen's status are untouched; the text stays on the screen.
+    expect(s.keyRefused).toBe(false);
+    expect(s.needPin).toBe(false);
+    expect(s.pinKnown()).toBe(true);
+    expect(s.status).not.toBe('error');
+    expect(s.get('a')?.description).toBe(BAD);
+    // Not sent again by itself.
+    const sent = patches('a');
+    await s.flush();
+    await s.flush();
+    expect(patches('a')).toBe(sent);
+    // A changed text merges into it and goes up.
+    await s.edit('a', { description: 'Runs a small server at dusk' });
+    await s.flush();
+    expect(keel.els.get('a')?.description).toBe('Runs a small server at dusk');
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('a refused catch stays on the screen; changed, it lands with its own id', async () => {
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    const id = await s.create('narrative', { name: 'A page', supertype: 'Unsorted', description: BAD });
+    await s.edit('b', { name: 'Bo Vell' });
+    await s.flush();
+    expect(keel.els.get('b')?.name).toBe('Bo Vell');
+    expect(keel.els.has(id)).toBe(false);
+    expect(s.get(id)?.name).toBe('A page');
+    expect(s.refusedRow(id)?.hostRefused).toBe(true);
+    await s.edit(id, { description: 'Runs a small server' });
+    await s.flush();
+    expect(keel.els.get(id)).toMatchObject({ name: 'A page', supertype: 'Unsorted', description: 'Runs a small server' });
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('a host page that is not "Blocked" is still the host: said without the cause, nothing else stops', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    keel.hostTitle = 'Access denied';
+    await s.edit('a', { description: BAD });
+    await s.edit('b', { name: 'Bo Vell' });
+    await s.flush();
+    expect(keel.els.get('b')?.name).toBe('Bo Vell');
+    const row = s.outbox.find((r) => r.id === 'a');
+    expect(row?.error).toBe('The web host in front of OnlyWorlds refused this change before it reached OnlyWorlds. Nothing is lost: it waits on this phone.');
+  });
+
+  it("keel's own 403 keeps its reading: the key can no longer write, and the outbox stops", async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.offline = true;
+    await s.edit('a', { name: 'Ada Vell' });
+    await s.edit('b', { name: 'Bo Vell' });
+    await s.flush();
+    keel.offline = false;
+    keel.nextError = { status: 403, code: 'permission_denied' };
+    await s.flush();
+    expect(s.statusText).toBe('This key can no longer write to the world');
+    expect(s.outbox.every((r) => r.state === 'waiting' && !r.hostRefused)).toBe(true);
+    expect(keel.els.get('b')?.name).toBe('Bo');
+  });
+
+  it('edits queued behind a refused send fold into it, so the next edit reaches it', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    await s.edit('a', { description: BAD });
+    await new Promise((r) => setTimeout(r, 20));
+    await s.edit('a', { name: 'Ada Vell' }); // behind the one in flight
+    expect(s.outbox.length).toBe(2);
+    keel.gate = null;
+    release();
+    await s.flush();
+    expect(s.outbox.length).toBe(1);
+    expect(s.outbox[0]).toMatchObject({ state: 'refused', hostRefused: true, values: { description: BAD, name: 'Ada Vell' } });
+    await s.edit('a', { description: 'A small server' });
+    await s.flush();
+    expect(keel.els.get('a')).toMatchObject({ name: 'Ada Vell', description: 'A small server' });
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('a picture refused on its own and the text refused by the host: the corrected edit still sends', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    keel.refuseTicket = { status: 403, code: 'storage_full' };
+    const photo = new Blob([new Uint8Array([1])], { type: 'image/webp' });
+    await s.edit('a', { description: BAD }, s.serverCopy('a'), photo);
+    await s.flush();
+    // The picture's own row sits behind the host's row.
+    expect(s.outbox.map((r) => [r.state, !!r.hostRefused, !!r.photo])).toEqual([['refused', true, false], ['refused', false, true]]);
+    keel.refuseTicket = null;
+    await s.edit('a', { description: 'A small server' });
+    await s.flush();
+    expect(keel.els.get('a')?.description).toBe('A small server');
+    expect(s.outbox.map((r) => [r.state, !!r.photo])).toEqual([['refused', true]]);
+  });
+
+  it('a newer picture or a clear through the corrected edit takes out the older picture refused on its own', async () => {
+    for (const newer of ['photo', 'clear'] as const) {
+      keel = new FakeKeel();
+      globalThis.fetch = keel.fetch as typeof fetch;
+      keel.put({ id: 'a', type: 'character', name: 'Ada', image_url: 'https://media.onlyworlds.com/w/old.webp' });
+      const s = await freshWorld();
+      await s.pull();
+      setPin(s.rec, '1234');
+      keel.hostBlock = /python -m/;
+      keel.refuseTicket = { status: 403, code: 'storage_full' };
+      await s.edit('a', { description: BAD }, s.serverCopy('a'), new Blob([new Uint8Array([1])], { type: 'image/webp' }));
+      await s.flush();
+      keel.refuseTicket = null;
+      if (newer === 'photo') await s.edit('a', { description: 'A small server' }, undefined, new Blob([new Uint8Array([2])], { type: 'image/webp' }));
+      else await s.edit('a', { description: 'A small server', image_url: null });
+      await s.flush();
+      // No refused picture is left to be tried again after the newer one.
+      expect(s.outbox.length).toBe(0);
+      expect((await db.outboxRows(s.id)).length).toBe(0);
+      expect(keel.els.get('a')?.image_url ?? null).toBe(newer === 'photo' ? 'https://media.onlyworlds.com/w/1.webp' : null);
+    }
+  });
+
+  it('a picture refused on its own while a newer one waits behind it is let go, never set aside to land last', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.refuseTicket = { status: 403, code: 'storage_full' };
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    await s.edit('a', {}, s.serverCopy('a'), new Blob([new Uint8Array([1])], { type: 'image/webp' }));
+    const flushing = s.flush();
+    await new Promise((r) => setTimeout(r, 20));
+    await s.edit('a', {}, undefined, new Blob([new Uint8Array([2])], { type: 'image/webp' })); // behind the one in flight
+    keel.gate = null;
+    keel.refuseTicket = null;
+    release();
+    await flushing;
+    await s.flush();
+    expect(s.outbox.filter((r) => r.state === 'refused').length).toBe(0);
+    expect(s.outbox.length).toBe(0);
+    expect(keel.els.get('a')?.image_url).toBe('https://media.onlyworlds.com/w/1.webp');
+  });
+
+  // Helpers for the interleavings below (the third gate's probes, taken whole).
+  const settle = async (s: Awaited<ReturnType<typeof freshWorld>>) => {
+    for (let i = 0; i < 4; i++) {
+      await s.flush();
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 20));
+  const hold = () => {
+    let release!: () => void;
+    keel.gate = new Promise<void>((r) => (release = r));
+    return () => {
+      keel.gate = null;
+      release();
+    };
+  };
+  const picture = (b: number) => new Blob([new Uint8Array([b])], { type: 'image/webp' });
+
+  it('a clear saved at any moment while a refused picture is set aside: the older picture never lands last', async () => {
+    const bad: string[] = [];
+    for (let k = 0; k < 12; k++) {
+      keel = new FakeKeel();
+      globalThis.fetch = keel.fetch as typeof fetch;
+      keel.put({ id: 'a', type: 'character', name: 'Ada', image_url: 'https://media.onlyworlds.com/w/old.webp' });
+      const s = await freshWorld();
+      await s.pull();
+      setPin(s.rec, '1234');
+      keel.refuseTicket = { status: 403, code: 'storage_full' };
+      const go = hold();
+      await s.edit('a', {}, s.serverCopy('a'), picture(1));
+      const f = s.flush();
+      await tick();
+      await s.edit('a', { description: 'd' }); // a waiting row behind the picture in flight
+      go();
+      for (let i = 0; i < k; i++) await new Promise((r) => setImmediate(r));
+      await s.edit('a', { image_url: null });
+      await f;
+      await settle(s);
+      keel.refuseTicket = null;
+      for (const r of s.outbox.filter((x) => x.state === 'refused')) await s.retryRefused(r);
+      await settle(s);
+      const got = keel.els.get('a')?.image_url ?? null;
+      if (got !== null) bad.push(`k=${k}: ${got}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('a row an edit folded into the refused row while a flush was mid-loop is never sent after it', async () => {
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    await s.edit('b', { description: BAD }, s.serverCopy('b'));
+    await settle(s);
+    await s.edit('a', { name: BAD }, s.serverCopy('a'));
+    await settle(s);
+    // A waiting row behind a's refused row (an edit saved while the refusal was being written).
+    const behind: OutboxRowT = { op: 'patch', type: 'character', id: 'a', lateBase: true, values: { name: 'ok 20' }, state: 'waiting', createdAt: '' };
+    behind.seq = await db.putOutboxRow(s.id, behind);
+    s.outbox.push(behind);
+    const go = hold();
+    await s.edit('b', { description: 'fine' }); // b's row reopens; its flush sends it, held
+    await tick();
+    await s.edit('a', { name: 'ok 22' }); // folds the row behind into a's while that flush is mid-loop
+    go();
+    await settle(s);
+    expect(keel.els.get('a')?.name).toBe('ok 22');
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('a picture refused on its own with a delete queued behind it: let go, the delete lands, nothing stuck', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.refuseTicket = { status: 403, code: 'storage_full' };
+    const go = hold();
+    await s.edit('a', { description: 'x' }, s.serverCopy('a'), picture(1));
+    const f = s.flush();
+    await tick();
+    await s.remove('a');
+    go();
+    await f;
+    await settle(s);
+    expect(keel.els.has('a')).toBe(false);
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('an edit saved while the refusal is written is neither lost nor left behind, through a reload', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    await s.edit('a', { description: BAD });
+    await new Promise((r) => setTimeout(r, 20));
+    await s.edit('a', { name: 'Ada Vell' }); // behind the one in flight
+    const x = [...s.outbox].sort((p, q) => (p.seq ?? 0) - (q.seq ?? 0))[0];
+    keel.gate = null;
+    release();
+    const flushing = s.flush();
+    // The first moment the fold shows (the row behind read into it, or the refusal marked), before its writes land.
+    let spins = 0;
+    while (!(x.values.name === 'Ada Vell' || x.hostRefused) && spins < 2000) {
+      await new Promise((r) => setImmediate(r));
+      spins++;
+    }
+    expect(spins).toBeLessThan(2000);
+    await s.edit('a', { gender: 'she' });
+    await flushing;
+    await s.flush();
+    expect(s.get('a')).toMatchObject({ name: 'Ada Vell', gender: 'she' });
+    expect((await db.outboxRows(s.id)).length).toBe(s.outbox.length);
+    forgetSession(s.id);
+    const s2 = await openWorld(s.id);
+    await s2.edit('a', { description: 'A small server' });
+    await s2.flush();
+    await s2.flush();
+    expect(keel.els.get('a')).toMatchObject({ name: 'Ada Vell', gender: 'she', description: 'A small server' });
+    expect(s2.outbox.length).toBe(0);
+  });
+
+  it('a delete queued behind a refused send lets it go, and the delete is sent', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    await s.edit('a', { description: BAD });
+    await new Promise((r) => setTimeout(r, 20));
+    await s.remove('a');
+    keel.gate = null;
+    release();
+    await s.flush();
+    await s.flush();
+    expect(keel.els.has('a')).toBe(false);
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('a refused catch deleted: let go, and the delete settles on the 404', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    const id = await s.create('narrative', { name: 'A page', supertype: 'Unsorted', description: BAD });
+    await s.flush();
+    expect(s.refusedRow(id)?.hostRefused).toBe(true);
+    await s.remove(id);
+    await s.flush();
+    expect(s.outbox.length).toBe(0);
+    expect(s.get(id)).toBeUndefined();
+  });
+
+  it('Try again sends the same text once, on the press only; another refusal after it is not the host mark', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.hostBlock = /python -m/;
+    await s.edit('a', { description: BAD });
+    await s.flush();
+    const row = s.outbox[0];
+    const sent = patches('a');
+    keel.hostBlock = null;
+    keel.nextError = { status: 403, code: 'not_author' };
+    await s.retryRefused(row);
+    await s.flush();
+    expect(patches('a')).toBe(sent + 1);
+    expect(row).toMatchObject({ state: 'refused', error: 'You can change only what you made in this world' });
+    expect(row.hostRefused).toBeUndefined();
+    expect(s.get('a')?.description).toBeUndefined();
+  });
+
+  it("a read the host refuses is not the key's: nothing stops asking", async () => {
+    const s = await freshWorld('owner');
+    keel.hostBlockReads = true;
+    await s.pull();
+    expect(s.keyRefused).toBe(false);
+    expect(s.statusText).toMatch(/^The web host in front of OnlyWorlds refused a read of this world/);
+    keel.hostBlockReads = false;
   });
 });

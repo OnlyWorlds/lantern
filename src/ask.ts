@@ -9,6 +9,7 @@ import { buildAskContext, OwApiError, OwNetworkError, OwV2Client, type OwAskCont
 import { accountToken } from './account';
 import { aiAnswered, aiKey } from './ai-key';
 import { OWN_KEY_REFUSED } from './own-key';
+import { hostRefusalText, isHostRefusal } from './hostrefusal';
 import { roomShown } from './room';
 import { API_BASE, LANTERN_CLIENT_NAME } from './world';
 
@@ -60,6 +61,8 @@ export async function askInASentence(worldId: string, question: string, context:
     if (e.isAskUnavailable || (e.status === 404 && e.param === 'use')) throw new AskRefused('Answers in a sentence are paused for now. The list above is the world itself.');
     if (e.isIdempotencyInFlight || e.isUseInFlight) throw new AskRefused('That answer is still on its way. Try again in a moment.');
     if (e.isAskFailed) throw new AskRefused('No answer came back. Try again.');
+    // The web host refused the question's text before keel saw it: not the account.
+    if (isHostRefusal(e)) throw new AskRefused(hostRefusalText(e, 'this question (with the elements sent beside it)', 'Your question is kept; nothing was counted.'));
     if (e.status === 404 || e.status === 403) throw new AskRefused('Your account is not in this world any more, so it cannot be asked in a sentence.');
     if (e.status === 401) throw new AskRefused('Sign in again to have it answered in a sentence.');
     throw new AskRefused('No answer came back. Try again.');
