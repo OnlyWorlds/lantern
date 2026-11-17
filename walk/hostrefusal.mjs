@@ -3,13 +3,13 @@
 // that refuses only such text, the phone says the host refused that one change, keeps the text on the
 // screen, sends every other element's change, never blames the key, never sends the refused text again
 // by itself, and sends it once the text is changed.
-// Run: npm run build && (npx vite preview --port 5181 --host 127.0.0.1 &) && node walk/hostrefusal.mjs [chromium|webkit]
+// Run: npm run build && (npx vite preview --port 5181 &) && node walk/hostrefusal.mjs [chromium|webkit]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { writeWorldFile } from '@onlyworlds/sdk';
 
-const BASE = process.env.LANTERN_URL ?? 'http://127.0.0.1:5181';
+const BASE = process.env.LANTERN_URL ?? 'http://localhost:5181';
 const OUT = 'walk/shots';
 mkdirSync(OUT, { recursive: true });
 const only = process.argv[2];
