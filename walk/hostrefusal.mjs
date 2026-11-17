@@ -41,7 +41,8 @@ async function run(engine, name, device) {
   const ctx = await browser.newContext({ ...devices[device], serviceWorkers: 'block' });
   const page = await ctx.newPage();
   const errors = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+  // WebKit names a poll its own navigation cancelled "due to access control checks" (as walk/opendoor.mjs reads it).
+  page.on('pageerror', (e) => !/due to access control checks/.test(e.message) && errors.push(e.message));
   const writes = [];
   let head = 100;
   const json = (body, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
