@@ -727,7 +727,6 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
   const info = fieldInfo(type, field);
   if (info?.type === 'single_link' && typeof v === 'string') return h('div', { class: 'chips' }, linkChip(s, v));
   if (info?.type === 'multi_link' && Array.isArray(v)) return h('div', { class: 'chips' }, ...v.map((id) => linkChip(s, String(id))));
-  if (info?.type === 'integer_max' && info.max) return document.createTextNode(`${v} / ${info.max}`);
   // A date in the world's calendar, with the number it is kept as (Atlas's element page does the same).
   const cal = typeof v === 'number' && Number.isInteger(v) && isDateField(field) ? s.calendar() : null;
   const named = cal ? dateText(v as number, undefined, cal) : '';

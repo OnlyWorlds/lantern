@@ -64,8 +64,6 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
         type: 'number',
         inputmode: custom ? 'decimal' : 'numeric',
         step: custom ? 'any' : '1',
-        min: info.type === 'integer_max' ? '0' : null,
-        max: info.type === 'integer_max' && info.max ? String(info.max) : null,
         'aria-label': fieldLabel(field),
       });
       input.value = typeof cur === 'number' ? String(cur) : '';
@@ -94,10 +92,6 @@ export function editField(s: WorldSession, el: OwElement, field: string): void {
           }
           if (!custom && !Number.isInteger(n)) {
             err.textContent = 'A whole number, please.';
-            return;
-          }
-          if (info.type === 'integer_max' && info.max !== undefined && (n < 0 || n > info.max)) {
-            err.textContent = `From 0 to ${info.max}.`;
             return;
           }
           v = n;
