@@ -41,7 +41,7 @@ class FakeKeel {
   nextError: { status: number; code: string } | null = null;
   /** Set: this key may not create an element hidden (a member). */
   cannotHide = false;
-  /** The world's house (keel's elements/charter.py): ids this key, below keeper, may not change or delete. */
+  /** The world's house (keel's elements/charter.py): ids of Laws and Objects this key, below keeper, may not change or delete. */
   house = new Set<string>();
   /** Set: the account's PIN wall is locked for this many seconds (core/auth.py: checked before the PIN). */
   pinLocked: number | null = null;
@@ -105,7 +105,8 @@ class FakeKeel {
     // A PIN refusal names its header (param API-Pin).
     const sentPin = headers.get('API-Pin');
     // keel checks the PIN wall before the PIN itself: a locked account refuses the right PIN too, with
-    // the lock's seconds as Retry-After (core/auth.py _check_walls, core/throttle.py).
+    // the lock's seconds as Retry-After (core/auth.py _check_walls, core/throttle.py). keel answers a
+    // write with no PIN the same way; Lantern never writes without one, so only a sent PIN is played.
     if (sentPin && this.pinLocked !== null) {
       return new Response(JSON.stringify({ error: { code: 'rate_limited', type: 'rate_limited', message: 'Too many failed PIN attempts. Try again later.', param: null } }), {
         status: 429,
@@ -162,7 +163,8 @@ class FakeKeel {
       // keel: a create carrying hidden: true from a key that cannot hide (probed live).
       if (this.cannotHide && method === 'POST' && body.hidden === true) return this.err(403, 'hidden_not_allowed');
       // keel: a change or delete of the house by a key below keeper (elements/charter.py HOUSE_MESSAGE).
-      if (this.house.has(id) && (method === 'PATCH' || method === 'DELETE')) {
+      // The house is Laws and Objects only (HOUSE_TYPES): a Character is never refused this way.
+      if (this.house.has(id) && (type === 'law' || type === 'object') && (method === 'PATCH' || method === 'DELETE')) {
         const message = `Only the world's owner and co-builders change this element. Nothing was written. Ask one of them, or propose the change: POST /api/v2/${type}/${id}/proposals.`;
         return this.json(403, { error: { code: 'keeper_only', type: 'permission_error', message, param: 'id' } });
       }
@@ -231,11 +233,13 @@ async function freshWorld(role?: 'owner' | 'collaborator') {
   return openWorld(id);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   keel = new FakeKeel();
   globalThis.fetch = keel.fetch as typeof fetch;
   store.clear();
   setBuildBehind(false);
+  // keel's wrong-PIN wait is the account's: one test's lock is not the next one's.
+  await db.kvSet('sendWait:lantern-pin-account', undefined);
 });
 
 describe('pull', () => {
@@ -841,11 +845,11 @@ describe('outbox', () => {
 });
 
 describe("keel's refusal of one change: that change only, in keel's words, never sent again by itself", () => {
-  const patches = (id: string) => keel.calls.filter((c) => c === `PATCH /character/${id}`).length;
+  const patches = (id: string) => keel.calls.filter((c) => c === `PATCH /character/${id}` || c === `PATCH /law/${id}`).length;
   const HOUSE = "Only the world's owner and co-builders change this element. Nothing was written. Ask one of them, or propose the change.";
 
   it('keeper_only: the house element is refused in keel words, every other element goes, the key is fine', async () => {
-    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'a', type: 'law', name: 'The charter' });
     keel.put({ id: 'b', type: 'character', name: 'Bo' });
     keel.house.add('a');
     const s = await freshWorld();
@@ -876,7 +880,7 @@ describe("keel's refusal of one change: that change only, in keel's words, never
   });
 
   it('keeper_only on a delete: not deleted, said in keel words', async () => {
-    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'a', type: 'object', name: 'The seal' });
     keel.house.add('a');
     const s = await freshWorld();
     await s.pull();
@@ -884,7 +888,38 @@ describe("keel's refusal of one change: that change only, in keel's words, never
     await s.remove('a');
     await s.flush();
     expect(s.outbox[0]).toMatchObject({ op: 'delete', state: 'refused', error: HOUSE });
-    expect(keel.els.get('a')?.name).toBe('Ada');
+    expect(keel.els.get('a')?.name).toBe('The seal');
+  });
+
+  it("the element's next edit takes the refused change's place: sent once, refused again if keel says so, never held behind it", async () => {
+    keel.put({ id: 'a', type: 'law', name: 'The charter' });
+    keel.house.add('a');
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    await s.edit('a', { name: 'The charter, amended' });
+    await s.flush();
+    expect(s.outbox).toHaveLength(1);
+    expect(s.outbox[0].state).toBe('refused');
+    // The person edits it again: the new act replaces the refused row and goes once.
+    await s.edit('a', { description: 'Read at every gathering' });
+    await s.flush();
+    expect(patches('a')).toBe(2);
+    expect(s.outbox).toHaveLength(1);
+    expect(s.outbox[0]).toMatchObject({ state: 'refused', error: HOUSE, values: { description: 'Read at every gathering' } });
+    expect((await db.outboxRows(s.id)).length).toBe(1);
+    // Never again by itself.
+    await s.pull(true);
+    await s.flush();
+    expect(patches('a')).toBe(2);
+    // Once keel takes it (a keeper now), the next edit lands and nothing is left.
+    keel.house.delete('a');
+    await s.edit('a', { description: 'Read at the solstice' });
+    await s.flush();
+    expect(patches('a')).toBe(3);
+    expect(keel.els.get('a')?.description).toBe('Read at the solstice');
+    expect(s.outbox).toHaveLength(0);
+    expect(await db.outboxRows(s.id)).toHaveLength(0);
   });
 
   it('a 403 code this build does not know takes the mildest reading: that one change refused', async () => {
@@ -983,15 +1018,16 @@ describe("keel's wait (429): one wait for the world, honoured in full, kept thro
     expect(again.waitRuns()).toBeNull();
   });
 
-  it('a wait longer than keel ever asks is held to its 900 s; none said is a minute', async () => {
+  it("a wait longer than keel ever asks is held to its 901 s; none said is a minute", async () => {
     const s = await lockedWorld(5000);
     const t0 = Date.now();
     await s.flush();
-    expect(s.sendWait!.until - t0).toBeLessThanOrEqual(901_000);
-    expect(s.sendWait!.until - t0).toBeGreaterThanOrEqual(899_000);
+    expect(s.sendWait!.until - t0).toBeLessThanOrEqual(902_000);
+    expect(s.sendWait!.until - t0).toBeGreaterThanOrEqual(900_000);
 
     keel.pinLocked = null;
-    const t = await freshWorld('owner');
+    const t = await freshWorld(); // a world with its own PIN: the account's lock is not its own
+    expect(t.waitRuns()).toBeNull();
     await t.pull();
     setPin(t.rec, '1234');
     keel.offline = true;
@@ -1004,6 +1040,53 @@ describe("keel's wait (429): one wait for the world, honoured in full, kept thro
     expect(t.sendWait?.code).toBe('too_many_requests');
     expect(t.sendWait!.until - t1).toBeGreaterThanOrEqual(59_000);
     expect(t.sendWait!.until - t1).toBeLessThanOrEqual(61_000);
+  });
+
+  it("the wrong-PIN lock is the account's: another of its worlds sends nothing until it ends, a world with its own PIN goes on", async () => {
+    const s = await lockedWorld(900);
+    await s.flush();
+    expect(patches()).toBe(1);
+    keel.pinLocked = null;
+    // Another world of the same account, its PIN the account's one.
+    const other = await freshWorld('collaborator');
+    await other.pull();
+    keel.offline = true;
+    await other.edit('a', { name: 'Ada elsewhere' });
+    await other.flush();
+    keel.offline = false;
+    await other.flush();
+    expect(patches()).toBe(1);
+    expect(other.sendWait?.code).toBe('rate_limited');
+    expect(other.sendWait?.until).toBe(s.sendWait!.until);
+    // A world opened with someone else's key keeps its own PIN, and its own waits.
+    const own = await freshWorld();
+    await own.pull();
+    setPin(own.rec, '1234');
+    await own.edit('b', { name: 'Bo elsewhere' });
+    await own.flush();
+    expect(keel.els.get('b')?.name).toBe('Bo elsewhere');
+  });
+
+  it("a ten-digit key's reads carry the PIN: the poll's reads wait out the lock too", async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const id = `w-${++n}`;
+    await db.putWorldRecord({ id, name: 'Old key world', kind: 'online', apiKey: '1234567890', keyKind: 'legacy', addedAt: '', role: 'owner' });
+    forgetSession(id);
+    const s = await openWorld(id);
+    setPin(s.rec, '1234');
+    await s.pull();
+    keel.pinLocked = 900;
+    await s.pull(true); // meets the lock
+    expect(s.sendWait?.code).toBe('rate_limited');
+    const reads = keel.calls.filter((c) => c.startsWith('GET')).length;
+    keel.pinLocked = null;
+    await s.pull(true);
+    await s.pull(true);
+    expect(keel.calls.filter((c) => c.startsWith('GET')).length).toBe(reads);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(s.sendWait!.until + 1000);
+    await s.pull(true);
+    expect(keel.calls.filter((c) => c.startsWith('GET')).length).toBeGreaterThan(reads);
   });
 
   it('a second session on the same world (another window) honours the wait the first one met', async () => {

@@ -342,14 +342,15 @@ export async function putOutboxRow(worldId: string, row: OutboxRow): Promise<num
   return key as number;
 }
 
-/** A row written and the rows merged into it removed, in one transaction: a crash keeps all or none. */
-export async function putOutboxRowFolding(worldId: string, row: OutboxRow, folded: number[]): Promise<void> {
+/** A row written and the rows merged into it removed, in one transaction: a crash keeps all or none. Its seq back. */
+export async function putOutboxRowFolding(worldId: string, row: OutboxRow, folded: number[]): Promise<number> {
   const db = await world(worldId);
   const t = db.transaction('outbox', 'readwrite');
   const st = t.objectStore('outbox');
-  st.put(row);
+  const put = st.put(row);
   for (const seq of folded) st.delete(seq);
   await done(t);
+  return put.result as number;
 }
 
 export async function deleteOutboxRow(worldId: string, seq: number): Promise<void> {

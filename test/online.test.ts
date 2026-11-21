@@ -153,7 +153,7 @@ class FakeAccountKeel {
       if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
       if (this.accountPin && body.pin !== undefined) {
         if (this.pinOmitOnly) return this.err(422, 'invalid_request', 'pin');
-        if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
+        if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', type: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
         if (String(body.pin) !== this.accountPin) {
           this.pinTriesLeft--;
           return this.err(401, 'invalid_credentials', 'pin');
@@ -200,7 +200,7 @@ class FakeAccountKeel {
       if (JSON.stringify(ext).length > this.extMax) return this.err(422, 'invalid_request', 'extensions');
       if (this.accountPin && w.pin !== undefined) {
         if (this.pinOmitOnly) return this.err(422, 'invalid_request', 'pin');
-        if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
+        if (this.pinTriesLeft <= 0) return this.json(429, { error: { code: 'rate_limited', type: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '300' });
         if (String(w.pin) !== this.accountPin) {
           this.pinTriesLeft--;
           return this.err(401, 'invalid_credentials', 'pin');
@@ -307,7 +307,7 @@ class FakeAccountKeel {
     const [worldId, world] = found;
     // keel's PIN wall comes before the PIN (core/auth.py _check_walls): 429 rate_limited, the lock's seconds.
     if (method !== 'GET' && headers.get('API-Pin') && this.keyWritesLocked !== null) {
-      return this.json(429, { error: { code: 'rate_limited', message: 'Too many failed PIN attempts. Try again later.' } }, { 'Retry-After': String(this.keyWritesLocked) });
+      return this.json(429, { error: { code: 'rate_limited', type: 'rate_limited', message: 'Too many failed PIN attempts. Try again later.' } }, { 'Retry-After': String(this.keyWritesLocked) });
     }
     if (method !== 'GET' && headers.get('API-Pin') !== this.accountPin) return this.err(401, 'invalid_credentials', 'API-Pin');
     // keel's daily ticket cap (media/api.py _check_quota): 429 quota_exceeded with a Retry-After.
@@ -400,6 +400,8 @@ beforeEach(async () => {
   globalThis.fetch = keel.fetch as typeof fetch;
   store.clear();
   await db.kvSet('accountToken', 'ow_a_test');
+  // keel's wrong-PIN wait is the account's: one test's lock is not the next one's.
+  await db.kvSet('sendWait:lantern-pin-account', undefined);
 });
 
 describe('put it online', () => {
@@ -560,8 +562,8 @@ describe('put it online', () => {
     expect(keel.worlds.size).toBe(0);
     expect((await db.allElements(local)).length).toBe(2);
     // The wait is kept (keel's 300 s in full): a press before it ends sends nothing at all.
-    const { readWait } = await import('../src/sendwait');
-    const w = await readWait(local);
+    const { readWait, waitScope } = await import('../src/sendwait');
+    const w = await readWait(waitScope({ id: local, role: 'owner' }));
     expect(w?.code).toBe('rate_limited');
     expect(w!.until - t0).toBeGreaterThanOrEqual(299_000);
     expect(w!.until - t0).toBeLessThanOrEqual(301_000);
@@ -1047,8 +1049,8 @@ describe('put it online on the hand-over', () => {
     keel.keyWritesLocked = 900;
     const local = await localWorld(ELS);
     await expect(putOnline(local, '4321')).rejects.toThrow(/pictures did not arrive\. OnlyWorlds is holding off after too many wrong PINs\. Try again after \S.*\. Your phone copy is kept\./);
-    const { readWait } = await import('../src/sendwait');
-    const w = await readWait(local);
+    const { readWait, waitScope } = await import('../src/sendwait');
+    const w = await readWait(waitScope({ id: local, role: 'owner' }));
     expect(w?.code).toBe('rate_limited');
     expect(w!.until - Date.now()).toBeGreaterThan(890_000);
     keel.keyWritesLocked = null;

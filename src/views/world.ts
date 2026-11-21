@@ -8,7 +8,7 @@ import { search } from '../search';
 import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinFor, setPin } from '../pin';
 import { keyRefusalText, newKeyCures } from '../keyrefusal';
-import { holdsSends, tryAfterText, waitText } from '../sendwait';
+import { holdsSends, tryAfterText, waitClock, waitText, waitWhy } from '../sendwait';
 import {
   supertypeWord,
   customEditable,
@@ -227,15 +227,18 @@ function statusBanner(s: WorldSession): HTMLElement | null {
     });
     return h('div', { class: 'banner', role: 'status' }, text, b);
   }
+  // keel asked for a wait (429): why, and when the changes go. No Try again and no PIN question: nothing
+  // is sent before then, a PIN included.
+  const wait = s.waitRuns();
+  if (wait && s.waitingCount() > 0) {
+    return h('div', { class: 'banner', role: 'status', 'data-wait': '' }, !s.pinKnown() ? `${waitWhy(wait)} Enter your PIN after ${waitClock(wait)}; your changes wait on this phone.` : waitText(wait));
+  }
   if (askPin(s)) {
     const b = h('button', { class: 'btn btn-standard', type: 'button' }, 'Enter your PIN');
     b.addEventListener('click', () => pinSheet(s));
     return h('div', { class: 'banner', role: 'status' }, `Enter your PIN to send ${plural(s.waitingCount(), 'change')}.`, b);
   }
   if (s.status === 'syncing') return h('div', { class: 'banner', role: 'status' }, s.statusText || 'Syncing');
-  // keel asked for a wait (429): why, and when the changes go. No Try again: nothing is sent before then.
-  const wait = s.waitRuns();
-  if (wait && s.waitingCount() > 0) return h('div', { class: 'banner', role: 'status', 'data-wait': '' }, waitText(wait));
   // A key keel no longer takes (Atlas #198's twin): the cause, and a new key in place. An account
   // world can have one made; any world can take one pasted. Never a PIN question for a dead key.
   if (s.keyRefused && newKeyCures(s.keyRefusal) && !s.isLocal) {

@@ -23,7 +23,7 @@ import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
-import { holdSends, holdsSends, MAX_WAIT_S, readWait, tryAfterText, type SendWait } from './sendwait';
+import { holdSends, holdsSends, MAX_WAIT_S, readWait, tryAfterText, waitScope, type SendWait, type WaitScope } from './sendwait';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
@@ -39,7 +39,7 @@ import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 /** Lantern's name on every write (keel's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
 export const LANTERN_CLIENT_NAME = 'lantern';
-/** A change whose element id (or type) OnlyWorlds cannot take as an address: refused, never waiting. */
+/** keel's not_author, in Lantern's words. */
 export const NOT_AUTHOR_REFUSAL = 'You can change only what you made in this world';
 
 /**
@@ -56,6 +56,7 @@ export function oneChangeRefusalText(e: { message?: string }): string {
   return said || 'OnlyWorlds refused this change.';
 }
 
+/** A change whose element id (or type) OnlyWorlds cannot take as an address: refused, never waiting. */
 export const PATH_REFUSAL = 'OnlyWorlds cannot take this element: its id is not one it can address.';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
@@ -192,7 +193,7 @@ export class WorldSession {
     for (const el of await db.allElements(id)) s.truth.set(el.id, el);
     s.outbox = await db.outboxRows(id);
     // keel's wait outlives a reload: the time it ends is kept, never a timer.
-    s.sendWait = await readWait(id);
+    s.sendWait = await readWait(waitScope(rec));
     // A row caught mid-send when the app closed goes back to waiting: a create carries its
     // Idempotency-Key and a patch its If-Match, so sending it again is safe.
     for (const r of s.outbox) {
@@ -763,14 +764,18 @@ export class WorldSession {
 
   // ---------- the client ----------
 
+  /** A ten-digit key (not the demo's) sends the PIN on its reads too (the SDK's OwKeyKind 'legacy'). */
+  get readsCarryPin(): boolean {
+    const key = this.rec.apiKey;
+    return !!key && !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
+  }
+
   private client(withPin: boolean): OwV2Client {
     if (!this.rec.apiKey) throw new Error('This world has no key.');
     // A ten-digit key (not the demo's) needs the PIN to read a private world too (the SDK's
     // OwKeyKind 'legacy'): without it every read came back 401 and the home said "This key no
     // longer opens the world" (a live write walk). Prefixed keys read without one.
-    const key = this.rec.apiKey;
-    const readsNeedPin = !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
-    const pin = withPin || readsNeedPin ? pinFor(this.rec) : undefined;
+    const pin = withPin || this.readsCarryPin ? pinFor(this.rec) : undefined;
     return new OwV2Client({ apiKey: this.rec.apiKey, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
   }
 
@@ -790,6 +795,8 @@ export class WorldSession {
   }
 
   private async doPull(resynced = false, quiet = false): Promise<void> {
+    // A ten-digit key's reads carry the PIN: they wait out keel's wait as the sends do.
+    if (this.readsCarryPin && (await this.currentWait())) return;
     const before = { status: this.status, text: this.statusText };
     if (!quiet) {
       this.status = 'syncing';
@@ -930,6 +937,7 @@ export class WorldSession {
         // What this key may see changed: walk from zero and replace the copy (not merge into it).
         return this.doPull(true);
       }
+      if (this.readsCarryPin && holdsSends(e)) await this.startWait(e as OwApiError);
       this.setError(e);
     }
     // A quiet poll that found nothing new and changed no status draws nothing.
@@ -1003,6 +1011,17 @@ export class WorldSession {
       taken.push(...pics);
       this.outbox = this.outbox.filter((r) => !pics.includes(r));
     }
+    // A change keel refused for this element (keeper_only, not_author, a rule this build does not know):
+    // this edit is the person's new act and takes its place, sent once, refused again if keel says so.
+    // Left in place it would hold every later change to the element behind it, for good. (A create keel
+    // refused is not on the screen, and a picture refused on its own keeps its own Try again.)
+    const replaced = hostRow
+      ? []
+      : this.outbox.filter((r) => r.id === id && r.state === 'refused' && !r.hostRefused && r.op !== 'create' && !isLonePicture(r));
+    if (replaced.length) {
+      this.outbox = this.outbox.filter((r) => !replaced.includes(r));
+      taken.push(...replaced);
+    }
     // Otherwise only the element's last row takes an edit, and only while it waits: an older row put
     // back to waiting (a 412 retry) must never carry a newer value ahead of rows behind it.
     const last = this.lastRowFor(id);
@@ -1033,7 +1052,8 @@ export class WorldSession {
         state: 'waiting',
         createdAt: new Date().toISOString(),
       };
-      row.seq = await db.putOutboxRow(this.id, row);
+      // The new row and the refused rows it replaces, in one transaction.
+      row.seq = await db.putOutboxRowFolding(this.id, row, taken.map((r) => r.seq!));
       this.outbox.push(row);
     }
     this.rebuild();
@@ -1527,8 +1547,13 @@ export class WorldSession {
     this.retryTimer = window.setTimeout(() => void this.flush(), Math.min(Math.max(ms, 1000), (MAX_WAIT_S + 1) * 1000));
   }
 
-  /** keel's wait for this world while it runs (another window may have started it); null once it ended. */
+  /** keel's wait for this world while it runs (another window or another of the account's worlds may have started it); null once it ended. */
   sendWait: SendWait | null = null;
+
+  /** Where this world's waits are kept: its own, and its PIN holder's (src/sendwait.ts). */
+  get waitScope(): WaitScope {
+    return waitScope(this.rec);
+  }
 
   /** The wait while it runs by the clock, for the screens; null once its time has passed. */
   waitRuns(): SendWait | null {
@@ -1537,7 +1562,7 @@ export class WorldSession {
 
   /** The wait as kept, read again; the screen is redrawn when it starts or ends. */
   async currentWait(): Promise<SendWait | null> {
-    const w = await readWait(this.id);
+    const w = await readWait(this.waitScope);
     if (w?.until !== this.sendWait?.until) {
       this.sendWait = w;
       this.emit();
@@ -1547,7 +1572,7 @@ export class WorldSession {
 
   /** keel answered 429: the world's sends wait the time it asked for (up to its 15 minutes). */
   async startWait(e: OwApiError): Promise<SendWait> {
-    this.sendWait = await holdSends(this.id, e);
+    this.sendWait = await holdSends(this.waitScope, e);
     this.retryLater(this.sendWait.until - Date.now());
     this.emit();
     return this.sendWait;

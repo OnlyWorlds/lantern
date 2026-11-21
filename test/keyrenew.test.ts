@@ -39,6 +39,10 @@ class FakeKeel {
   /** World keys keel answers GET /world for, and the world each opens. */
   worlds = new Map<string, { id: string; name: string }>();
   revoked = new Set<string>();
+  /** Set: keel's wrong-PIN wall is locked for this many seconds; a request carrying a PIN meets 429 (core/auth.py). */
+  pinLocked: number | null = null;
+  /** Requests on a world key (not the account's). */
+  keyCalls = 0;
 
   json(status: number, body: unknown) {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -64,10 +68,18 @@ class FakeKeel {
       return this.json(500, { error: { code: 'unexpected', message: `${method} ${path}` } });
     }
     const key = headers.get('API-Key') ?? '';
+    this.keyCalls++;
     if (this.revoked.has(key)) return this.json(401, { error: { code: 'key_revoked', message: 'This key has been revoked.', param: null } });
     const world = this.worlds.get(key);
     if (!world) return this.json(401, { error: { code: 'invalid_credentials', message: 'No valid API-Key.', param: null } });
+    if (headers.get('API-Pin') && this.pinLocked !== null) {
+      return new Response(JSON.stringify({ error: { code: 'rate_limited', type: 'rate_limited', message: 'Too many failed PIN attempts. Try again later.', param: null } }), {
+        status: 429,
+        headers: { 'content-type': 'application/json', 'Retry-After': String(this.pinLocked) },
+      });
+    }
     if (path === '/world') return this.json(200, world);
+    if (path === '/me') return this.json(200, { role: 'contributor', character: null });
     return this.json(500, { error: { code: 'unexpected', message: `${method} ${path}` } });
   };
 }
@@ -80,6 +92,7 @@ beforeEach(async () => {
   session.clear();
   await db.kvSet('accountToken', 'ow_a_test');
   await db.removeWorld(W); // fake IndexedDB outlives a test: each starts from one row
+  await db.kvSet(`sendWait:lantern-pin-${W}`, undefined); // and keel's waits with it
   await db.putWorldRecord({ id: W, name: 'Kessel', kind: 'online', apiKey: OLD, keyKind: 'write', role: 'collaborator', memberRole: 'co_builder', characterId: 'c-1', cursor: '42:0:0', addedAt: '' });
   await db.applyElements(W, [{ id: 'a', type: 'character', name: 'Ada' } as never]);
   await db.putOutboxRow(W, { id: 'a', type: 'character', op: 'patch', values: { name: 'Ada Vell' }, state: 'waiting' } as never);
@@ -161,5 +174,31 @@ describe('a pasted key', () => {
     expect(after.characterId).toBeUndefined();
     expect(after.cursor).toBe('42:0:0');
     expect((await db.outboxRows(W)).length).toBe(1);
+  });
+});
+
+describe("keel's wrong-PIN wait, where a key and its PIN are put in", () => {
+  const LEGACY = '1234567890';
+
+  it('Put in a new key with its PIN: a 429 says the wait, and nothing more is sent before it ends', async () => {
+    keel.worlds.set(LEGACY, { id: W, name: 'Kessel' });
+    keel.pinLocked = 900;
+    await expect(putKeyInPlace(await rec(), LEGACY, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    keel.pinLocked = null;
+    const calls = keel.keyCalls;
+    await expect(putKeyInPlace(await rec(), LEGACY, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    expect(keel.keyCalls).toBe(calls);
+    expect((await rec()).apiKey).toBe(OLD);
+  });
+
+  it('Open with a key and its PIN: the /me that proves it waits out the lock too', async () => {
+    const { openWithKey } = await import('../src/account');
+    keel.worlds.set(PASTED, { id: W, name: 'Kessel' });
+    keel.pinLocked = 600;
+    await expect(openWithKey(PASTED, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    keel.pinLocked = null;
+    const calls = keel.keyCalls;
+    await expect(openWithKey(PASTED, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    expect(keel.keyCalls - calls).toBe(1); // the world read, which carries no PIN; never /me
   });
 });

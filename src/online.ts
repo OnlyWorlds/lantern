@@ -10,7 +10,7 @@ import { OwApiError, OwV2Client } from '@onlyworlds/sdk';
 import * as db from './db';
 import { KEPT, accountName, accountToken, deviceName, whoAmI } from './account';
 import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession, pictureRefusalText } from './world';
-import { setPin } from './pin';
+import { ACCOUNT_PIN_HOLDER, setPin } from './pin';
 import { uuid7 } from './uuid7';
 import { mintKey } from './mints';
 import { moveDraft } from './draft';
@@ -19,7 +19,7 @@ import { withHiddenForCreate } from './hidden';
 import { SERVED_TRIMMED } from './schema';
 import { mintOf } from './revoke';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
-import { fetchThatHolds, holdSends, readWait, tryAfterText } from './sendwait';
+import { fetchThatHolds, holdSends, readWait, tryAfterText, type WaitScope } from './sendwait';
 
 export const BULK_MAX = 1000;
 /** keel's media tickets for one world in a day (KEEL_MEDIA_TICKETS_PER_DAY) and the size of one picture. */
@@ -78,6 +78,9 @@ function producerFor(rec: db.WorldRecord): Record<string, unknown> | undefined {
 }
 
 /** Put it online's own words: shown as they are, never read as a PIN refusal (a key's name can hold "pin"). */
+/** Where a put's waits are kept: the world on the phone's own, and the account's PIN (the put sends it). */
+const putScope = (localId: string): WaitScope => ({ world: `world:${localId}`, pin: ACCOUNT_PIN_HOLDER });
+
 export class OnlineSaid extends Error {}
 
 /** A put whose world may already be on the account, which this phone cannot find: Start over is offered. */
@@ -253,7 +256,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   let rec = await db.getWorldRecord(localId);
   if (!rec || rec.kind !== 'local') throw new Error('This world is not a world on this phone.');
   // keel's wait (429) from an earlier try holds this one: nothing goes out before it ends.
-  const wait = await readWait(localId);
+  const wait = await readWait(putScope(localId));
   if (wait) throw new OnlineSaid(`${tryAfterText(wait)} Your phone copy is kept.`);
   const elements = await db.allElements(localId);
   // A put begun by an earlier Lantern (its world already made, its key known) finishes on its own path.
@@ -339,7 +342,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       Object.assign(p, patch);
       await db.updateWorldRecord(localId, { pendingOnline: { ...p } });
     };
-    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(localId) });
+    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(putScope(localId)) });
     onStep(route === 'handover' ? `Sending the world and its ${elements.length} elements` : 'Making the world on your account');
     let made: { id: string; key?: string } | undefined;
     // After a send with no answer, keel is asked first which world this put's key made: it answers long
@@ -382,7 +385,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
         }
         if (err.status === 429) {
           // The world's wait (src/sendwait.ts): kept, so a press before it ends sends nothing.
-          const wait = tryAfterText(await holdSends(localId, err));
+          const wait = tryAfterText(await holdSends(putScope(localId), err));
           if (retry) throw new OnlineSaid(wait);
           await settle(null);
           throw new OnlineSaid(`${wait} Nothing was made.`);
@@ -453,7 +456,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       throw new OnlineSaid(`The world is online, but this phone could not get its key (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);
     }
   }
-  const client = new OwV2Client({ apiKey: p.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(localId) });
+  const client = new OwV2Client({ apiKey: p.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(putScope(localId)) });
 
   // 3. The pictures the phone holds go to the edge on the new key, each address kept as it comes, then
   //    one atomic /bulk sends the same elements whole with their pictures (an element with an id is
@@ -484,7 +487,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       // A PIN refusal keeps its kind, so the sheet says the PIN.
       if (e instanceof OwApiError && e.status === 401) throw e;
       // keel's wait (the client's fetch kept it): said with its end.
-      const wait = await readWait(localId);
+      const wait = await readWait(putScope(localId));
       if (wait && e instanceof OwApiError && e.status === 429) {
         throw new OnlineSaid(`The world is online, but its pictures did not arrive. ${tryAfterText(wait)} Your phone copy is kept.`);
       }
@@ -646,7 +649,7 @@ async function finishOld(
 ): Promise<string> {
   const localId = rec.id;
   const ownKeys = worldOwnKeys(rec);
-  const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(localId) });
+  const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(putScope(localId)) });
   const held = elements.filter((el) => isHeld(el as Record<string, unknown>));
   for (const [i, el] of held.entries()) {
     onStep(`Sending pictures · ${i + 1} of ${held.length}`);

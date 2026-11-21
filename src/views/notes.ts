@@ -1,7 +1,7 @@
 // A player's own notes (src/notes.ts): written at the table, kept on this phone, and one at a time
 // shared with the party (Titus, 2026-10-14).
 import { typeLabel, typeCount } from '../schema';
-import { OwV2Client, type OwElement } from '@onlyworlds/sdk';
+import { OwApiError, OwV2Client, type OwElement } from '@onlyworlds/sdk';
 import { takePlayerSeat } from '../account';
 import { h, plural } from '../dom';
 import { addNote, markShared, notes, removeNote, unmarkShared, type Note } from '../notes';
@@ -12,7 +12,7 @@ import { elName, errorText, sheet, tabbar, toast, topbar } from '../ui';
 import { markWords } from '../hidden';
 import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinSheet, type View } from './world';
-import { waitClock } from '../sendwait';
+import { holdsSends, tryAfterText, waitClock } from '../sendwait';
 
 /** Worlds with a share in flight on this phone. */
 const sharing = new Set<string>();
@@ -228,6 +228,11 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
       cancel.disabled = true;
       let marked = false;
       try {
+        // keel's wait (429) holds a PIN too: none goes out before it ends.
+        if (pin) {
+          const wait = await s.currentWait();
+          if (wait) throw new Error(tryAfterText(wait));
+        }
         // The first share takes a write key for this player's seat; it is kept, so a wrong PIN
         // next does not mint another.
         if (!s.playerCanSend) await takePlayerSeat(s, s.rec.characterId!);
@@ -237,6 +242,7 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
           try {
             await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: typed, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
           } catch (ex) {
+            if (ex instanceof OwApiError && holdsSends(ex)) throw new Error(tryAfterText(await s.startWait(ex)));
             throw (ex as { status?: number }).status === 401 ? new Error("That PIN is not your account's.") : ex;
           }
           setPin(s.rec, typed);

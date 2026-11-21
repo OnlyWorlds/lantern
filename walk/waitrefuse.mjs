@@ -1,10 +1,13 @@
 // keel's refusal of one change, and keel's wait. On a played keel:
-// 1. keeper_only (the world's house is its keepers'): that one change is refused in keel's words (the
-//    route it points a program at left out), every other element's change goes, the key and the PIN
-//    are never blamed, and the poll never sends the refused change again.
+// 1. keeper_only on a Law (the world's house is its keepers', keel's HOUSE_TYPES law and object): that
+//    one change is refused in keel's words (the route it points a program at left out), every other
+//    element's change goes, the key and the PIN are never blamed, and the poll never sends the refused
+//    change again. The Law's next edit takes its place and is sent once (refused again here).
 // 2. 429 rate_limited with Retry-After 900 (the wrong-PIN lock): nothing is sent for the whole 900 s,
 //    whatever asks (the poll, a new save, a reload); Waiting to send and the home say why and until
 //    when; once it ends the changes go by themselves.
+// 3. The PIN sheet under the lock: a 429 on its /me says the wait and keeps it for the account; a second
+//    press sends nothing; the home then says the wait, never asks for the PIN before it ends.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/waitrefuse.mjs [chromium|webkit]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
@@ -22,14 +25,14 @@ const check = (tag, ok, what) => {
 };
 
 const WID = '0f0f0f0f-0000-4000-8000-0000000e4290';
-const ADA = '0f0f0f0f-0000-4000-8000-0000000c0291';
+const ADA = '0f0f0f0f-0000-4000-8000-0000000c0291'; // a Law: the world's charter
 const BO = '0f0f0f0f-0000-4000-8000-0000000c0292';
 const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
 const zip = Buffer.from(
   writeWorldFile(
     [
       { path: 'world.json', data: enc({ id: WID, name: 'Wait ground' }) },
-      { path: `elements/character/ada--${ADA.slice(-8)}.json`, data: enc({ id: ADA, name: 'Ada', description: 'Keeps the charter.' }) },
+      { path: `elements/law/the-charter--${ADA.slice(-8)}.json`, data: enc({ id: ADA, name: 'The charter', description: 'How the house is kept.' }) },
       { path: `elements/character/bo--${BO.slice(-8)}.json`, data: enc({ id: BO, name: 'Bo', description: 'A ferryman.' }) },
     ],
     'Wait ground',
@@ -49,6 +52,8 @@ async function run(engine, name, device) {
   // WebKit names a poll its own navigation cancelled "due to access control checks" (as walk/opendoor.mjs reads it).
   page.on('pageerror', (e) => !/due to access control checks/.test(e.message) && errors.push(e.message));
   const writes = [];
+  /** Every request that carried a PIN, whatever keel answered. */
+  const pinned = [];
   let head = 100;
   /** Set: keel's PIN wall is locked; every request carrying a PIN is 429 with this Retry-After (core/auth.py). */
   let locked = null;
@@ -63,6 +68,7 @@ async function run(engine, name, device) {
     const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Retry-After' };
     if (method === 'OPTIONS') return r.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': '*', 'access-control-allow-headers': '*' } });
     const pin = req.headers()['api-pin'];
+    if (pin) pinned.push(`${method} ${path}`);
     if (pin && locked !== null) {
       writes.push({ method, path, answer: 429 });
       return r.fulfill({
@@ -78,7 +84,8 @@ async function run(engine, name, device) {
     }
     if (method === 'PATCH' || method === 'POST' || method === 'DELETE') {
       const m = path.match(/^\/([a-z]+)\/([^/]+)\/?$/);
-      if (m && m[2] === ADA) {
+      // keel's house is Laws and Objects (elements/charter.py HOUSE_TYPES).
+      if (m && m[2] === ADA && (m[1] === 'law' || m[1] === 'object')) {
         writes.push({ method, path, answer: 403 });
         return r.fulfill({ ...json({ error: { code: 'keeper_only', type: 'permission_error', message: houseMessage(m[1], m[2]), param: 'id' } }, 403), headers: cors });
       }
@@ -148,7 +155,7 @@ async function run(engine, name, device) {
   };
 
   // ---- 1. keeper_only: one change refused, the rest goes, never sent again by itself
-  await rename(ADA, 'Ada, keeper of the charter');
+  await rename(ADA, 'The charter, amended');
   await rename(BO, 'Bo Vell');
   check(name, patches(ADA).length === 1 && patches(ADA)[0].answer === 403, 'keel refused the house element (keeper_only)');
   check(name, patches(BO).some((w) => w.answer === 200), "the next element's change is sent after the refused one");
@@ -162,6 +169,16 @@ async function run(engine, name, device) {
   const h1 = await text();
   check(name, !/key can no longer|only reads|PIN|no longer opens/i.test(h1), 'the home never blames the key or the PIN');
   check(name, patches(ADA).length === sentAda, `not sent again by itself across three polls (${patches(ADA).length - sentAda} more)`);
+  // The Law's next edit is the person's new act: it takes the refused change's place and goes once.
+  await rename(ADA, 'The charter, as read at dusk');
+  check(name, patches(ADA).length === sentAda + 1 && patches(ADA).at(-1).answer === 403, `the next edit goes once and is refused again (${patches(ADA).length - sentAda})`);
+  const box1b = await outbox();
+  check(name, (box1b.match(/Not sent: Only the world's owner/g) ?? []).length === 1, 'one refused row: the new edit took the old one\'s place');
+  check(name, !/send by themselves/.test(box1b), 'never "They send by themselves" over a refused change');
+  await home();
+  await polls(2);
+  check(name, patches(ADA).length === sentAda + 1, 'the new edit is not sent again by itself');
+  const sentAgain = patches(ADA).length;
 
   // ---- 2. 429 with Retry-After 900: the world's wait, honoured in full
   locked = LOCK_S;
@@ -173,7 +190,8 @@ async function run(engine, name, device) {
       new Promise((res) => {
         const r = indexedDB.open('lantern');
         r.onsuccess = () => {
-          const g = r.result.transaction('kv').objectStore('kv').get(`sendWait:${id}`);
+          // The wrong-PIN lock is the account's (keel counts it there): kept under the account's PIN.
+          const g = r.result.transaction('kv').objectStore('kv').get('sendWait:lantern-pin-account');
           g.onsuccess = () => res({ wait: g.result, now: Date.now() });
         };
       }),
@@ -228,7 +246,38 @@ async function run(engine, name, device) {
     worldId,
   );
   check(name, leftRows.length === 1 && leftRows[0] === 'refused', `only the refused house change is left (${JSON.stringify(leftRows)})`);
-  check(name, patches(ADA).length === sentAda, 'the refused change was never sent again');
+  check(name, patches(ADA).length === sentAgain, 'the refused change was never sent again');
+
+  // ---- 3. The PIN sheet under the lock
+  locked = LOCK_S;
+  await page.evaluate(() => localStorage.removeItem('lantern-pin-account'));
+  await rename(BO, 'Bo of the far bank');
+  await home();
+  const ask = page.getByRole('button', { name: 'Enter your PIN' });
+  check(name, (await ask.count()) === 1, 'with no PIN kept, the home asks for it');
+  await ask.tap();
+  await page.locator('.sheet input[aria-label="PIN"]').fill('1234');
+  const before429 = writes.filter((w) => w.answer === 429).length;
+  await page.getByRole('button', { name: 'Send my changes' }).tap();
+  await page.waitForFunction(() => /Try again after/.test(document.querySelector('.sheet .error')?.textContent ?? ''), null, { timeout: 10000 }).catch(() => {});
+  const said1 = (await page.locator('.sheet .error').textContent()) ?? '';
+  check(name, /^OnlyWorlds is holding off after too many wrong PINs\. Try again after \S/.test(said1), `the PIN sheet says the wait (${said1})`);
+  check(name, writes.filter((w) => w.answer === 429).length === before429 + 1 && writes.at(-1).path.startsWith('/me'), 'its /me met the lock once');
+  locked = null;
+  const atSecond = pinned.length;
+  await page.getByRole('button', { name: 'Send my changes' }).tap();
+  await page.waitForTimeout(800);
+  // A sheet that took the PIN closes: read its words only while it is there.
+  const said2 = (await page.locator('.sheet .error').count()) ? ((await page.locator('.sheet .error').textContent()) ?? '') : '(the sheet closed)';
+  check(name, pinned.length === atSecond, `a second press sends no PIN (${pinned.length - atSecond})`);
+  check(name, /Try again after \S/.test(said2), 'and says the wait again');
+  await page.reload();
+  await page.waitForSelector('[data-screen="home"]');
+  await page.waitForTimeout(800);
+  const banner = page.locator('.banner[data-wait]');
+  check(name, (await banner.count()) === 1 && /Enter your PIN after \S/.test(await banner.innerText()), 'the home says the wait and when to enter the PIN');
+  check(name, (await page.getByRole('button', { name: 'Enter your PIN' }).count()) === 0, 'no PIN question before the wait ends');
+  await page.screenshot({ path: `${OUT}/waitrefuse-${name}-pinwait.png` });
   check(name, errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   await browser.close();
 }

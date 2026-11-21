@@ -12,6 +12,12 @@ export type PinOwner = { id: string; role?: string };
 const ACCOUNT_PIN = 'lantern-pin-account';
 const pinKey = (w: PinOwner) => (w.role ? ACCOUNT_PIN : `lantern-pin-${w.id}`);
 
+/** Whose PIN a world sends, as one name: the account's (every world it holds a role in) or the world's own. keel's wrong-PIN lock is the holder's (src/sendwait.ts). */
+export const pinHolder = (w: PinOwner): string => pinKey(w);
+
+/** The account's PIN holder, for a send made with the account's PIN before a world has a role (Put it online). */
+export const ACCOUNT_PIN_HOLDER = ACCOUNT_PIN;
+
 export function pinFor(w: PinOwner): string | undefined {
   try {
     return localStorage.getItem(pinKey(w)) ?? undefined;

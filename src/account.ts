@@ -2,7 +2,8 @@
 // which gives this phone an account token of its own; a token pasted from onlyworlds.com still
 // works behind "I have an account token" (ow_a_, sent as a Bearer token). The account lists its
 // worlds and mints a key per world this phone opens, named for the phone and revocable on the portal.
-import { OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
+import { OwApiError, OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
+import { holdSends, holdsSends, readWait, tryAfterText, waitScope, waitSeconds } from './sendwait';
 import * as db from './db';
 import { API_BASE, LANTERN_CLIENT_NAME, forgetSession, type WorldSession } from './world';
 import { plural } from './dom';
@@ -454,10 +455,18 @@ export async function putKeyInPlace(rec: db.WorldRecord, apiKey: string, pin?: s
   if (kind === 'account') throw new Error('That is an account token: use Sign in instead.');
   if (kind === 'unknown') throw new Error('That does not look like a world key (ow_w_, ow_r_, or ten digits).');
   if (key === rec.apiKey) throw new Error('That is the key this world has now.');
+  // The key put in keeps its own PIN (no account role): keel's wait for it holds this read, which carries
+  // that PIN for a ten-digit key.
+  const scope = waitScope({ id: rec.id });
+  if (pin) {
+    const wait = await readWait(scope);
+    if (wait) throw new Error(tryAfterText(wait));
+  }
   let meta: { id: string; name: string };
   try {
     meta = await new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).getWorld();
   } catch (e) {
+    if (holdsSends(e)) throw new Error(tryAfterText(await holdSends(scope, e as OwApiError)));
     const code = (e as { code?: string }).code;
     if (code === 'key_revoked') throw new Error('That key was revoked too. Make a new one on the world\'s page on onlyworlds.com.');
     if (code === 'invalid_credentials' && (e as { param?: string | null }).param !== 'API-Pin') throw new Error('OnlyWorlds does not know that key. Copy it again from the world\'s page on onlyworlds.com.');
@@ -550,11 +559,27 @@ export async function openWithKey(apiKey: string, pin?: string): Promise<db.Worl
   if (kind === 'account') throw new Error('That is an account token: use Sign in instead.');
   if (kind === 'unknown') throw new Error('That does not look like a world key (ow_w_, ow_r_, or ten digits).');
   const c = new OwV2Client({ apiKey: key, apiPin: pin || undefined, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
-  const meta = await c.getWorld();
+  let meta: Awaited<ReturnType<OwV2Client['getWorld']>>;
+  try {
+    meta = await c.getWorld();
+  } catch (ex) {
+    // A ten-digit key sends its PIN on this read, before the world is known: keel's wait is said, but
+    // there is no world yet to keep it under.
+    if (holdsSends(ex)) {
+      const e = ex as OwApiError;
+      throw new Error(tryAfterText({ until: Date.now() + waitSeconds(e.retryAfter) * 1000, code: e.code ?? undefined }));
+    }
+    throw ex;
+  }
   if (pin && kind === 'write') {
+    // A world opened with a key keeps its own PIN (no account role): keel's wait for it holds /me.
+    const scope = waitScope({ id: meta.id });
+    const wait = await readWait(scope);
+    if (wait) throw new Error(tryAfterText(wait));
     try {
       await c.me();
     } catch (ex) {
+      if (holdsSends(ex)) throw new Error(tryAfterText(await holdSends(scope, ex as OwApiError)));
       throw (ex as { status?: number }).status === 401 ? new Error("That PIN is not this key's.") : ex;
     }
   }

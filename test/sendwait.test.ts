@@ -1,8 +1,9 @@
-// keel's wait (429) for a world: how long, which answers start it, and that it is kept.
+// keel's wait (429): how long, which answers start it, where it is kept, and that it is kept.
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const { fetchThatHolds, holdSends, readWait, waitSeconds, waitText, MAX_WAIT_S } = await import('../src/sendwait');
+const { fetchThatHolds, holdSends, readWait, waitClock, waitScope, waitSeconds, waitText, MAX_WAIT_S } = await import('../src/sendwait');
+const db = await import('../src/db');
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -14,62 +15,111 @@ function answer(status: number, body: string, headers: Record<string, string> = 
 }
 
 let n = 0;
-const world = () => `sw-${++n}`;
+/** A world of its own, with its own PIN (opened with a key): its own two places. */
+const world = () => waitScope({ id: `sw-${++n}` });
 
 describe('waitSeconds', () => {
-  it("takes keel's seconds whole, up to its 900, a minute when none is said", () => {
-    expect(MAX_WAIT_S).toBe(900);
+  it("takes keel's seconds whole, up to its 901, a minute when none is said", () => {
+    expect(MAX_WAIT_S).toBe(901);
     expect(waitSeconds(900)).toBe(900);
+    expect(waitSeconds(901)).toBe(901);
     expect(waitSeconds(301)).toBe(301);
-    expect(waitSeconds(86_400)).toBe(900);
+    expect(waitSeconds(86_400)).toBe(901);
     expect(waitSeconds(0)).toBe(1);
     expect(waitSeconds(null)).toBe(60);
     expect(waitSeconds(undefined)).toBe(60);
   });
 });
 
-describe('holdSends', () => {
+describe('holdSends and readWait', () => {
   it('keeps the longer of two waits, and lets an ended one go', async () => {
-    const id = world();
+    const scope = world();
     const now = 1_000_000;
-    await holdSends(id, { code: 'rate_limited', retryAfter: 900 }, now);
-    const shorter = await holdSends(id, { code: 'too_many_requests', retryAfter: 10 }, now);
+    await holdSends(scope, { code: 'rate_limited', retryAfter: 900 }, now);
+    const shorter = await holdSends(scope, { code: 'rate_limited', retryAfter: 10 }, now);
     expect(shorter).toEqual({ until: now + 900_000, code: 'rate_limited' });
-    expect(await readWait(id, now + 899_000)).not.toBeNull();
-    expect(await readWait(id, now + 900_000)).toBeNull();
-    expect(await readWait(id, now)).toBeNull(); // let go once read as ended
+    expect(await readWait(scope, now + 899_000)).not.toBeNull();
+    expect(await readWait(scope, now + 900_000)).toBeNull();
+    expect(await readWait(scope, now)).toBeNull(); // let go once read as ended
+  });
+
+  it('the wrong-PIN lock is the PIN holder\'s: every world of the account waits, a world with its own PIN does not', async () => {
+    const now = 2_000_000;
+    const a = waitScope({ id: 'acct-a', role: 'owner' });
+    const b = waitScope({ id: 'acct-b', role: 'collaborator' });
+    const own = waitScope({ id: 'own-c' });
+    await holdSends(a, { code: 'rate_limited', retryAfter: 600 }, now);
+    expect((await readWait(b, now))?.until).toBe(now + 600_000);
+    expect(await readWait(own, now)).toBeNull();
+  });
+
+  it("a busy key's wait (any other 429) is its world's alone", async () => {
+    const now = 3_000_000;
+    const a = waitScope({ id: 'busy-a', role: 'owner' });
+    const b = waitScope({ id: 'busy-b', role: 'owner' });
+    await holdSends(a, { code: 'too_many_requests', retryAfter: 30 }, now);
+    expect((await readWait(a, now))?.code).toBe('too_many_requests');
+    expect(await readWait(b, now)).toBeNull();
+    // Both places at once: the later one holds.
+    await holdSends(a, { code: 'rate_limited', retryAfter: 120 }, now);
+    expect((await readWait(a, now))?.until).toBe(now + 120_000);
+  });
+
+  it('a kept end further off than keel ever asks (a clock set back), or not a number, reads as ended', async () => {
+    const now = 4_000_000;
+    for (const until of [now + 3 * 3600_000, now + 902_000, Number.NaN, Infinity]) {
+      const scope = world();
+      await db.kvSet(`sendWait:${scope.world}`, { until });
+      expect(await readWait(scope, now)).toBeNull();
+      expect(await db.kvGet(`sendWait:${scope.world}`)).toBeUndefined();
+    }
+    const scope = world();
+    await db.kvSet(`sendWait:${scope.world}`, { until: now + 901_000 });
+    expect(await readWait(scope, now)).not.toBeNull();
+  });
+});
+
+describe('waitClock', () => {
+  it('rounds the minute up, never early', () => {
+    const at = new Date(2026, 10, 21, 4, 52, 30).getTime();
+    const shown = waitClock({ until: at });
+    const expected = new Date(2026, 10, 21, 4, 53, 0).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    expect(shown).toBe(expected);
+    const exact = new Date(2026, 10, 21, 4, 52, 0).getTime();
+    expect(waitClock({ until: exact })).toBe(new Date(exact).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
   });
 });
 
 describe('fetchThatHolds', () => {
-  it("a 429 that is the world's starts the wait with keel's Retry-After", async () => {
-    const id = world();
+  it("a wrong-PIN 429 starts the PIN holder's wait with keel's Retry-After", async () => {
+    const scope = world();
     globalThis.fetch = answer(429, JSON.stringify({ error: { code: 'rate_limited', message: 'Too many failed PIN attempts. Try again later.' } }), { 'Retry-After': '900' });
     const t0 = Date.now();
-    const res = await fetchThatHolds(id)('https://x.test/api/v2/bulk');
+    const res = await fetchThatHolds(scope)('https://x.test/api/v2/bulk');
     expect(res.status).toBe(429);
     expect((await res.json()).error.code).toBe('rate_limited'); // the caller still reads the answer
-    const w = await readWait(id);
+    const w = await readWait(scope);
     expect(w?.code).toBe('rate_limited');
+    expect(await db.kvGet(`sendWait:${scope.pin}`)).toBeTruthy();
     expect(w!.until - t0).toBeGreaterThanOrEqual(899_000);
     expect(waitText(w!)).toMatch(/^OnlyWorlds is holding off after too many wrong PINs\. Your changes wait on this phone and go by themselves at \S/);
   });
 
-  it("a day's allowance (a picture's quota, an AI use) is said where it was met: never the world's wait", async () => {
+  it("a day's allowance (a picture's quota, an AI use) is said where it was met: never a wait for sends", async () => {
     for (const code of ['quota_exceeded', 'use_ceiling', 'use_in_flight']) {
-      const id = world();
+      const scope = world();
       globalThis.fetch = answer(429, JSON.stringify({ error: { code } }), { 'Retry-After': '40000' });
-      await fetchThatHolds(id)('https://x.test/api/v2/media/ticket');
-      expect(await readWait(id)).toBeNull();
+      await fetchThatHolds(scope)('https://x.test/api/v2/media/ticket');
+      expect(await readWait(scope)).toBeNull();
     }
   });
 
   it('a 429 with no envelope and no Retry-After waits a minute; any other answer starts nothing', async () => {
-    const id = world();
+    const scope = world();
     globalThis.fetch = answer(429, 'slow down');
     const t0 = Date.now();
-    await fetchThatHolds(id)('https://x.test/api/v2/world');
-    const w = await readWait(id);
+    await fetchThatHolds(scope)('https://x.test/api/v2/world');
+    const w = await readWait(scope);
     expect(w!.until - t0).toBeGreaterThanOrEqual(59_000);
     expect(w!.until - t0).toBeLessThanOrEqual(61_000);
     expect(waitText(w!)).toMatch(/^OnlyWorlds asked this phone to wait before sending more\./);
