@@ -23,6 +23,7 @@ import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
+import { holdSends, holdsSends, MAX_WAIT_S, readWait, tryAfterText, type SendWait } from './sendwait';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
@@ -39,6 +40,22 @@ export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 /** Lantern's name on every write (keel's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
 export const LANTERN_CLIENT_NAME = 'lantern';
 /** A change whose element id (or type) OnlyWorlds cannot take as an address: refused, never waiting. */
+export const NOT_AUTHOR_REFUSAL = 'You can change only what you made in this world';
+
+/**
+ * keel's own words for a refusal of one change. A route it points a program at (keeper_only's "propose
+ * the change: POST /api/v2/<type>/<id>/proposals") is cut: a phone cannot follow it.
+ */
+export function oneChangeRefusalText(e: { message?: string }): string {
+  const said = (e.message ?? '')
+    .replace(/:\s*(?:GET|POST|PUT|PATCH|DELETE)\s+\/\S*?\.?(?=\s|$)/g, '.')
+    .split(/(?<=\.)\s+/)
+    .filter((part) => !/\/api\//.test(part))
+    .join(' ')
+    .trim();
+  return said || 'OnlyWorlds refused this change.';
+}
+
 export const PATH_REFUSAL = 'OnlyWorlds cannot take this element: its id is not one it can address.';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error';
@@ -174,6 +191,8 @@ export class WorldSession {
     const s = new WorldSession(rec);
     for (const el of await db.allElements(id)) s.truth.set(el.id, el);
     s.outbox = await db.outboxRows(id);
+    // keel's wait outlives a reload: the time it ends is kept, never a timer.
+    s.sendWait = await readWait(id);
     // A row caught mid-send when the app closed goes back to waiting: a create carries its
     // Idempotency-Key and a patch its If-Match, so sending it again is safe.
     for (const r of s.outbox) {
@@ -719,6 +738,8 @@ export class WorldSession {
     if (this.isLocal) await this.mayWrite();
     if (!this.isLocal) {
       if (!navigator.onLine) throw new Error('Moving now needs signal. Try again when you have it.');
+      const wait = await this.currentWait();
+      if (wait) throw new Error(tryAfterText(wait));
       try {
         const meta = await this.client(true).patchWorld({ time_range_current: n });
         const k = clockFrom(meta as unknown as Record<string, unknown>);
@@ -726,6 +747,7 @@ export class WorldSession {
         if (k.unit) this.rec = { ...this.rec, timeUnit: k.unit };
       } catch (e) {
         if (e instanceof OwApiError && e.isOwnerOnly) throw new Error("Only the world's owner or a co-builder can move its now.");
+        if (e instanceof OwApiError && holdsSends(e)) throw new Error(tryAfterText(await this.startWait(e)));
         if (e instanceof OwApiError && e.status === 401) {
           // A wrong PIN: cleared, never retried (keel throttles wrong PINs).
           setPin(this.rec, undefined);
@@ -1158,6 +1180,13 @@ export class WorldSession {
     if (buildBehind || this.retired) return;
     const rows = this.outbox.filter((r) => r.state === 'waiting').sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     if (!rows.length) return;
+    // keel asked for a wait (429): nothing goes before it ends, whoever asked for this flush (the poll,
+    // a new save, Send now, Try again). The flush comes back by itself when it ends.
+    const wait = await this.currentWait();
+    if (wait) {
+      this.retryLater(wait.until - Date.now());
+      return;
+    }
     // A key keel no longer takes: sending again changes nothing until a new key is in place.
     if (this.keyRefused && (this.keyRefusal === 'key_revoked' || this.keyRefusal === 'key_unknown')) {
       this.emit();
@@ -1379,10 +1408,27 @@ export class WorldSession {
         await keep('refused', HIDDEN_REFUSAL);
         return false;
       }
-      if (e.status === 403 && !e.isNotAuthor) {
-        await keep('waiting');
+      if (e.status === 403 && refusal === 'read_only_key') {
+        // keel's code for the key itself (a read key on a write): the change waits, the outbox stops,
+        // and the home offers a new key in place.
+        this.keyRefused = true;
+        this.keyRefusal = refusal;
         this.status = 'error';
-        this.statusText = 'This key can no longer write to the world';
+        this.statusText = keyRefusalText(refusal);
+        await keep('waiting');
+        return true;
+      }
+      if (e.status === 403) {
+        // Any other code refuses this one change (keeper_only: the world's house is its keepers'; a code
+        // this build does not know yet reads the same, the mildest reading). Said in keel's words, never
+        // sent again by itself; every other element goes on.
+        await keep('refused', e.isNotAuthor ? NOT_AUTHOR_REFUSAL : oneChangeRefusalText(e));
+        return false;
+      }
+      if (holdsSends(e)) {
+        // keel's wait (429: wrong PINs, or too many requests) is the world's: kept, honoured in full.
+        await keep('waiting');
+        await this.startWait(e);
         return true;
       }
       if (e.isBusy || e.status === 429 || e.status >= 500 || (e.status === 409 && e.code === 'upload_pending') || e.isIdempotencyInFlight) {
@@ -1398,7 +1444,7 @@ export class WorldSession {
         await keep('refused', 'Your Character is not in that group now. Ask your game master.');
         return false;
       }
-      await keep('refused', e.isNotAuthor ? 'You can change only what you made in this world' : e.message);
+      await keep('refused', e.isNotAuthor ? NOT_AUTHOR_REFUSAL : e.message);
       return false;
     }
     // The SDK refuses a body carrying a stub's flag before sending (4.40): a refusal, never "no
@@ -1478,7 +1524,33 @@ export class WorldSession {
 
   private retryLater(ms: number): void {
     clearTimeout(this.retryTimer);
-    this.retryTimer = window.setTimeout(() => void this.flush(), Math.min(Math.max(ms, 1000), 60000));
+    this.retryTimer = window.setTimeout(() => void this.flush(), Math.min(Math.max(ms, 1000), (MAX_WAIT_S + 1) * 1000));
+  }
+
+  /** keel's wait for this world while it runs (another window may have started it); null once it ended. */
+  sendWait: SendWait | null = null;
+
+  /** The wait while it runs by the clock, for the screens; null once its time has passed. */
+  waitRuns(): SendWait | null {
+    return this.sendWait && this.sendWait.until > Date.now() ? this.sendWait : null;
+  }
+
+  /** The wait as kept, read again; the screen is redrawn when it starts or ends. */
+  async currentWait(): Promise<SendWait | null> {
+    const w = await readWait(this.id);
+    if (w?.until !== this.sendWait?.until) {
+      this.sendWait = w;
+      this.emit();
+    }
+    return w;
+  }
+
+  /** keel answered 429: the world's sends wait the time it asked for (up to its 15 minutes). */
+  async startWait(e: OwApiError): Promise<SendWait> {
+    this.sendWait = await holdSends(this.id, e);
+    this.retryLater(this.sendWait.until - Date.now());
+    this.emit();
+    return this.sendWait;
   }
 
   /** The conflict screen's answer: per field, mine or theirs. */

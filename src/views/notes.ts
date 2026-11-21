@@ -12,6 +12,7 @@ import { elName, errorText, sheet, tabbar, toast, topbar } from '../ui';
 import { markWords } from '../hidden';
 import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinSheet, type View } from './world';
+import { waitClock } from '../sendwait';
 
 /** Worlds with a share in flight on this phone. */
 const sharing = new Set<string>();
@@ -247,7 +248,8 @@ function shareSheet(s: WorldSession, n: Note, party: OwElement, circles: OwEleme
         marked = markShared(s.id, n.id, id, elName(party));
         if (!marked) throw new Error('This phone would not keep the note.');
         await s.shareNote(sharedNoteValues(n.text, party.id), id);
-        toast(navigator.onLine ? `Sending to ${elName(party)}…` : `Kept on this phone. It goes to ${elName(party)} when you have signal.`);
+        const wait = s.waitRuns();
+        toast(wait ? `Kept on this phone. It goes to ${elName(party)} by itself at ${waitClock(wait)}.` : navigator.onLine ? `Sending to ${elName(party)}…` : `Kept on this phone. It goes to ${elName(party)} when you have signal.`);
         if (form.isConnected) close();
         refresh();
       } catch (ex) {

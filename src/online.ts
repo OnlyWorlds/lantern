@@ -19,6 +19,7 @@ import { withHiddenForCreate } from './hidden';
 import { SERVED_TRIMMED } from './schema';
 import { mintOf } from './revoke';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
+import { fetchThatHolds, holdSends, readWait, tryAfterText } from './sendwait';
 
 export const BULK_MAX = 1000;
 /** keel's media tickets for one world in a day (KEEL_MEDIA_TICKETS_PER_DAY) and the size of one picture. */
@@ -251,6 +252,9 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   if (!token) throw new Error('Sign in first.');
   let rec = await db.getWorldRecord(localId);
   if (!rec || rec.kind !== 'local') throw new Error('This world is not a world on this phone.');
+  // keel's wait (429) from an earlier try holds this one: nothing goes out before it ends.
+  const wait = await readWait(localId);
+  if (wait) throw new OnlineSaid(`${tryAfterText(wait)} Your phone copy is kept.`);
   const elements = await db.allElements(localId);
   // A put begun by an earlier Lantern (its world already made, its key known) finishes on its own path.
   if (rec.pendingOnline && !isV2(rec.pendingOnline)) return finishOld(rec, rec.pendingOnline, elements, pin, onStep);
@@ -335,7 +339,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       Object.assign(p, patch);
       await db.updateWorldRecord(localId, { pendingOnline: { ...p } });
     };
-    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
+    const acct = new OwV2Client({ apiKey: token, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(localId) });
     onStep(route === 'handover' ? `Sending the world and its ${elements.length} elements` : 'Making the world on your account');
     let made: { id: string; key?: string } | undefined;
     // After a send with no answer, keel is asked first which world this put's key made: it answers long
@@ -377,8 +381,8 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
           throw new OnlineSaid("OnlyWorlds no longer takes this phone's sign-in. Sign in again, then put it online. Nothing was made.");
         }
         if (err.status === 429) {
-          const mins = Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60));
-          const wait = `Too many wrong PINs: OnlyWorlds waits before taking another. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`;
+          // The world's wait (src/sendwait.ts): kept, so a press before it ends sends nothing.
+          const wait = tryAfterText(await holdSends(localId, err));
           if (retry) throw new OnlineSaid(wait);
           await settle(null);
           throw new OnlineSaid(`${wait} Nothing was made.`);
@@ -449,7 +453,7 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       throw new OnlineSaid(`The world is online, but this phone could not get its key (${e instanceof Error ? e.message : String(e)}). Your phone copy is kept; try again.`);
     }
   }
-  const client = new OwV2Client({ apiKey: p.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
+  const client = new OwV2Client({ apiKey: p.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(localId) });
 
   // 3. The pictures the phone holds go to the edge on the new key, each address kept as it comes, then
   //    one atomic /bulk sends the same elements whole with their pictures (an element with an id is
@@ -479,6 +483,11 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
       }
       // A PIN refusal keeps its kind, so the sheet says the PIN.
       if (e instanceof OwApiError && e.status === 401) throw e;
+      // keel's wait (the client's fetch kept it): said with its end.
+      const wait = await readWait(localId);
+      if (wait && e instanceof OwApiError && e.status === 429) {
+        throw new OnlineSaid(`The world is online, but its pictures did not arrive. ${tryAfterText(wait)} Your phone copy is kept.`);
+      }
       // A refusal about the pictures themselves (the day's limit, a full store) is said as the outbox says
       // it: a plain "try again" would send a person into the same refusal all day.
       const why = pictureRefusalText(e);
@@ -637,7 +646,7 @@ async function finishOld(
 ): Promise<string> {
   const localId = rec.id;
   const ownKeys = worldOwnKeys(rec);
-  const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME });
+  const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(localId) });
   const held = elements.filter((el) => isHeld(el as Record<string, unknown>));
   for (const [i, el] of held.entries()) {
     onStep(`Sending pictures · ${i + 1} of ${held.length}`);

@@ -8,6 +8,7 @@ import { noteGiven } from '../given';
 import { elName, errorText, go, sheet, toast } from '../ui';
 import { markWords } from '../hidden';
 import type { WorldSession } from '../world';
+import { waitClock } from '../sendwait';
 
 interface Draft {
   name: string;
@@ -87,7 +88,8 @@ export function giveToParty(s: WorldSession, thing: OwElement, draft?: Draft): v
         const id = await s.create('narrative', revealValues(thing, party.id, name.value, line.value));
         noteGiven(s.id, id);
         // It is in the outbox, not yet with keel: the toast says so (a PIN may still be needed).
-        toast(navigator.onLine ? `Sending to ${elName(party)}…` : `Kept on this phone. ${elName(party)} sees it when you have signal.`);
+        const wait = s.waitRuns();
+        toast(wait ? `Kept on this phone. ${elName(party)} sees it after ${waitClock(wait)}.` : navigator.onLine ? `Sending to ${elName(party)}…` : `Kept on this phone. ${elName(party)} sees it when you have signal.`);
         // Left during the write (a navigation closed the sheet): the user is elsewhere now, stay there.
         if (!form.isConnected) return;
         close();

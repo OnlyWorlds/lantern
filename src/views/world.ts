@@ -8,6 +8,7 @@ import { search } from '../search';
 import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
 import { pinFor, setPin } from '../pin';
 import { keyRefusalText, newKeyCures } from '../keyrefusal';
+import { holdsSends, tryAfterText, waitText } from '../sendwait';
 import {
   supertypeWord,
   customEditable,
@@ -232,6 +233,9 @@ function statusBanner(s: WorldSession): HTMLElement | null {
     return h('div', { class: 'banner', role: 'status' }, `Enter your PIN to send ${plural(s.waitingCount(), 'change')}.`, b);
   }
   if (s.status === 'syncing') return h('div', { class: 'banner', role: 'status' }, s.statusText || 'Syncing');
+  // keel asked for a wait (429): why, and when the changes go. No Try again: nothing is sent before then.
+  const wait = s.waitRuns();
+  if (wait && s.waitingCount() > 0) return h('div', { class: 'banner', role: 'status', 'data-wait': '' }, waitText(wait));
   // A key keel no longer takes (Atlas #198's twin): the cause, and a new key in place. An account
   // world can have one made; any world can take one pasted. Never a PIN question for a dead key.
   if (s.keyRefused && newKeyCures(s.keyRefusal) && !s.isLocal) {
@@ -275,6 +279,12 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
       err.textContent = '';
       btn.disabled = true;
       try {
+        // keel's wait (429) holds a PIN too: none goes out before it ends.
+        const wait = await s.currentWait();
+        if (wait) {
+          err.textContent = tryAfterText(wait);
+          return;
+        }
         // /me proves it before anything is written: since SDK 4.59 a world key's other reads send
         // no PIN, so a world read let a wrong one through to fail at the write.
         await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
@@ -284,6 +294,10 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
         onTaken?.();
         void s.flush();
       } catch (ex) {
+        if (ex instanceof OwApiError && holdsSends(ex)) {
+          err.textContent = tryAfterText(await s.startWait(ex));
+          return;
+        }
         const m = errorText(ex);
         err.textContent = /PIN|credential|401/i.test(m) ? 'That PIN does not open this world.' : m;
       } finally {

@@ -11,6 +11,7 @@ import { proposedWord } from '../review';
 import { hiddenWord, markWords } from '../hidden';
 import { isKnownOf } from '../knownof';
 import { isReadingAid } from '../aids';
+import { goesAtText } from '../sendwait';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
@@ -18,7 +19,8 @@ async function save(s: WorldSession, el: OwElement, values: Record<string, unkno
   try {
     await s.edit(el.id, values, base);
     close();
-    if (!s.isLocal) toast(navigator.onLine ? 'Saved. Sending…' : 'Saved on this phone. It sends when you have signal.');
+    const wait = s.waitRuns();
+    if (!s.isLocal) toast(wait ? `Saved. ${goesAtText(wait)}` : navigator.onLine ? 'Saved. Sending…' : 'Saved on this phone. It sends when you have signal.');
   } catch (e) {
     toast(errorText(e));
   }
@@ -241,7 +243,8 @@ export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void
     const err = h('p', { class: 'error', role: 'alert' });
     const done = (text: string) => {
       close();
-      toast(s.isLocal ? text : navigator.onLine ? `${text} Sending…` : `${text} It sends when you have signal.`);
+      const wait = s.waitRuns();
+      toast(s.isLocal ? text : wait ? `${text} ${goesAtText(wait)}` : navigator.onLine ? `${text} Sending…` : `${text} It sends when you have signal.`);
     };
     const picker = photoPicker(
       (photo) => {

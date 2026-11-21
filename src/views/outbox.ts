@@ -9,6 +9,7 @@ import { movedFields, type WorldSession } from '../world';
 import type { OutboxRow } from '../db';
 import { askPin, pinSheet, type View } from './world';
 import { afterPress } from '../press';
+import { waitText } from '../sendwait';
 
 function show(s: WorldSession, type: string, field: string, v: unknown): string {
   if (isEmptyValue(v)) return '(empty)';
@@ -109,9 +110,11 @@ export function outboxView(s: WorldSession): View {
     const waiting = rows.filter((r) => r.state === 'waiting' || r.state === 'sending');
     const pinBtn = askPin(s) ? h('button', { class: 'btn btn-standard', type: 'button' }, 'Enter your PIN') : null;
     pinBtn?.addEventListener('click', () => pinSheet(s));
+    // keel asked for a wait (429): nothing is sent before it ends, so no Send now; the line says until when.
+    const wait = s.waitRuns();
     // Changes send by themselves the moment there is signal and a PIN; Send now is for the doubt
     // (Titus's walk: "can we force send?").
-    const sendNow = !pinBtn && waiting.some((r) => r.state === 'waiting') ? h('button', { class: 'btn', type: 'button', 'data-action': 'send-now' }, 'Send now') : null;
+    const sendNow = !pinBtn && !wait && waiting.some((r) => r.state === 'waiting') ? h('button', { class: 'btn', type: 'button', 'data-action': 'send-now' }, 'Send now') : null;
     sendNow?.addEventListener('click', () => {
       if (!navigator.onLine) return toast('No signal. Your changes send by themselves when the phone has it.');
       sendNow.disabled = true;
@@ -119,7 +122,11 @@ export function outboxView(s: WorldSession): View {
       void s.flush().finally(() => afterPress(refresh));
     });
     const when = waiting.length
-      ? h('p', { class: 'muted small', style: 'margin:0' }, pinBtn ? 'They send as soon as the PIN is in.' : 'They send by themselves whenever the phone has signal.')
+      ? h(
+          'p',
+          { class: 'muted small', style: 'margin:0', ...(wait ? { 'data-wait': '' } : {}) },
+          pinBtn ? 'They send as soon as the PIN is in.' : wait ? waitText(wait) : 'They send by themselves whenever the phone has signal.',
+        )
       : '';
     main.replaceChildren(
       topbar('Waiting to send', `#/w/${s.id}`),

@@ -52,6 +52,8 @@ class FakeAccountKeel {
   /** The next media ticket fails (a 503), once. */
   failTicketOnce = false;
   ticketQuotaReached = false;
+  /** Set: the account's PIN wall is locked for this many seconds on the world key's writes. */
+  keyWritesLocked: number | null = null;
   mints: Record<string, unknown>[] = [];
   /** Ids keel refuses in its first phase (a field it will not take): every item linking to one fails invalid_link. */
   refuseIds = new Set<string>();
@@ -303,6 +305,10 @@ class FakeAccountKeel {
     const found = this.worldOfKey(headers.get('API-Key'));
     if (!found) return this.err(401, 'invalid_credentials');
     const [worldId, world] = found;
+    // keel's PIN wall comes before the PIN (core/auth.py _check_walls): 429 rate_limited, the lock's seconds.
+    if (method !== 'GET' && headers.get('API-Pin') && this.keyWritesLocked !== null) {
+      return this.json(429, { error: { code: 'rate_limited', message: 'Too many failed PIN attempts. Try again later.' } }, { 'Retry-After': String(this.keyWritesLocked) });
+    }
     if (method !== 'GET' && headers.get('API-Pin') !== this.accountPin) return this.err(401, 'invalid_credentials', 'API-Pin');
     // keel's daily ticket cap (media/api.py _check_quota): 429 quota_exceeded with a Retry-After.
     if (path === '/media/ticket' && this.ticketQuotaReached) {
@@ -549,9 +555,24 @@ describe('put it online', () => {
     keel.accountPin = '4321';
     keel.pinTriesLeft = 0;
     const local = await localWorld(ELS);
-    await expect(putOnline(local, '4321')).rejects.toThrow(/Too many wrong PINs.*Try again in 5 minutes\. Nothing was made\./);
+    const t0 = Date.now();
+    await expect(putOnline(local, '4321')).rejects.toThrow(/too many wrong PINs\. Try again after \S.*\. Nothing was made\./);
     expect(keel.worlds.size).toBe(0);
     expect((await db.allElements(local)).length).toBe(2);
+    // The wait is kept (keel's 300 s in full): a press before it ends sends nothing at all.
+    const { readWait } = await import('../src/sendwait');
+    const w = await readWait(local);
+    expect(w?.code).toBe('rate_limited');
+    expect(w!.until - t0).toBeGreaterThanOrEqual(299_000);
+    expect(w!.until - t0).toBeLessThanOrEqual(301_000);
+    keel.pinTriesLeft = 5;
+    const real = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = ((...a: Parameters<typeof fetch>) => (calls++, real(...a))) as typeof fetch;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/too many wrong PINs\. Try again after \S.*\. Your phone copy is kept\./);
+    globalThis.fetch = real;
+    expect(calls).toBe(0);
+    expect(keel.worlds.size).toBe(0);
   });
 
   it('a keel that refuses a pinned account its PIN on the create (before 2026-11-07, or rolled back): the create goes without it, as before', async () => {
@@ -1019,6 +1040,25 @@ describe('put it online on the hand-over', () => {
     keel.ticketQuotaReached = false;
     const id = await putOnline(local, '4321');
     expect(keel.worlds.get(id)!.els.get(ELS[1].id)?.image_url).toMatch(/^https:/);
+  });
+
+  it("the PIN lock met on the new key's writes (after the world is made) holds the next press until it ends", async () => {
+    keel.accountPin = '4321';
+    keel.keyWritesLocked = 900;
+    const local = await localWorld(ELS);
+    await expect(putOnline(local, '4321')).rejects.toThrow(/pictures did not arrive\. OnlyWorlds is holding off after too many wrong PINs\. Try again after \S.*\. Your phone copy is kept\./);
+    const { readWait } = await import('../src/sendwait');
+    const w = await readWait(local);
+    expect(w?.code).toBe('rate_limited');
+    expect(w!.until - Date.now()).toBeGreaterThan(890_000);
+    keel.keyWritesLocked = null;
+    const real = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = ((...a: Parameters<typeof fetch>) => (calls++, real(...a))) as typeof fetch;
+    await expect(putOnline(local, '4321')).rejects.toThrow(/too many wrong PINs\. Try again after \S.*\./);
+    globalThis.fetch = real;
+    expect(calls).toBe(0);
+    expect(isPutting(await db.getWorldRecord(local))).toBe(true);
   });
 
   it('a failed read back leaves no online world on the phone, so it is never opened or signed out of here while the put holds the copy', async () => {
