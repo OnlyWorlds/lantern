@@ -123,6 +123,8 @@ class FakeKeel {
     }
     if (path === '/media/ticket') return this.json(200, { ticket: 't', upload_url: 'https://edge.test/up', prefix: 'w/', max_bytes: 15e6, exp: 0 });
     if (path === '/world') return this.json(200, { id: 'w1', name: 'Fake world' });
+    // keel's /me: who this key is (a PIN sent here is proven, as above).
+    if (path === '/me') return this.json(200, { role: 'guest', character: null });
     if (path === '/changes') {
       // keel's head read: the world's current change_seq and view epoch, no bodies (core/changes.py).
       // A guest's cursors carry the view epoch: "<seq>:<id>:<epoch>" (keel 4b R2).
@@ -1638,5 +1640,184 @@ describe("the web host's refusal: one write refused in the host's words, never t
     expect(s.keyRefused).toBe(false);
     expect(s.statusText).toMatch(/^The web host in front of OnlyWorlds refused a read of this world/);
     keel.hostBlockReads = false;
+  });
+});
+
+describe('round three: a refused delete, the PIN proven during the wait, the reads of a ten-digit key, the words', () => {
+  const HOUSE = "Only the world's owner and co-builders change this element. Nothing was written. Ask one of them, or propose the change.";
+  const deletes = (id: string) => keel.calls.filter((c) => c === `DELETE /object/${id}`).length;
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('a delete after a refused delete is the new act: it takes its place, goes once, and says it was queued', async () => {
+    keel.put({ id: 'o', type: 'object', name: 'The seal' });
+    keel.house.add('o');
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    expect(await s.remove('o')).toBe(true);
+    await s.flush();
+    expect(s.outbox).toHaveLength(1);
+    expect(s.outbox[0]).toMatchObject({ op: 'delete', state: 'refused', error: HOUSE });
+    // Deleted again: the refused row gives way, the new delete goes once, and is refused again.
+    expect(await s.remove('o')).toBe(true);
+    await s.flush();
+    expect(deletes('o')).toBe(2);
+    expect(s.outbox).toHaveLength(1);
+    expect(s.outbox[0]).toMatchObject({ op: 'delete', state: 'refused' });
+    await s.pull(true);
+    await s.flush();
+    expect(deletes('o')).toBe(2);
+    // Taken by keel now: the next delete lands.
+    keel.house.delete('o');
+    expect(await s.remove('o')).toBe(true);
+    await s.flush();
+    expect(keel.els.has('o')).toBe(false);
+    expect(s.outbox).toHaveLength(0);
+    // Nothing left to delete: said as nothing done.
+    expect(await s.remove('o')).toBe(false);
+  });
+
+  it('an edit that takes the place of a refused change says so', async () => {
+    keel.put({ id: 'a', type: 'law', name: 'The charter' });
+    keel.house.add('a');
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    expect(await s.edit('a', { name: 'The charter, amended' })).toBe(false);
+    await s.flush();
+    expect(await s.edit('a', { name: 'The charter, read aloud' })).toBe(true);
+  });
+
+  it('a create keel refused is never replaced by an edit (its element never landed): the refused row stays whole', async () => {
+    keel.cannotHide = true;
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    const id = await s.create('character', { name: 'Hidden one', hidden: true });
+    await s.flush();
+    expect(s.outbox[0]).toMatchObject({ op: 'create', state: 'refused' });
+    await expect(s.edit(id, { name: 'Hidden two' })).rejects.toThrow(/not on this phone/);
+    expect(s.outbox).toHaveLength(1);
+    expect(s.outbox[0]).toMatchObject({ op: 'create', state: 'refused' });
+    expect(await db.outboxRows(s.id)).toHaveLength(1);
+  });
+
+  it('a picture refused on its own keeps its own Try again: the next edit does not replace it', async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.refuseTicket = { status: 403, code: 'storage_full' };
+    await s.edit('a', { name: 'Ada Vell' }, s.serverCopy('a'), new Blob([new Uint8Array([1])], { type: 'image/webp' }));
+    await s.flush();
+    const lone = s.outbox.find((r) => r.state === 'refused' && r.photo);
+    expect(lone).toBeTruthy();
+    keel.refuseTicket = null;
+    expect(await s.edit('a', { description: 'A cartographer' })).toBe(false);
+    expect(s.outbox.includes(lone!)).toBe(true);
+  });
+
+  it("Let it go on a refused create takes the changes queued behind it: they have nothing to change", async () => {
+    keel.cannotHide = true;
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    let release!: () => void;
+    keel.gate = new Promise((r) => (release = r));
+    const id = await s.create('character', { name: 'Hidden one', hidden: true });
+    await new Promise((r) => setTimeout(r, 20)); // the create is on its way
+    await s.edit(id, { description: 'Added while it went' });
+    expect(s.outbox).toHaveLength(2);
+    keel.gate = null;
+    release();
+    await s.flush();
+    const create = s.outbox.find((r) => r.op === 'create')!;
+    expect(create.state).toBe('refused');
+    expect(s.waitingState()).toMatchObject({ waiting: 1, held: 1 });
+    await s.drop(create);
+    expect(s.outbox).toHaveLength(0);
+    expect(await db.outboxRows(s.id)).toHaveLength(0);
+  });
+
+  it("the world's PIN sheet: during keel's wait nothing is sent; a 429 on its /me starts the wait; a PIN proven is kept", async () => {
+    const { WaitSaid } = await import('../src/sendwait');
+    const s = await freshWorld('owner');
+    await s.pull();
+    keel.pinLocked = 900;
+    await expect(s.takeTypedPin('1234')).rejects.toBeInstanceOf(WaitSaid);
+    expect(s.pinKnown()).toBe(false);
+    expect(s.waitRuns()?.code).toBe('rate_limited');
+    keel.pinLocked = null;
+    const before = keel.calls.length;
+    await expect(s.takeTypedPin('1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    expect(keel.calls.length).toBe(before);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(s.sendWait!.until + 1000);
+    await s.takeTypedPin('1234');
+    expect(s.pinKnown()).toBe(true);
+    expect(keel.calls.slice(before)).toEqual(['GET /me']);
+  });
+
+  it("the share sheet's PIN: during keel's wait nothing is sent and no seat is taken; a 429 on its /me starts the wait", async () => {
+    const { readyPlayerShare } = await import('../src/account');
+    const { WaitSaid } = await import('../src/sendwait');
+    const id = `w-${++n}`;
+    // A player holding a write key for their seat already (no seat to take): their PIN is the account's.
+    await db.putWorldRecord({ id, name: 'Table world', kind: 'online', apiKey: 'ow_w_' + 'p'.repeat(40), keyKind: 'write', memberRole: 'guest', role: 'collaborator', characterId: 'c1', addedAt: '' });
+    forgetSession(id);
+    const s = await openWorld(id);
+    keel.pinLocked = 600;
+    await expect(readyPlayerShare(s, '1234')).rejects.toBeInstanceOf(WaitSaid);
+    expect(s.waitRuns()?.code).toBe('rate_limited');
+    keel.pinLocked = null;
+    const before = keel.calls.length;
+    await expect(readyPlayerShare(s, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    expect(keel.calls.length).toBe(before);
+    expect(s.pinKnown()).toBe(false);
+  });
+
+  it("the share sheet's first share during keel's wait takes no seat: nothing is asked of keel at all", async () => {
+    const { readyPlayerShare } = await import('../src/account');
+    const { WaitSaid, holdSends, waitScope } = await import('../src/sendwait');
+    const id = `w-${++n}`;
+    // A player with only a read key: the first share would take their seat (a mint on the account).
+    await db.putWorldRecord({ id, name: 'Table world', kind: 'online', apiKey: 'ow_r_' + 'p'.repeat(40), keyKind: 'read', memberRole: 'guest', role: 'collaborator', characterId: 'c1', addedAt: '' });
+    await db.kvSet('accountToken', 'ow_a_test');
+    forgetSession(id);
+    const s = await openWorld(id);
+    await holdSends(waitScope(s.rec), { code: 'rate_limited', retryAfter: 600 });
+    const before = keel.calls.length;
+    await expect(readyPlayerShare(s, '1234')).rejects.toBeInstanceOf(WaitSaid);
+    expect(keel.calls.length).toBe(before);
+    await db.kvSet('accountToken', undefined);
+  });
+
+  it("a ten-digit key's reads (roster, public page, files, doors, a file link, who I am) hold during the wait", async () => {
+    const { WaitSaid } = await import('../src/sendwait');
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const id = `w-${++n}`;
+    await db.putWorldRecord({ id, name: 'Old key world', kind: 'online', apiKey: '1234567890', keyKind: 'legacy', addedAt: '', role: 'owner', publicPageOn: true, publicPageAt: 0 });
+    forgetSession(id);
+    const s = await openWorld(id);
+    setPin(s.rec, '1234');
+    await s.pull();
+    keel.pinLocked = 900;
+    await s.pull(true); // meets the lock
+    expect(s.waitRuns()?.code).toBe('rate_limited');
+    keel.pinLocked = null;
+    vi.stubGlobal('navigator', { onLine: true });
+    const before = keel.calls.length;
+    expect(s.roster()).toBeNull();
+    s.askPublicPage();
+    expect(s.files('character', 'a')).toBeNull();
+    expect(s.doors('character', 'a')).toBeNull();
+    await expect(s.fileLink('character', 'a', 'f1')).rejects.toBeInstanceOf(WaitSaid);
+    await s.learnWhoIAm();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(keel.calls.slice(before)).toEqual([]);
+    vi.unstubAllGlobals();
   });
 });

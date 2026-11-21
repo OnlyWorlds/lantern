@@ -93,6 +93,7 @@ beforeEach(async () => {
   await db.kvSet('accountToken', 'ow_a_test');
   await db.removeWorld(W); // fake IndexedDB outlives a test: each starts from one row
   await db.kvSet(`sendWait:lantern-pin-${W}`, undefined); // and keel's waits with it
+  await db.kvSet('sendWait:lantern-pin-account', undefined);
   await db.putWorldRecord({ id: W, name: 'Kessel', kind: 'online', apiKey: OLD, keyKind: 'write', role: 'collaborator', memberRole: 'co_builder', characterId: 'c-1', cursor: '42:0:0', addedAt: '' });
   await db.applyElements(W, [{ id: 'a', type: 'character', name: 'Ada' } as never]);
   await db.putOutboxRow(W, { id: 'a', type: 'character', op: 'patch', values: { name: 'Ada Vell' }, state: 'waiting' } as never);
@@ -200,5 +201,30 @@ describe("keel's wrong-PIN wait, where a key and its PIN are put in", () => {
     const calls = keel.keyCalls;
     await expect(openWithKey(PASTED, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
     expect(keel.keyCalls - calls).toBe(1); // the world read, which carries no PIN; never /me
+  });
+});
+
+describe("the account's wrong-PIN wait, for an account world and at sign-out", () => {
+  const LEGACY = '2345678901';
+
+  it("Put in a new key on an account world sends the account's PIN: the account's wait holds it", async () => {
+    const { holdSends, waitScope } = await import('../src/sendwait');
+    // The account's lock, met on another of its worlds.
+    await holdSends(waitScope({ id: 'another', role: 'owner' }), { code: 'rate_limited', retryAfter: 600 });
+    keel.worlds.set(LEGACY, { id: W, name: 'Kessel' });
+    const calls = keel.keyCalls;
+    await expect(putKeyInPlace(await rec(), LEGACY, '1234')).rejects.toThrow(/too many wrong PINs\. Try again after \S/);
+    expect(keel.keyCalls).toBe(calls);
+    expect((await rec()).apiKey).toBe(OLD);
+  });
+
+  it("a sign-out lets the account's wait go: the next account does not inherit it", async () => {
+    const { holdSends, readWait, waitScope } = await import('../src/sendwait');
+    const { signOut } = await import('../src/account');
+    const scope = waitScope({ id: W, role: 'collaborator' });
+    await holdSends(scope, { code: 'rate_limited', retryAfter: 600 });
+    expect(await readWait(scope)).not.toBeNull();
+    await signOut();
+    expect(await readWait(scope)).toBeNull();
   });
 });

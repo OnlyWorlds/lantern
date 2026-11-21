@@ -1,17 +1,27 @@
 import { OwApiError } from '@onlyworlds/sdk';
 import * as db from './db';
-import { pinHolder, type PinOwner } from './pin';
+import { ACCOUNT_PIN_HOLDER, pinHolder, type PinOwner } from './pin';
 
 /**
- * keel's wait (429, Retry-After), kept where every send that carries a PIN reads it first: the outbox
- * (so the poll, a new save, Send now and Try again), moving now, the PIN sheets, Put it online, a key
- * put in with its PIN, and a ten-digit key's reads (they carry the PIN too). Nothing of those goes out
- * before it ends. The time it ends is kept in the app database, so a reload or a second window keeps it.
+ * keel's wait (429, Retry-After), read first by these sends, none of which goes out before it ends: the
+ * outbox (so the poll, a new save, Send now and Try again), moving now, the world's PIN sheet and the
+ * share sheet's PIN, Put it online, a key put in with a PIN, the /me that proves a PIN when a world is
+ * opened with a key, and every read of a ten-digit key (they carry the PIN too: the poll, the roster, the
+ * public page, files, doors, a file link and who I am). The time it ends is kept in the app database, so
+ * a reload or a second window keeps it.
  *
  * Two places, as keel counts: too many wrong PINs lock the PIN's holder (an account and every world
  * that sends its PIN, keel's core/throttle.py; in Lantern the account's one PIN, or a world opened with
  * another's key and its own PIN), up to 901 s; any other 429 (a busy key) is the world's.
+ *
+ * The limit: a world opened with a key is the key's own PIN holder here, since Lantern cannot tell
+ * whose PIN was typed. Opening one of the account's own worlds that way during the account's wait sends
+ * that PIN once (a ten-digit key on its first read, a write key on its /me); keel refuses it with 429
+ * and counts nothing (the lock is checked before the PIN).
  */
+
+/** Said in place of a send during keel's wait: its words are the screen's. */
+export class WaitSaid extends Error {}
 
 /** keel's longest wait: the PIN lock, 900 s, and the one second its answer can add (core/throttle.py check). */
 export const MAX_WAIT_S = 901;
@@ -128,4 +138,51 @@ export function waitText(w: SendWait): string {
 /** For a send the person asked for (Put it online, moving now, a PIN, a key): why, and when to try again. */
 export function tryAfterText(w: SendWait): string {
   return `${waitWhy(w)} Try again after ${waitClock(w)}.`;
+}
+
+/** The wait while no PIN is kept: the PIN is asked for only once it ends. */
+export function pinAfterText(w: SendWait): string {
+  return `${waitWhy(w)} Enter your PIN after ${waitClock(w)}; your changes wait on this phone.`;
+}
+
+/** Let the account's wrong-PIN wait go: a sign-out, or another account signing in (its lock is not theirs). */
+export async function forgetAccountWait(): Promise<void> {
+  await db.kvSet(kvKey(ACCOUNT_PIN_HOLDER), undefined);
+}
+
+/** A change behind one OnlyWorlds did not take, for the same element: it goes once that one is gone. */
+export const HELD_TEXT = 'A change behind one OnlyWorlds did not take, above, goes once that one is tried again or let go.';
+
+/** What the outbox and the home need to know to say when the waiting changes go. */
+export interface WaitingState {
+  /** Changes waiting (or being sent). */
+  waiting: number;
+  /** Of them, the ones held behind a change OnlyWorlds did not take for the same element. */
+  held: number;
+  /** keel's wait while it runs. */
+  wait: SendWait | null;
+  /** A PIN is kept for this world. */
+  pinKnown: boolean;
+  /** The PIN is being asked for (a send found none). */
+  askPin: boolean;
+}
+
+/** Waiting to send's line under its changes; empty when none wait. */
+export function waitingLine(st: WaitingState): string {
+  if (!st.waiting) return '';
+  if (st.held === st.waiting) return HELD_TEXT;
+  const head = st.wait
+    ? st.pinKnown
+      ? waitText(st.wait)
+      : pinAfterText(st.wait)
+    : st.askPin
+      ? 'They send as soon as the PIN is in.'
+      : 'They send by themselves whenever the phone has signal.';
+  return st.held ? `${head} ${HELD_TEXT}` : head;
+}
+
+/** The home's banner during keel's wait, or null when the wait says nothing there (none runs, nothing goes). */
+export function homeWaitLine(st: WaitingState): string | null {
+  if (!st.wait || st.waiting - st.held <= 0) return null;
+  return st.pinKnown ? waitText(st.wait) : pinAfterText(st.wait);
 }

@@ -5,22 +5,23 @@ import { icon } from '../icons';
 import { search } from '../search';
 import { customEditable, customFieldKey, customFieldProblem, customFields, fieldInfo, fieldLabel, isCustomField, isProfileField, typeColor, typeName, aTypeName } from '../schema';
 import { chipMark, elName, errorText, go, sheet, toast, typeChip } from '../ui';
-import type { WorldSession } from '../world';
+import { REPLACED_REFUSAL, type WorldSession } from '../world';
 import { photoPicker } from './photo';
 import { proposedWord } from '../review';
 import { hiddenWord, markWords } from '../hidden';
 import { isKnownOf } from '../knownof';
 import { isReadingAid } from '../aids';
-import { goesAtText } from '../sendwait';
+import { goesAtText, waitClock } from '../sendwait';
 
 const SHORT_TEXT = new Set(['name', 'supertype', 'subtype']);
 
 async function save(s: WorldSession, el: OwElement, values: Record<string, unknown>, close: () => void, base: OwElement | undefined): Promise<void> {
   try {
-    await s.edit(el.id, values, base);
+    const replaced = await s.edit(el.id, values, base);
     close();
     const wait = s.waitRuns();
-    if (!s.isLocal) toast(wait ? `Saved. ${goesAtText(wait)}` : navigator.onLine ? 'Saved. Sending…' : 'Saved on this phone. It sends when you have signal.');
+    const said = wait ? `Saved. ${goesAtText(wait)}` : navigator.onLine ? 'Saved. Sending…' : 'Saved on this phone. It sends when you have signal.';
+    if (!s.isLocal) toast(replaced ? `${said} ${REPLACED_REFUSAL}` : said);
   } catch (e) {
     toast(errorText(e));
   }
@@ -241,17 +242,18 @@ export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void
   const base = s.serverCopy(el.id);
   sheet((close) => {
     const err = h('p', { class: 'error', role: 'alert' });
-    const done = (text: string) => {
+    const done = (text: string, replaced: boolean) => {
       close();
       const wait = s.waitRuns();
-      toast(s.isLocal ? text : wait ? `${text} ${goesAtText(wait)}` : navigator.onLine ? `${text} Sending…` : `${text} It sends when you have signal.`);
+      const said = s.isLocal ? text : wait ? `${text} ${goesAtText(wait)}` : navigator.onLine ? `${text} Sending…` : `${text} It sends when you have signal.`;
+      toast(replaced ? `${said} ${REPLACED_REFUSAL}` : said);
     };
     const picker = photoPicker(
       (photo) => {
         // Shrinking a big photo takes a moment: a sheet closed meanwhile was a no.
         if (!picker.row.isConnected) return;
         s.edit(el.id, {}, base, photo).then(
-          () => done('Picture saved.'),
+          (replaced) => done('Picture saved.', replaced),
           (e) => (err.textContent = errorText(e)),
         );
       },
@@ -262,7 +264,7 @@ export function pictureSheet(s: WorldSession, el: OwElement, has: boolean): void
           const b = h('button', { class: 'btn btn-quiet', type: 'button', style: 'align-self:center' }, 'Remove the picture');
           b.addEventListener('click', () => {
             s.edit(el.id, { image_url: '' }, base).then(
-              () => done('Picture removed.'),
+              (replaced) => done('Picture removed.', replaced),
               (e) => (err.textContent = errorText(e)),
             );
           });
@@ -289,10 +291,12 @@ export function deleteSheet(s: WorldSession, el: OwElement): void {
     ok.addEventListener('click', async () => {
       ok.disabled = true;
       try {
-        await s.remove(el.id);
+        const queued = await s.remove(el.id);
         close();
         const unsorted = el.type === 'narrative' && el.supertype === 'Unsorted';
-        toast(s.isLocal || navigator.onLine ? `Deleted ${name}.` : `Deleted ${name} on this phone. It sends when you have signal.`);
+        // Said only when it was done or is on its way (an element already gone has nothing to delete).
+        const wait = s.waitRuns();
+        if (queued) toast(s.isLocal ? `Deleted ${name}.` : wait ? `Deleted ${name} on this phone. It goes by itself at ${waitClock(wait)}.` : navigator.onLine ? `Deleted ${name}.` : `Deleted ${name} on this phone. It sends when you have signal.`);
         go(`#/w/${s.id}/t/${el.type}${unsorted ? '?unsorted' : ''}`, true);
       } catch (ex) {
         err.textContent = errorText(ex);

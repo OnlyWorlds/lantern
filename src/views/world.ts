@@ -1,14 +1,14 @@
 // Inside a world: its home (find, the types), a type's list, an element's page.
-import { OwApiError, OwV2Client, type OwElement, type OwFileRow } from '@onlyworlds/sdk';
+import { OwApiError, type OwElement, type OwFileRow } from '@onlyworlds/sdk';
 import { newestFirst } from '../when';
 import { fileLine } from '../files';
 import { h, plural } from '../dom';
 import { icon, typeIcon } from '../icons';
 import { search } from '../search';
-import { API_BASE, LANTERN_CLIENT_NAME, type WorldSession } from '../world';
-import { pinFor, setPin } from '../pin';
+import { type WorldSession } from '../world';
+import { pinFor } from '../pin';
 import { keyRefusalText, newKeyCures } from '../keyrefusal';
-import { holdsSends, tryAfterText, waitClock, waitText, waitWhy } from '../sendwait';
+import { homeWaitLine, WaitSaid } from '../sendwait';
 import {
   supertypeWord,
   customEditable,
@@ -228,11 +228,9 @@ function statusBanner(s: WorldSession): HTMLElement | null {
     return h('div', { class: 'banner', role: 'status' }, text, b);
   }
   // keel asked for a wait (429): why, and when the changes go. No Try again and no PIN question: nothing
-  // is sent before then, a PIN included.
-  const wait = s.waitRuns();
-  if (wait && s.waitingCount() > 0) {
-    return h('div', { class: 'banner', role: 'status', 'data-wait': '' }, !s.pinKnown() ? `${waitWhy(wait)} Enter your PIN after ${waitClock(wait)}; your changes wait on this phone.` : waitText(wait));
-  }
+  // is sent before then, a PIN included. Changes held behind a refused one are not counted as going.
+  const waitLine = homeWaitLine(s.waitingState());
+  if (waitLine) return h('div', { class: 'banner', role: 'status', 'data-wait': '' }, waitLine);
   if (askPin(s)) {
     const b = h('button', { class: 'btn btn-standard', type: 'button' }, 'Enter your PIN');
     b.addEventListener('click', () => pinSheet(s));
@@ -282,23 +280,14 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
       err.textContent = '';
       btn.disabled = true;
       try {
-        // keel's wait (429) holds a PIN too: none goes out before it ends.
-        const wait = await s.currentWait();
-        if (wait) {
-          err.textContent = tryAfterText(wait);
-          return;
-        }
-        // /me proves it before anything is written: since SDK 4.59 a world key's other reads send
-        // no PIN, so a world read let a wrong one through to fail at the write.
-        await new OwV2Client({ apiKey: s.rec.apiKey!, apiPin: pin.value.trim(), baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
-        setPin(s.rec, pin.value.trim());
-        s.needPin = false;
+        // Proven on /me and kept; keel's wait holds it (nothing sent, WaitSaid with the words).
+        await s.takeTypedPin(pin.value.trim());
         close();
         onTaken?.();
         void s.flush();
       } catch (ex) {
-        if (ex instanceof OwApiError && holdsSends(ex)) {
-          err.textContent = tryAfterText(await s.startWait(ex));
+        if (ex instanceof WaitSaid) {
+          err.textContent = ex.message;
           return;
         }
         const m = errorText(ex);
@@ -1183,7 +1172,7 @@ function fileRow(s: WorldSession, el: OwElement, r: OwFileRow): HTMLElement {
       a.click();
       a.remove();
     } catch (ex) {
-      toast(ex instanceof OwApiError && ex.status === 404 ? 'This file is no longer on OnlyWorlds.' : 'The file could not be fetched. Try again in a moment.');
+      toast(ex instanceof WaitSaid ? ex.message : ex instanceof OwApiError && ex.status === 404 ? 'This file is no longer on OnlyWorlds.' : 'The file could not be fetched. Try again in a moment.');
     } finally {
       get.removeAttribute('disabled');
       get.textContent = 'Download';

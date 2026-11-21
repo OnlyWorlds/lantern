@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const { fetchThatHolds, holdSends, readWait, waitClock, waitScope, waitSeconds, waitText, MAX_WAIT_S } = await import('../src/sendwait');
+const { fetchThatHolds, forgetAccountWait, holdSends, homeWaitLine, HELD_TEXT, pinAfterText, readWait, waitClock, waitingLine, waitScope, waitSeconds, waitText, MAX_WAIT_S } = await import('../src/sendwait');
 const db = await import('../src/db');
 
 const realFetch = globalThis.fetch;
@@ -128,5 +128,44 @@ describe('fetchThatHolds', () => {
     globalThis.fetch = answer(503, '{}', { 'Retry-After': '5' });
     await fetchThatHolds(other)('https://x.test/api/v2/world');
     expect(await readWait(other)).toBeNull();
+  });
+});
+
+describe('the words for the waiting changes', () => {
+  const wait = { until: new Date(2026, 10, 21, 4, 52, 30).getTime(), code: 'rate_limited' };
+  const base = { waiting: 2, held: 0, wait: null, pinKnown: true, askPin: false };
+
+  it('Waiting to send: by themselves, the PIN first, the wait, the wait with no PIN, and the held', () => {
+    expect(waitingLine({ ...base, waiting: 0 })).toBe('');
+    expect(waitingLine(base)).toBe('They send by themselves whenever the phone has signal.');
+    expect(waitingLine({ ...base, pinKnown: false, askPin: true })).toBe('They send as soon as the PIN is in.');
+    expect(waitingLine({ ...base, wait })).toBe(waitText(wait));
+    expect(waitingLine({ ...base, wait, pinKnown: false, askPin: true })).toBe(pinAfterText(wait));
+    expect(pinAfterText(wait)).toMatch(/^OnlyWorlds is holding off after too many wrong PINs\. Enter your PIN after \S.*; your changes wait on this phone\.$/);
+    // Held behind a change OnlyWorlds did not take: never "by themselves" over it.
+    expect(waitingLine({ ...base, held: 2 })).toBe(HELD_TEXT);
+    expect(waitingLine({ ...base, held: 2, wait })).toBe(HELD_TEXT);
+    expect(waitingLine({ ...base, held: 1 })).toBe(`They send by themselves whenever the phone has signal. ${HELD_TEXT}`);
+  });
+
+  it('the home: the wait, the wait with no PIN, and nothing when every waiting change is held or none runs', () => {
+    expect(homeWaitLine(base)).toBeNull();
+    expect(homeWaitLine({ ...base, wait })).toBe(waitText(wait));
+    expect(homeWaitLine({ ...base, wait, pinKnown: false })).toBe(pinAfterText(wait));
+    expect(homeWaitLine({ ...base, wait, held: 2 })).toBeNull();
+    expect(homeWaitLine({ ...base, wait, waiting: 0 })).toBeNull();
+  });
+});
+
+describe('forgetAccountWait', () => {
+  it("lets the account's wrong-PIN wait go, and a world's own waits stay", async () => {
+    const now = Date.now();
+    const acct = waitScope({ id: 'fa', role: 'owner' });
+    const own = waitScope({ id: 'fb' });
+    await holdSends(acct, { code: 'rate_limited', retryAfter: 600 }, now);
+    await holdSends(own, { code: 'rate_limited', retryAfter: 600 }, now);
+    await forgetAccountWait();
+    expect(await readWait(acct, now)).toBeNull();
+    expect(await readWait(own, now)).not.toBeNull();
   });
 });

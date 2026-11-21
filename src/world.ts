@@ -23,7 +23,7 @@ import { isEmptyValue, withoutLinksTo } from './schema';
 import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
-import { holdSends, holdsSends, MAX_WAIT_S, readWait, tryAfterText, waitScope, type SendWait, type WaitScope } from './sendwait';
+import { holdSends, holdsSends, MAX_WAIT_S, readWait, tryAfterText, WaitSaid, waitScope, type SendWait, type WaitingState, type WaitScope } from './sendwait';
 import { calendarOf, clockFrom } from './time';
 import { chooseCalendar, chosenCalendar } from './calendarpick';
 import { fromWire, isKnownOf, KNOWN_OF_REFUSAL } from './knownof';
@@ -39,6 +39,9 @@ import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 /** Lantern's name on every write (keel's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
 export const LANTERN_CLIENT_NAME = 'lantern';
+/** Said after an edit that took the place of a change OnlyWorlds refused (`edit()` returns true). */
+export const REPLACED_REFUSAL = 'It takes the place of the change OnlyWorlds did not take.';
+
 /** keel's not_author, in Lantern's words. */
 export const NOT_AUTHOR_REFUSAL = 'You can change only what you made in this world';
 
@@ -249,7 +252,7 @@ export class WorldSession {
    * phone has signal; a refusal stays quiet (the mark says "an agent" without the name).
    */
   roster(): OwMember[] | null {
-    if (!this.rosterAsked && !this.isLocal && this.rec.kind !== 'demo' && this.rec.apiKey && navigator.onLine) {
+    if (!this.rosterAsked && !this.isLocal && this.rec.kind !== 'demo' && this.rec.apiKey && navigator.onLine && !this.readsHeld()) {
       this.rosterAsked = true;
       this.client(false).members().then(
         (rows) => {
@@ -272,7 +275,7 @@ export class WorldSession {
    * failed read changes nothing (the last answer stands, offline-first).
    */
   askPublicPage(): void {
-    if (this.publicPageAsked || this.rec.kind !== 'online' || !this.rec.apiKey || !navigator.onLine) return;
+    if (this.publicPageAsked || this.rec.kind !== 'online' || !this.rec.apiKey || !navigator.onLine || this.readsHeld()) return;
     if (readerOf(this.rec) !== 'public' || !publicPageStale(this.rec)) return;
     // A full read under way asks GET /world itself and writes the answer: the ask is kept for later.
     if (this.status === 'syncing') return;
@@ -309,7 +312,7 @@ export class WorldSession {
       this.fileSlots.set(id, slot);
     }
     const s = slot;
-    if (!s.asking && navigator.onLine && (s.readAt === 0 || now - s.readAt > 60_000)) {
+    if (!s.asking && navigator.onLine && !this.readsHeld() && (s.readAt === 0 || now - s.readAt > 60_000)) {
       s.asking = true;
       Promise.resolve()
         .then(() => this.client(false).listFiles(type, id))
@@ -351,7 +354,7 @@ export class WorldSession {
     const s = slot;
     const stale = s.readAt === 0 || now - s.readAt > 60_000;
     const passed = s.read !== null && !readCovers(s.read, copyUpdated) && s.askedFor !== copyUpdated;
-    if (!s.asking && navigator.onLine && (stale || passed)) {
+    if (!s.asking && navigator.onLine && !this.readsHeld() && (stale || passed)) {
       s.asking = true;
       s.askedFor = copyUpdated;
       Promise.resolve()
@@ -383,6 +386,10 @@ export class WorldSession {
 
   /** A link to one file, asked for at the tap and used at once: the link is the credential, never kept. */
   async fileLink(type: string, id: string, fileId: string): Promise<string> {
+    if (this.readsCarryPin) {
+      const wait = await this.currentWait();
+      if (wait) throw new WaitSaid(tryAfterText(wait));
+    }
     const d = await this.client(false).fileDownloadLink(type, id, fileId);
     if (typeof d.url !== 'string' || !/^https:\/\//.test(d.url)) throw new Error('no file address');
     return d.url;
@@ -400,6 +407,7 @@ export class WorldSession {
    */
   async learnWhoIAm(): Promise<void> {
     if (this.isLocal || this.rec.kind === 'demo' || !this.rec.apiKey) return;
+    if (this.readsCarryPin && (await this.currentWait())) return;
     try {
       const me = await this.client(false).me();
       // The SDK types the role as open (a new one may come); Lantern knows these three.
@@ -770,6 +778,11 @@ export class WorldSession {
     return !!key && !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
   }
 
+  /** A ten-digit key's reads carry the PIN: they hold while keel's wait runs (asked again after it). */
+  private readsHeld(): boolean {
+    return this.readsCarryPin && !!this.waitRuns();
+  }
+
   private client(withPin: boolean): OwV2Client {
     if (!this.rec.apiKey) throw new Error('This world has no key.');
     // A ten-digit key (not the demo's) needs the PIN to read a private world too (the SDK's
@@ -985,7 +998,8 @@ export class WorldSession {
    * server's copy when the user started the edit: a change that arrived since then is a conflict
    * for the 412 rule to judge, never a silent base.
    */
-  async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement, photo?: Blob): Promise<void> {
+  /** Returns true when it took the place of a change OnlyWorlds refused (the screens say so). */
+  async edit(id: string, values: Record<string, unknown>, baseAtOpen?: OwElement, photo?: Blob): Promise<boolean> {
     await this.mayWrite();
     // A stub's empties are not its values (a world file can bring one into a world you can write).
     if (this.isStub(id)) throw new Error(KNOWN_OF_REFUSAL);
@@ -997,7 +1011,7 @@ export class WorldSession {
       this.truth.set(id, next);
       this.rebuild();
       this.emit();
-      return;
+      return false;
     }
     // The element's row the web host refused, wherever it sits: this edit merges into it and sends it
     // again, with any edits queued behind it folded in first (all in memory before any await, so an
@@ -1059,6 +1073,7 @@ export class WorldSession {
     this.rebuild();
     this.emit();
     void this.flush();
+    return replaced.length > 0;
   }
 
   /**
@@ -1112,10 +1127,11 @@ export class WorldSession {
    * Online it is a row like any change: hidden at once, sent in order behind anything already in
    * flight for it. A catch that never left the phone is simply dropped, and nothing is sent.
    */
-  async remove(id: string): Promise<void> {
+  /** Delete an element: done here or queued to send (true), or nothing to delete (false). */
+  async remove(id: string): Promise<boolean> {
     await this.mayWrite();
     const el = this.view.get(id);
-    if (!el) return;
+    if (!el) return false;
     if (this.isStub(id)) throw new Error(KNOWN_OF_REFUSAL);
     if (this.isLocal) {
       const gone = new Set([id]);
@@ -1132,9 +1148,11 @@ export class WorldSession {
       if (rec) this.rec = rec;
       this.rebuild();
       this.emit();
-      return;
+      return true;
     }
-    if (this.outbox.some((r) => r.id === id && r.op === 'delete')) return;
+    // A delete already on its way. One keel refused is let go below, and this delete is the person's
+    // new act: sent once, refused again if keel says so.
+    if (this.outbox.some((r) => r.id === id && r.op === 'delete' && r.state !== 'refused')) return true;
     const rows = this.outbox.filter((r) => r.id === id);
     const create = rows.find((r) => r.op === 'create');
     // Rows not in flight are moot once it is deleted: let them go. One sending stays, and the delete follows it.
@@ -1153,7 +1171,7 @@ export class WorldSession {
       // Never left the phone: gone with nothing sent.
       this.rebuild();
       this.emit();
-      return;
+      return true;
     }
     const row: OutboxRow = {
       op: 'delete',
@@ -1169,6 +1187,7 @@ export class WorldSession {
     this.rebuild();
     this.emit();
     void this.flush();
+    return true;
   }
 
   /** A delete keel answered (or had already done): the element leaves this phone's copy. */
@@ -1547,6 +1566,43 @@ export class WorldSession {
     this.retryTimer = window.setTimeout(() => void this.flush(), Math.min(Math.max(ms, 1000), (MAX_WAIT_S + 1) * 1000));
   }
 
+  /**
+   * A typed PIN proven on /me before it is kept: since SDK 4.59 a world key's other reads send no PIN, so
+   * a world read let a wrong one through to fail at the write. keel's wait holds it like any PIN: during
+   * it nothing is sent, and a 429 starts it; both throw `WaitSaid` with the words to show. Any other
+   * refusal is thrown as keel's.
+   */
+  async provePin(typed: string): Promise<void> {
+    await this.throwIfWaiting();
+    try {
+      await new OwV2Client({ apiKey: this.rec.apiKey!, apiPin: typed, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME }).me();
+    } catch (ex) {
+      if (ex instanceof OwApiError && holdsSends(ex)) throw new WaitSaid(tryAfterText(await this.startWait(ex)));
+      throw ex;
+    }
+  }
+
+  /** The world's PIN sheet: the typed PIN proven (`provePin`) and kept, so the waiting changes can go. */
+  async takeTypedPin(typed: string): Promise<void> {
+    await this.provePin(typed);
+    setPin(this.rec, typed);
+    this.needPin = false;
+  }
+
+  /** Before a send the person asked for that carries a PIN: `WaitSaid` while keel's wait runs. */
+  async throwIfWaiting(): Promise<void> {
+    const wait = await this.currentWait();
+    if (wait) throw new WaitSaid(tryAfterText(wait));
+  }
+
+  /** What the outbox and the home say about the waiting changes (src/sendwait.ts waitingLine, homeWaitLine). */
+  waitingState(): WaitingState {
+    const refused = this.outbox.filter((r) => r.state === 'refused');
+    const waiting = this.outbox.filter((r) => r.state === 'waiting' || r.state === 'sending');
+    const held = waiting.filter((r) => refused.some((q) => q.id === r.id && (q.seq ?? 0) < (r.seq ?? 0))).length;
+    return { waiting: waiting.length, held, wait: this.waitRuns(), pinKnown: this.pinKnown(), askPin: this.needPin && !this.pinKnown() && waiting.length > 0 };
+  }
+
   /** keel's wait for this world while it runs (another window or another of the account's worlds may have started it); null once it ended. */
   sendWait: SendWait | null = null;
 
@@ -1609,9 +1665,15 @@ export class WorldSession {
   /** Drop an edit (take theirs, or let a refused change go). */
   async drop(row: OutboxRow, theirs?: OwElement): Promise<void> {
     const take = theirs && this.isNewer(theirs) ? { ...theirs, type: theirs.type || row.type } : null;
+    // A create keel refused never made the element: the changes queued behind it have nothing to change,
+    // so they go with it (left, they would wait for good).
+    const orphans = row.op === 'create' && row.state === 'refused' && !this.truth.has(row.id)
+      ? this.outbox.filter((r) => r !== row && r.id === row.id && r.state !== 'sending')
+      : [];
     await db.settleOutboxRow(this.id, row.seq!, take);
+    for (const r of orphans) await db.deleteOutboxRow(this.id, r.seq!);
     if (take) this.truth.set(take.id, take);
-    this.outbox = this.outbox.filter((r) => r !== row);
+    this.outbox = this.outbox.filter((r) => r !== row && !orphans.includes(r));
     this.rebuild();
     this.emit();
   }

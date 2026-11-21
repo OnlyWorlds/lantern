@@ -3,7 +3,7 @@
 // works behind "I have an account token" (ow_a_, sent as a Bearer token). The account lists its
 // worlds and mints a key per world this phone opens, named for the phone and revocable on the portal.
 import { OwApiError, OwV2Client, OwSignInError, detectKeyKind, isDemoKey, kindCanWrite, type OwKeyKind } from '@onlyworlds/sdk';
-import { holdSends, holdsSends, readWait, tryAfterText, waitScope, waitSeconds } from './sendwait';
+import { forgetAccountWait, holdSends, holdsSends, readWait, tryAfterText, waitScope, waitSeconds } from './sendwait';
 import * as db from './db';
 import { API_BASE, LANTERN_CLIENT_NAME, forgetSession, type WorldSession } from './world';
 import { plural } from './dom';
@@ -98,6 +98,8 @@ export async function keepAccount(token: string, who: AccountWho, tokenId?: stri
   if (before && before !== who.id) {
     await db.kvSet('accountWorlds', undefined);
     forgetAccountPin();
+    // The old account's wrong-PIN wait is not this one's.
+    await forgetAccountWait();
     for (const w of await db.listWorlds()) {
       if (w.role) {
         await db.updateWorldRecord(w.id, { role: undefined, heldRole: w.role, heldBy: before });
@@ -212,6 +214,7 @@ export async function signOut(): Promise<{ revoking: Promise<RevokeOutcome> | nu
   await db.kvSet('pendingOpen', undefined);
   await db.kvSet('accountWorlds', undefined);
   forgetAccountPin();
+  await forgetAccountWait();
   // The account id stays, so the next sign-in can tell whether it is the same account.
   dropHandoffRecord();
   return { revoking };
@@ -455,9 +458,10 @@ export async function putKeyInPlace(rec: db.WorldRecord, apiKey: string, pin?: s
   if (kind === 'account') throw new Error('That is an account token: use Sign in instead.');
   if (kind === 'unknown') throw new Error('That does not look like a world key (ow_w_, ow_r_, or ten digits).');
   if (key === rec.apiKey) throw new Error('That is the key this world has now.');
-  // The key put in keeps its own PIN (no account role): keel's wait for it holds this read, which carries
-  // that PIN for a ten-digit key.
-  const scope = waitScope({ id: rec.id });
+  // The PIN sent with it is the one this world holds now (the account's for an account world, the
+  // screen passes pinFor(rec)): keel's wait for that PIN's holder holds this read, which carries the PIN
+  // for a ten-digit key, and a 429 here is kept for that holder.
+  const scope = waitScope(rec);
   if (pin) {
     const wait = await readWait(scope);
     if (wait) throw new Error(tryAfterText(wait));
@@ -514,6 +518,24 @@ export async function mintPlayerKey(worldId: string, characterId: string): Promi
     throw other;
   }
   return { key: minted.key, keyMint, token };
+}
+
+/**
+ * Before a player's note is shared: keel's wait holds a typed PIN (nothing sent, the seat not taken),
+ * the first share takes the player's seat, and a typed PIN is proven on /me and kept. Throws `WaitSaid`
+ * during keel's wait, or the PIN refused in the player's words.
+ */
+export async function readyPlayerShare(s: WorldSession, typed?: string): Promise<void> {
+  if (typed) await s.throwIfWaiting();
+  if (!s.playerCanSend) await takePlayerSeat(s, s.rec.characterId!);
+  if (!typed) return;
+  try {
+    await s.provePin(typed);
+  } catch (ex) {
+    throw (ex as { status?: number }).status === 401 ? new Error("That PIN is not your account's.") : ex;
+  }
+  setPin(s.rec, typed);
+  s.needPin = false;
 }
 
 /**

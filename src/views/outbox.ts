@@ -9,7 +9,7 @@ import { movedFields, type WorldSession } from '../world';
 import type { OutboxRow } from '../db';
 import { askPin, pinSheet, type View } from './world';
 import { afterPress } from '../press';
-import { waitClock, waitText, waitWhy } from '../sendwait';
+import { waitingLine } from '../sendwait';
 
 function show(s: WorldSession, type: string, field: string, v: unknown): string {
   if (isEmptyValue(v)) return '(empty)';
@@ -126,19 +126,7 @@ export function outboxView(s: WorldSession): View {
       sendNow.textContent = 'Sending…';
       void s.flush().finally(() => afterPress(refresh));
     });
-    const behindRefused = 'A change behind one OnlyWorlds did not take, above, goes once that one is tried again or let go.';
-    const whenText =
-      held.length === waiting.length
-        ? behindRefused
-        : `${
-            wait
-              ? !s.pinKnown()
-                ? `${waitWhy(wait)} Enter your PIN after ${waitClock(wait)}; your changes wait on this phone.`
-                : waitText(wait)
-              : pinBtn
-                ? 'They send as soon as the PIN is in.'
-                : 'They send by themselves whenever the phone has signal.'
-          }${held.length ? ` ${behindRefused}` : ''}`;
+    const whenText = waitingLine(s.waitingState());
     const when = waiting.length
       ? h('p', { class: 'muted small', style: 'margin:0', ...(wait ? { 'data-wait': '' } : {}), ...(held.length ? { 'data-held': '' } : {}) }, whenText)
       : '';
