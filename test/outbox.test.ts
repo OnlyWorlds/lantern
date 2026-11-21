@@ -1821,3 +1821,142 @@ describe('round three: a refused delete, the PIN proven during the wait, the rea
     vi.unstubAllGlobals();
   });
 });
+
+describe('round four: Let it go takes only what it should, and a window already open honours a wait another started', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  /** A refused row and others, put in place as a session meets them (the outbox kept in the database too). */
+  async function withRows(s: Awaited<ReturnType<typeof freshWorld>>, rows: OutboxRowT[]): Promise<OutboxRowT[]> {
+    for (const r of rows) {
+      r.seq = await db.putOutboxRow(s.id, r);
+      s.outbox.push(r);
+    }
+    return rows;
+  }
+  const row = (o: Partial<OutboxRowT> & Pick<OutboxRowT, 'op' | 'id' | 'state'>): OutboxRowT =>
+    ({ type: 'character', values: {}, createdAt: '', ...o }) as OutboxRowT;
+
+  it("Let it go on a refused create leaves another element's changes alone", async () => {
+    const s = await freshWorld();
+    await s.pull();
+    const [create, orphan, other] = await withRows(s, [
+      row({ op: 'create', id: 'x', state: 'refused', values: { name: 'Never made' } }),
+      row({ op: 'patch', id: 'x', state: 'waiting', values: { description: 'On it' }, lateBase: true }),
+      row({ op: 'patch', id: 'y', state: 'waiting', values: { name: 'Someone else' }, lateBase: true }),
+    ]);
+    await s.drop(create);
+    expect(s.outbox).toEqual([other]);
+    expect((await db.outboxRows(s.id)).map((r) => r.seq)).toEqual([other.seq]);
+    expect(s.outbox.includes(orphan)).toBe(false);
+  });
+
+  it('Let it go on a refused create whose element is in the copy keeps the changes queued behind it', async () => {
+    keel.put({ id: 'x', type: 'character', name: 'Made after all' });
+    const s = await freshWorld();
+    await s.pull();
+    const [create, edit] = await withRows(s, [
+      row({ op: 'create', id: 'x', state: 'refused', values: { name: 'Made after all' } }),
+      row({ op: 'patch', id: 'x', state: 'waiting', values: { description: 'Still mine' }, lateBase: true }),
+    ]);
+    await s.drop(create);
+    expect(s.outbox).toEqual([edit]);
+    expect(await db.outboxRows(s.id)).toHaveLength(1);
+  });
+
+  it('Let it go on a refused change that is not a create keeps the changes queued behind it', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    // The element is not in the copy yet (its create still waits), so only the create guard keeps the rest.
+    const [create, refused, edit] = await withRows(s, [
+      row({ op: 'create', id: 'x', state: 'waiting', values: { name: 'Ada' } }),
+      row({ op: 'patch', id: 'x', state: 'refused', values: { name: 'Refused' }, lateBase: true }),
+      row({ op: 'patch', id: 'x', state: 'waiting', values: { description: 'Behind it' }, lateBase: true }),
+    ]);
+    await s.drop(refused);
+    expect(s.outbox).toEqual([create, edit]);
+    expect(await db.outboxRows(s.id)).toHaveLength(2);
+  });
+
+  it('Let it go on a refused create leaves a change already on its way', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    const [create, sending] = await withRows(s, [
+      row({ op: 'create', id: 'x', state: 'refused', values: { name: 'Never made' } }),
+      row({ op: 'patch', id: 'x', state: 'sending', values: { description: 'In flight' }, lateBase: true }),
+    ]);
+    await s.drop(create);
+    expect(s.outbox).toEqual([sending]);
+    expect(await db.outboxRows(s.id)).toHaveLength(1);
+  });
+
+  async function legacyWorld(role?: 'owner') {
+    const id = `w-${++n}`;
+    await db.putWorldRecord({ id, name: 'Old key world', kind: 'online', apiKey: '1234567890', keyKind: 'legacy', addedAt: '', ...(role ? { role } : {}) });
+    forgetSession(id);
+    return openWorld(id);
+  }
+
+  it("a window already open honours the wait another window started: the roster, files and doors read nothing", async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const { holdSends } = await import('../src/sendwait');
+    const b = await legacyWorld('owner');
+    setPin(b.rec, '1234');
+    await b.pull();
+    expect(b.waitRuns()).toBeNull();
+    // Another window (or another of the account's worlds) meets keel's lock: kept for the account.
+    await holdSends(b.waitScope, { code: 'rate_limited', retryAfter: 900 });
+    expect(b.waitRuns()).toBeNull(); // this window has not seen it yet
+    vi.stubGlobal('navigator', { onLine: true });
+    const before = keel.calls.length;
+    expect(b.roster()).toBeNull();
+    expect(b.files('character', 'a')).toBeNull();
+    expect(b.doors('character', 'a')).toBeNull();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(keel.calls.slice(before)).toEqual([]);
+    expect(b.waitRuns()?.code).toBe('rate_limited');
+    // Past its end, the next calls ask (the reads were never spent).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(b.sendWait!.until + 1000);
+    b.roster();
+    b.files('character', 'a');
+    b.doors('character', 'a');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(keel.calls.slice(before).sort()).toEqual(['GET /character/a', 'GET /character/a/files', 'GET /members'].sort());
+  });
+
+  it("a ten-digit key read through the public page holds during the wait and asks after it", async () => {
+    const { holdSends } = await import('../src/sendwait');
+    const s = await legacyWorld(); // no account role: a reader of the public page, its own PIN
+    setPin(s.rec, '1234');
+    await holdSends(s.waitScope, { code: 'rate_limited', retryAfter: 900 });
+    vi.stubGlobal('navigator', { onLine: true });
+    const before = keel.calls.length;
+    s.askPublicPage();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(keel.calls.slice(before)).toEqual([]);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(s.sendWait!.until + 1000);
+    s.askPublicPage();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(keel.calls.slice(before)).toEqual(['GET /world']);
+  });
+
+  it('who I am, held by the wait, is asked when the wait ends', async () => {
+    const { holdSends } = await import('../src/sendwait');
+    const s = await legacyWorld('owner');
+    setPin(s.rec, '1234');
+    await holdSends(s.waitScope, { code: 'rate_limited', retryAfter: 900 });
+    const before = keel.calls.length;
+    await s.learnWhoIAm();
+    expect(keel.calls.slice(before)).toEqual([]);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(s.sendWait!.until + 1000);
+    await s.pull(true); // the poll's read sees the wait end
+    await new Promise((r) => setTimeout(r, 30));
+    expect(keel.calls.slice(before)).toContain('GET /me');
+  });
+});

@@ -227,4 +227,18 @@ describe("the account's wrong-PIN wait, for an account world and at sign-out", (
     await signOut();
     expect(await readWait(scope)).toBeNull();
   });
+
+  it("another account signing in lets the old account's wait go, and a world's own wait stays", async () => {
+    const { holdSends, readWait, waitScope } = await import('../src/sendwait');
+    const { keepAccount } = await import('../src/account');
+    await db.kvSet('accountId', 'first-account');
+    const acct = waitScope({ id: W, role: 'collaborator' });
+    const own = waitScope({ id: 'opened-with-a-key' });
+    await holdSends(acct, { code: 'rate_limited', retryAfter: 600 });
+    await holdSends(own, { code: 'rate_limited', retryAfter: 600 });
+    await keepAccount('ow_a_other', { id: 'second-account', username: 'someone' });
+    expect(await readWait(acct)).toBeNull();
+    expect(await readWait(own)).not.toBeNull();
+    await db.kvSet(`sendWait:${own.pin}`, undefined);
+  });
 });

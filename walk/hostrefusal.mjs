@@ -103,7 +103,8 @@ async function run(engine, name, device) {
 
   const rename = async (id, to) => {
     await page.goto(`${BASE}/#/w/${worldId}/e/${id}`);
-    await page.waitForSelector('.el-head h1');
+    // This element's own page, never the one the walk came from (a hash change keeps the old one a moment).
+    await page.waitForSelector(`[data-screen="element"][data-id="${id}"] .el-head h1`);
     await page.locator('.el-head h1').tap();
     await page.locator('.sheet input').fill(to);
     await page.getByRole('button', { name: 'Save' }).tap();
@@ -116,7 +117,7 @@ async function run(engine, name, device) {
   await rename(BO, 'Bo Vell');
   check(name, patches(BO).some((w) => w.answer === 200), "the next element's change is sent after the refused one");
   await page.goto(`${BASE}/#/w/${worldId}/e/${ADA}`);
-  await page.waitForSelector('.el-head h1');
+  await page.waitForSelector(`[data-screen="element"][data-id="${ADA}"] .el-head h1`);
   check(name, (await page.locator('.el-head h1').innerText()).includes('python -m'), 'the refused text stays on the screen');
   check(name, /A change to this was not sent/.test(await text()), "the element's page says a change was not sent");
   await page.goto(`${BASE}/#/w/${worldId}/outbox`);

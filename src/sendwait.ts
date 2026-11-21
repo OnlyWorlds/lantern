@@ -118,11 +118,6 @@ export function waitClock(w: SendWait): string {
   return new Date(Math.ceil(w.until / 60_000) * 60_000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-/** After a save while the wait runs: the change is kept, and when it goes. */
-export function goesAtText(w: SendWait): string {
-  return `It waits on this phone and goes by itself at ${waitClock(w)}.`;
-}
-
 /** Why sends wait, in a sentence. */
 export function waitWhy(w: SendWait): string {
   return w.code === 'rate_limited'
@@ -183,6 +178,12 @@ export function waitingLine(st: WaitingState): string {
 
 /** The home's banner during keel's wait, or null when the wait says nothing there (none runs, nothing goes). */
 export function homeWaitLine(st: WaitingState): string | null {
-  if (!st.wait || st.waiting - st.held <= 0) return null;
+  if (!st.wait || st.waiting <= 0) return null;
+  // Every waiting change held behind one OnlyWorlds did not take: the wait is said, never "by themselves"
+  // and never a PIN question (nothing goes before the wait ends, a PIN included).
+  if (st.held >= st.waiting) return `${waitWhy(st.wait)} ${HELD_HOME_TEXT}`;
   return st.pinKnown ? waitText(st.wait) : pinAfterText(st.wait);
 }
+
+/** The home's words for changes all held behind one OnlyWorlds did not take. */
+export const HELD_HOME_TEXT = 'Your changes wait on this phone, behind one OnlyWorlds did not take: see Waiting to send.';

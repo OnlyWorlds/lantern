@@ -34,14 +34,12 @@ import { HIDDEN_REFUSAL, handOnElements, withHiddenForCreate } from './hidden';
 import { publicPageOnFrom, publicPageStale, readerOf } from './waymark-for';
 import { worldExtensionsOf } from './worldfile';
 import { readCovers, type DoorRead } from './doortrail';
+import type { SendSituation } from './sheetwords';
 import type { CalendarConfig, OwFileRow } from '@onlyworlds/sdk';
 
 export const API_BASE = 'https://www.onlyworlds.com/api/v2';
 /** Lantern's name on every write (keel's X-OW-Client, sent by the SDK's `client` option since 4.56.0). */
 export const LANTERN_CLIENT_NAME = 'lantern';
-/** Said after an edit that took the place of a change OnlyWorlds refused (`edit()` returns true). */
-export const REPLACED_REFUSAL = 'It takes the place of the change OnlyWorlds did not take.';
-
 /** keel's not_author, in Lantern's words. */
 export const NOT_AUTHOR_REFUSAL = 'You can change only what you made in this world';
 
@@ -58,6 +56,9 @@ export function oneChangeRefusalText(e: { message?: string }): string {
     .trim();
   return said || 'OnlyWorlds refused this change.';
 }
+
+/** A read keel's wait held: never sent, asked again later. */
+const HELD = Symbol('held');
 
 /** A change whose element id (or type) OnlyWorlds cannot take as an address: refused, never waiting. */
 export const PATH_REFUSAL = 'OnlyWorlds cannot take this element: its id is not one it can address.';
@@ -254,14 +255,17 @@ export class WorldSession {
   roster(): OwMember[] | null {
     if (!this.rosterAsked && !this.isLocal && this.rec.kind !== 'demo' && this.rec.apiKey && navigator.onLine && !this.readsHeld()) {
       this.rosterAsked = true;
-      this.client(false).members().then(
-        (rows) => {
-          if (this.retired) return;
-          this.rosterRows = rows;
-          this.emit();
-        },
-        () => {},
-      );
+      this.readHeldNow()
+        .then((held) => (held ? Promise.reject(HELD) : this.client(false).members()))
+        .then(
+          (rows) => {
+            if (this.retired) return;
+            this.rosterRows = rows;
+            this.emit();
+          },
+          // Held by keel's wait: asked again on the next call once it ends.
+          (e) => void (e === HELD && (this.rosterAsked = false)),
+        );
     }
     return this.rosterRows;
   }
@@ -280,7 +284,9 @@ export class WorldSession {
     // A full read under way asks GET /world itself and writes the answer: the ask is kept for later.
     if (this.status === 'syncing') return;
     this.publicPageAsked = true;
-    this.client(false).getWorld().then(
+    this.readHeldNow()
+      .then((held) => (held ? Promise.reject(HELD) : this.client(false).getWorld()))
+      .then(
       async (meta) => {
         if (this.retired) return;
         const on = publicPageOnFrom(meta as unknown as Record<string, unknown>);
@@ -291,7 +297,8 @@ export class WorldSession {
           if (was !== on) this.emit();
         }
       },
-      () => {},
+      // Held by keel's wait: asked again on the next call once it ends.
+      (e) => void (e === HELD && (this.publicPageAsked = false)),
     );
   }
 
@@ -314,8 +321,12 @@ export class WorldSession {
     const s = slot;
     if (!s.asking && navigator.onLine && !this.readsHeld() && (s.readAt === 0 || now - s.readAt > 60_000)) {
       s.asking = true;
-      Promise.resolve()
-        .then(() => this.client(false).listFiles(type, id))
+      let held = false;
+      this.readHeldNow()
+        .then((h) => {
+          held = h;
+          return h ? Promise.reject(HELD) : this.client(false).listFiles(type, id);
+        })
         .then(
           (rows) => {
             if (this.retired) return;
@@ -326,7 +337,8 @@ export class WorldSession {
           () => {},
         )
         .finally(() => {
-          s.readAt = Date.now();
+          // A read keel's wait held was never asked: asked again on the next call once it ends.
+          if (!held) s.readAt = Date.now();
           s.asking = false;
         });
     }
@@ -357,8 +369,12 @@ export class WorldSession {
     if (!s.asking && navigator.onLine && !this.readsHeld() && (stale || passed)) {
       s.asking = true;
       s.askedFor = copyUpdated;
-      Promise.resolve()
-        .then(() => this.client(false).get(type, id))
+      let held = false;
+      this.readHeldNow()
+        .then((h) => {
+          held = h;
+          return h ? Promise.reject(HELD) : this.client(false).get(type, id);
+        })
         .then(
           (el) => {
             if (this.retired) return;
@@ -377,7 +393,9 @@ export class WorldSession {
           () => {},
         )
         .finally(() => {
-          s.readAt = Date.now();
+          // A read keel's wait held was never asked: asked again on the next call once it ends.
+          if (held) s.askedFor = undefined;
+          else s.readAt = Date.now();
           s.asking = false;
         });
     }
@@ -407,7 +425,11 @@ export class WorldSession {
    */
   async learnWhoIAm(): Promise<void> {
     if (this.isLocal || this.rec.kind === 'demo' || !this.rec.apiKey) return;
-    if (this.readsCarryPin && (await this.currentWait())) return;
+    if (await this.readHeldNow()) {
+      // Asked again when the wait ends (currentWait sees it end: the poll's read of a ten-digit key).
+      this.whoAfterWait = true;
+      return;
+    }
     try {
       const me = await this.client(false).me();
       // The SDK types the role as open (a new one may come); Lantern knows these three.
@@ -778,9 +800,16 @@ export class WorldSession {
     return !!key && !isDemoKey(key) && (this.rec.keyKind ?? detectKeyKind(key)) === 'legacy';
   }
 
-  /** A ten-digit key's reads carry the PIN: they hold while keel's wait runs (asked again after it). */
+  /** A ten-digit key's reads carry the PIN: they hold while keel's wait runs (asked again after it). The
+   * wait this window knows, at once; `readHeldNow` reads the stored one too, before the read goes. */
   private readsHeld(): boolean {
     return this.readsCarryPin && !!this.waitRuns();
+  }
+
+  /** The stored wait, read just before a ten-digit key's read goes: a wait another window or another of
+   * the account's worlds started holds it too. */
+  private async readHeldNow(): Promise<boolean> {
+    return this.readsCarryPin && !!(await this.currentWait());
   }
 
   private client(withPin: boolean): OwV2Client {
@@ -1595,6 +1624,11 @@ export class WorldSession {
     if (wait) throw new WaitSaid(tryAfterText(wait));
   }
 
+  /** Where a change saved now stands, for the sheets' words (src/sheetwords.ts). */
+  sendSituation(): SendSituation {
+    return { local: this.isLocal, online: navigator.onLine, wait: this.waitRuns(), pinKnown: this.pinKnown() };
+  }
+
   /** What the outbox and the home say about the waiting changes (src/sendwait.ts waitingLine, homeWaitLine). */
   waitingState(): WaitingState {
     const refused = this.outbox.filter((r) => r.state === 'refused');
@@ -1623,8 +1657,15 @@ export class WorldSession {
       this.sendWait = w;
       this.emit();
     }
+    if (!w && this.whoAfterWait) {
+      this.whoAfterWait = false;
+      void this.learnWhoIAm();
+    }
     return w;
   }
+
+  /** `learnWhoIAm` was held by keel's wait: asked when it ends. */
+  private whoAfterWait = false;
 
   /** keel answered 429: the world's sends wait the time it asked for (up to its 15 minutes). */
   async startWait(e: OwApiError): Promise<SendWait> {
@@ -1670,8 +1711,7 @@ export class WorldSession {
     const orphans = row.op === 'create' && row.state === 'refused' && !this.truth.has(row.id)
       ? this.outbox.filter((r) => r !== row && r.id === row.id && r.state !== 'sending')
       : [];
-    await db.settleOutboxRow(this.id, row.seq!, take);
-    for (const r of orphans) await db.deleteOutboxRow(this.id, r.seq!);
+    await db.settleOutboxRow(this.id, row.seq!, take, orphans.map((r) => r.seq!));
     if (take) this.truth.set(take.id, take);
     this.outbox = this.outbox.filter((r) => r !== row && !orphans.includes(r));
     this.rebuild();

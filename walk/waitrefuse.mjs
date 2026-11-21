@@ -127,7 +127,8 @@ async function run(engine, name, device) {
 
   const rename = async (id, to) => {
     await page.goto(`${BASE}/#/w/${worldId}/e/${id}`);
-    await page.waitForSelector('.el-head h1');
+    // This element's own page, never the one the walk came from (a hash change keeps the old one a moment).
+    await page.waitForSelector(`[data-screen="element"][data-id="${id}"] .el-head h1`);
     await page.locator('.el-head h1').tap();
     await page.locator('.sheet input').fill(to);
     await page.getByRole('button', { name: 'Save' }).tap();

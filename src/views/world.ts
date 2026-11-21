@@ -1,5 +1,5 @@
 // Inside a world: its home (find, the types), a type's list, an element's page.
-import { OwApiError, type OwElement, type OwFileRow } from '@onlyworlds/sdk';
+import { type OwElement, type OwFileRow } from '@onlyworlds/sdk';
 import { newestFirst } from '../when';
 import { fileLine } from '../files';
 import { h, plural } from '../dom';
@@ -8,7 +8,8 @@ import { search } from '../search';
 import { type WorldSession } from '../world';
 import { pinFor } from '../pin';
 import { keyRefusalText, newKeyCures } from '../keyrefusal';
-import { homeWaitLine, WaitSaid } from '../sendwait';
+import { homeWaitLine } from '../sendwait';
+import { fileLinkError, pinSheetError } from '../sheetwords';
 import {
   supertypeWord,
   customEditable,
@@ -286,12 +287,7 @@ export function pinSheet(s: WorldSession, onTaken?: () => void): void {
         onTaken?.();
         void s.flush();
       } catch (ex) {
-        if (ex instanceof WaitSaid) {
-          err.textContent = ex.message;
-          return;
-        }
-        const m = errorText(ex);
-        err.textContent = /PIN|credential|401/i.test(m) ? 'That PIN does not open this world.' : m;
+        err.textContent = pinSheetError(ex, errorText(ex));
       } finally {
         btn.disabled = false;
       }
@@ -742,7 +738,8 @@ function valueNode(s: WorldSession, type: string, field: string, v: unknown): No
 
 /** `fill`: just made from Catch, so its empty fields show at once, ready to fill in (Titus, 2026-10-12). */
 export function elementView(s: WorldSession, id: string, fill = false): View {
-  const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'element' });
+  // Its id on the page: a walk waits for this element's own page, never the one it came from.
+  const main = h('main', { class: 'screen has-tabbar', 'data-screen': 'element', 'data-id': id });
   // Only a page that exists counts as opened (a dead link is not Recent).
   if (s.get(id)) noteOpened(s.id, id);
   // All fields (Settings) opens with the empty ones showing, as a page just made from Catch does.
@@ -1172,7 +1169,7 @@ function fileRow(s: WorldSession, el: OwElement, r: OwFileRow): HTMLElement {
       a.click();
       a.remove();
     } catch (ex) {
-      toast(ex instanceof WaitSaid ? ex.message : ex instanceof OwApiError && ex.status === 404 ? 'This file is no longer on OnlyWorlds.' : 'The file could not be fetched. Try again in a moment.');
+      toast(fileLinkError(ex));
     } finally {
       get.removeAttribute('disabled');
       get.textContent = 'Download';

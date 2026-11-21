@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const { fetchThatHolds, forgetAccountWait, holdSends, homeWaitLine, HELD_TEXT, pinAfterText, readWait, waitClock, waitingLine, waitScope, waitSeconds, waitText, MAX_WAIT_S } = await import('../src/sendwait');
+const { fetchThatHolds, forgetAccountWait, holdSends, homeWaitLine, HELD_HOME_TEXT, HELD_TEXT, pinAfterText, waitWhy, readWait, waitClock, waitingLine, waitScope, waitSeconds, waitText, MAX_WAIT_S } = await import('../src/sendwait');
 const db = await import('../src/db');
 
 const realFetch = globalThis.fetch;
@@ -152,7 +152,9 @@ describe('the words for the waiting changes', () => {
     expect(homeWaitLine(base)).toBeNull();
     expect(homeWaitLine({ ...base, wait })).toBe(waitText(wait));
     expect(homeWaitLine({ ...base, wait, pinKnown: false })).toBe(pinAfterText(wait));
-    expect(homeWaitLine({ ...base, wait, held: 2 })).toBeNull();
+    // Every waiting change held: the wait is said, and never a PIN question.
+    expect(homeWaitLine({ ...base, wait, held: 2 })).toBe(`${waitWhy(wait)} ${HELD_HOME_TEXT}`);
+    expect(homeWaitLine({ ...base, wait, held: 2, pinKnown: false, askPin: true })).toBe(`${waitWhy(wait)} ${HELD_HOME_TEXT}`);
     expect(homeWaitLine({ ...base, wait, waiting: 0 })).toBeNull();
   });
 });
@@ -164,8 +166,12 @@ describe('forgetAccountWait', () => {
     const own = waitScope({ id: 'fb' });
     await holdSends(acct, { code: 'rate_limited', retryAfter: 600 }, now);
     await holdSends(own, { code: 'rate_limited', retryAfter: 600 }, now);
+    // A busy key's wait is its world's, an account world's included: not the account's to let go.
+    const busy = waitScope({ id: 'fc', role: 'owner' });
+    await holdSends(busy, { code: 'too_many_requests', retryAfter: 30 }, now);
     await forgetAccountWait();
     expect(await readWait(acct, now)).toBeNull();
     expect(await readWait(own, now)).not.toBeNull();
+    expect((await readWait(busy, now))?.code).toBe('too_many_requests');
   });
 });

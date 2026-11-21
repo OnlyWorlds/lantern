@@ -360,11 +360,12 @@ export async function deleteOutboxRow(worldId: string, seq: number): Promise<voi
   await done(t);
 }
 
-/** A row leaves the outbox and the server's answer lands in the store, together. */
-export async function settleOutboxRow(worldId: string, seq: number, el: OwElement | null): Promise<void> {
+/** A row leaves the outbox and the server's answer lands in the store, together (with `alsoGone`, rows let go with it). */
+export async function settleOutboxRow(worldId: string, seq: number, el: OwElement | null, alsoGone: number[] = []): Promise<void> {
   const db = await world(worldId);
   const t = db.transaction(['outbox', 'elements'], 'readwrite');
   t.objectStore('outbox').delete(seq);
+  for (const other of alsoGone) t.objectStore('outbox').delete(other);
   if (el) t.objectStore('elements').put(el);
   await done(t);
 }
