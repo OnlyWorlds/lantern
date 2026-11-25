@@ -12,6 +12,6 @@
   --lan-accent: #3fb6c6;
   --lan-action: #58a6ff;
   --lan-accent-glow: rgba(63, 182, 198, 0.3);
-  --lan-font-display: system-ui, sans-serif;
-  --lan-font-body: system-ui, sans-serif;
+  --lan-font-display: 'Lato', system-ui, sans-serif;
+  --lan-font-body: 'Lato', system-ui, sans-serif;
 }

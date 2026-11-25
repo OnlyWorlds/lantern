@@ -50,7 +50,7 @@ async function walk(engine, deviceName, tag, theme) {
   await page.goto(`${BASE}/#/new`);
   const start = page.getByRole('button', { name: 'Start the world' });
   const st = await look(start);
-  check(tag, isFill(st) && st.h >= 48 && st.weight === '600', `Start the world is the Entry fill, 48 high, weight 600 (h${st.h}, ${st.weight})`);
+  check(tag, isFill(st) && st.h >= 48 && st.weight === '700', `Start the world is the Entry fill, 48 high, weight 700 (h${st.h}, ${st.weight})`);
   await page.locator('input[aria-label="World name"]').fill('Ladder table');
   await start.tap();
   await page.waitForSelector('[data-screen="home"]');
@@ -97,7 +97,7 @@ async function walk(engine, deviceName, tag, theme) {
   const save = page.locator('.sheet button[type="submit"]');
   await save.first().waitFor({ timeout: 5000 });
   const sv = await look(save);
-  check(tag, isWash(sv, sv.accent) && sv.h >= 48 && sv.weight === '500', `a sheet's Save is the Standard wash and edge, 48 high (${sv.bg}, edge ${sv.edge}, h${sv.h})`);
+  check(tag, isWash(sv, sv.accent) && sv.h >= 48 && sv.weight === '400', `a sheet's Save is the Standard wash and edge, 48 high (${sv.bg}, edge ${sv.edge}, h${sv.h})`);
   await page.screenshot({ path: `${OUT}/ladder-${tag.replace(' ', '-')}-sheet.png` });
 
   check(tag, errors.length === 0, `no page errors (${errors.join(' | ').slice(0, 200)})`);

@@ -1,6 +1,6 @@
 // Lantern's shell: the look, the worker, the router, and keeping open worlds in step.
-import '@fontsource/atkinson-hyperlegible/400.css';
-import '@fontsource/atkinson-hyperlegible/700.css';
+import '@fontsource/lato/400.css';
+import '@fontsource/lato/700.css';
 import '@fontsource-variable/bricolage-grotesque/opsz.css';
 import './themes/theme-warm.css';
 import './themes/theme-house.css';

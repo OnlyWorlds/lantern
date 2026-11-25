@@ -70,7 +70,8 @@ export default defineConfig({
   plugins: [lanternWorker()],
   // mpa: unknown paths 404 in dev and preview, as on Pages with a 404.html (the worker's 404 rule is walked against it).
   appType: 'mpa',
-  build: { target: 'es2022' },
+  // A font file is never inlined: the CSP allows no data: font, and Lato's latin-ext .woff files are under 4 KB.
+  build: { target: 'es2022', assetsInlineLimit: (file: string) => (/\.(woff2?|ttf|otf)$/i.test(file) ? false : undefined) },
   server: { port: 5180, strictPort: true },
   preview: { port: 5181, strictPort: true, headers: CSP ? { 'Content-Security-Policy': CSP } : {} },
 });
