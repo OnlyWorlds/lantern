@@ -1,6 +1,6 @@
 # Lantern: the build spec
 
-**2026-10-11 23:30** · Temper · the runway for the first overnight build (Titus's rulings of 2026-10-11)
+**2026-10-11 23:30** · Temper · **built**: written as the runway for the first overnight build (Titus's rulings of 2026-10-11); Lantern is public since 2026-10-18, so the code and lantern.onlyworlds.com are the truth and this page is the design as it was decided
 **The picture**: the design canvas https://claude.ai/artifact/Cq1bZE99Sy3TKxxB1v1v7V (source `design-canvas/`). **The reasoning**: the design questions (D1 to D10), a second round of them, and a first draft with Titus's notes, kept in the builders' working notes outside this repository.
 
 Lantern is OnlyWorlds in your pocket: a web page pinned to the phone's home screen that holds all your worlds. Find anything, follow its links, fix a field, catch an idea or a page of notes, and run a game from the phone at the table. It works without signal and sends your changes when it can. Atlas is the studio; Lantern is what you carry. Name and address may change later; the address stays `lantern.onlyworlds.com` for now.
