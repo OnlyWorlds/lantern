@@ -1,17 +1,23 @@
-# Lantern's suites, run on GitHub's machines (since 2026-10-26). Manual only: it runs when someone
-# dispatches it (`gh workflow run e2e.yml --ref main`), never on a push or a pull request. It reads
-# the repository and nothing else: no secret, so the live walks (live-*, frames*, leftovers), which
-# need test accounts, run elsewhere.
+# Lantern's suites, run on GitHub's machines (since 2026-10-26). It runs when someone dispatches it
+# (`gh workflow run e2e.yml --ref main`) and on a pull request from a branch of this repository,
+# never on a push and never for a fork's pull request. It reads the repository and nothing else: no
+# secret, so the live walks (live-*, frames*, leftovers), which need test accounts, run elsewhere.
 name: e2e
 
 on:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   suites:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
