@@ -25,10 +25,11 @@ export function clockFrom(world: Record<string, unknown>): WorldClock {
 
 /**
  * How much a calendar may hold before Lantern stops naming dates by it. A world is anyone's, and the
- * SDK's `formatStep` costs more with each era, month, extra day, template character and (on this
- * pin, which builds a whole year for every label) each step its months hold in a year: 150,000 eras cost seconds a
- * label, a 5,000,000-day month 768 ms. At these bounds a label costs under 2 ms. Atlas keeps the
- * same counts (its `CALENDAR_BOUNDS`) until one bound for every tool lives in the standard.
+ * SDK's `formatStep` costs more with each era, month, extra day and template character: on SDK
+ * 4.203.1, 15,000 eras cost 40 ms a label and 150,000 cost seconds. At these bounds a label costs
+ * under 2 ms. Atlas keeps the same counts (its `CALENDAR_BOUNDS`) until one bound for every tool
+ * lives in the standard. `yearSteps` was set on SDK 4.176.0, which built a whole year for every
+ * label (a 5,000,000-day month cost 768 ms); 4.201.2 made that cheap, and the bound stays as a limit.
  */
 export const CALENDAR_BOUNDS = Object.freeze({
   eras: 256,
