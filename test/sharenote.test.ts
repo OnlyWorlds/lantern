@@ -75,7 +75,7 @@ class GuestKeel {
       if (body.narrator == null) body.narrator = this.character;
       else if (body.narrator !== this.character) return this.err(422, 'invalid_request', 'narrator');
       const mine = this.circles();
-      if (Array.isArray(body.collectives) && body.collectives.some((c) => !mine.includes(c as string))) return this.err(400, 'invalid_request', 'collectives');
+      if (Array.isArray(body.collectives) && body.collectives.some((c) => !mine.includes(c as string))) return this.err(400, 'invalid_link', 'collectives'); // keel elements/resolve.py, #241 R4
     }
     return this.json(201, this.put({ ...body, type } as El));
   };

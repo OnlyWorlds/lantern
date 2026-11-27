@@ -1514,8 +1514,10 @@ export class WorldSession {
         this.retryLater((e.retryAfter ?? (e.status === 429 ? 60 : e.isIdempotencyInFlight ? 1 : 10)) * 1000);
         return true;
       }
-      if (this.isPlayer && row.op === 'create' && row.type === 'narrative' && (e.status === 400 || e.status === 422)) {
-        // keel: a group the player's Character is not in answers as a missing link.
+      if (this.isPlayer && row.op === 'create' && row.type === 'narrative' && e.code === 'invalid_link') {
+        // keel: a group the player's Character is not in answers as a missing link (400 invalid_link,
+        // its field in param). By keel's code: any other refusal (a note past keel's limit on one
+        // element is a 422 invalid_request) says its own sentence below.
         await keep('refused', 'Your Character is not in that group now. Ask your game master.');
         return false;
       }

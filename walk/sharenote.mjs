@@ -94,7 +94,9 @@ async function walk(engine, deviceName, tag) {
   let seq = 100;
   // Who the signed-in account is in this world: the game master's phone first, then the player's.
   let seat = 'owner';
-  let refuseNext = false;
+  const LARGE = 'This narrative was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element.';
+  // keel's refusal of the next share: 'group' (the Character left it) or 'large' (past keel's limit on one element).
+  let refuseNext = null;
   // The seat's Character, as keel's /me says it (the app learns it again on each open).
   let meChar = MIRA;
   await page.route(/^https:\/\/(?!lantern\.)[^/]*onlyworlds\.com\//, async (r) => {
@@ -115,9 +117,12 @@ async function walk(engine, deviceName, tag) {
       return json(200, { role: 'guest', character: meChar, scope: 'write' });
     }
     if (req.method() === 'POST' && path === '/narrative' && refuseNext) {
-      refuseNext = false;
-      notes.push({ refused: true });
-      return json(400, { error: { code: 'invalid_request', message: 'Link not found.', type: 'invalid_request_error', param: 'collectives' } });
+      const why = refuseNext;
+      refuseNext = null;
+      notes.push({ refused: why });
+      // keel's own shapes (core/errors.py invalid_link; elements/weight.py, no param).
+      if (why === 'large') return json(422, { error: { type: 'invalid_request', code: 'invalid_request', message: LARGE, param: null } });
+      return json(400, { error: { type: 'invalid_request', code: 'invalid_link', message: 'Link not found.', param: 'collectives' } });
     }
     // keel's mint answers the key's row (its id) with the full key; a member revokes their own by id.
     if (req.method() === 'POST' && path === `/account/worlds/${WID}/keys`) {
@@ -211,12 +216,21 @@ async function walk(engine, deviceName, tag) {
   await page.locator('textarea[aria-label="A note"]').fill('The ferry runs at dawn.');
   await page.getByRole('button', { name: 'Save the note' }).tap();
   await page.waitForFunction(() => document.querySelectorAll('.note-card').length === 3);
-  refuseNext = true;
+  refuseNext = 'group';
   await page.locator('.note-card').first().locator('[data-action=share-note]').tap();
   await page.getByRole('button', { name: 'Share it' }).tap();
   await page.waitForFunction(() => /^Not shared: Your Character is not in that group/.test(document.querySelector('.note-card [data-part=share-state]')?.textContent ?? ''), null, { timeout: 15000 });
   check(tag, (await page.locator('.note-card').first().locator('[data-action=share-note]').innerText()).trim() === 'Share it again', 'a refused share is said on its card and offered again');
   await page.screenshot({ path: `${OUT}/sharenote-${tag}-035-refused.png` });
+
+  // A share past keel's limit on one element says keel's own sentence, never the group.
+  refuseNext = 'large';
+  await page.locator('.note-card').first().locator('[data-action=share-note]').tap();
+  await page.getByRole('button', { name: 'Share it', exact: true }).tap();
+  await page.waitForFunction((l) => (document.querySelector('.note-card [data-part=share-state]')?.textContent ?? '').includes(l), LARGE, { timeout: 15000 });
+  const largeState = await page.locator('.note-card').first().locator('[data-part=share-state]').innerText();
+  check(tag, largeState.includes('an element holds at most 1 MB') && !/group/.test(largeState), 'a share past the size limit says the limit, not the group');
+  await page.screenshot({ path: `${OUT}/sharenote-${tag}-036-large.png` });
 
   // A seat with no Character: told why before anything is sent.
   meChar = null;
@@ -228,7 +242,7 @@ async function walk(engine, deviceName, tag) {
   await page.waitForFunction(() => document.querySelectorAll('.note-card').length === 4);
   await page.locator('.note-card').first().locator('[data-action=share-note]').tap();
   await page.waitForSelector('text=you have none in this world yet');
-  check(tag, notes.length === 3, 'no Character: said, and nothing sent');
+  check(tag, notes.length === 4, 'no Character: said, and nothing sent');
   await page.screenshot({ path: `${OUT}/sharenote-${tag}-04-nocharacter.png` });
 
   check(tag, errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
