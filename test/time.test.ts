@@ -1,7 +1,7 @@
 // Before now: a world's Events in order, split at the world's now (src/time.ts).
 import { describe, expect, it } from 'vitest';
 import { formatStep, type OwElement } from '@onlyworlds/sdk';
-import { CALENDAR_BOUNDS, calendarOf, clockFrom, dateText, hasDatedEvent, isDateField, ongoing, spanText, timeline } from '../src/time';
+import { calendarOf, clockFrom, dateText, hasDatedEvent, isDateField, ongoing, spanText, timeline } from '../src/time';
 
 const ev = (id: string, name: string, start?: number, end?: number) =>
   ({ id, type: 'event', name, start_date: start, end_date: end }) as unknown as OwElement;
@@ -126,11 +126,13 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
   });
 });
 
-describe("a calendar past the bound names no dates (a world is anyone's)", () => {
+// The calendar profile's size bounds (standard serial 149, profiles/calendar.md "Not a calendar"):
+// a calendar past one is no calendar in every reader, Lantern's own bounds gone with SDK 4.212.1.
+describe("a calendar past the profile's bounds names no dates (a world is anyone's)", () => {
   const months = (n: number, len = 3) => ({ names: Array.from({ length: n }, (_, i) => `M${i}`), lengths: Array.from({ length: n }, () => len) });
   const base = () => ({ version: 2, grain: 'day', bundles: { months: months(2) }, format: '{day} {month} {year}' });
   const calendar = (value: unknown) => ({ id: 'c1', type: 'construct', name: 'c1', supertype: 'calendar', atlas_calendar: value }) as unknown as OwElement;
-  const B = CALENDAR_BOUNDS;
+  const B = { eras: 256, months: 64, weekdays: 64, intercalary: 16, except: 8, template: 256, name: 256 };
   const shapes: Array<[string, (n: number) => object, number]> = [
     ['eras', n => ({ ...base(), eras: Array.from({ length: n }, (_, i) => ({ name: `E${i}`, start: i * 10 })) }), B.eras],
     ['months', n => ({ ...base(), bundles: { months: months(n) } }), B.months],
@@ -139,7 +141,6 @@ describe("a calendar past the bound names no dates (a world is anyone's)", () =>
     ['weekdays', n => ({ ...base(), bundles: { months: months(2), week: { length: n, names: Array.from({ length: n }, (_, i) => `W${i}`) } } }), B.weekdays],
     ['template', n => ({ ...base(), format: '{day}' + ' '.repeat(n - 5) }), B.template],
     ['a name', n => ({ ...base(), bundles: { months: { names: ['x'.repeat(n), 'B'], lengths: [3, 3] } } }), B.name],
-    ['steps in a year', n => ({ ...base(), bundles: { months: { names: ['A', 'B'], lengths: [n - 100, 100] } } }), B.yearSteps],
   ];
   for (const [what, make, bound] of shapes) {
     it(`${what}: ${bound} names dates, one more is the numbers`, () => {
@@ -148,11 +149,11 @@ describe("a calendar past the bound names no dates (a world is anyone's)", () =>
     });
   }
 
-  it('a 5,000,000-day month is the numbers, at once', () => {
+  it('a 5,000,000-day month names its dates, at once (the SDK words a label of any year length cheaply)', () => {
     const t0 = performance.now();
     const cal = calendarOf({}, [calendar({ version: 2, grain: 'day', bundles: { months: { names: ['Long'], lengths: [5_000_000] } } })]);
-    expect(cal).toBeNull();
-    expect(dateText(4_999_999, 'Day', cal)).toBe('Day 4999999');
+    expect(cal).not.toBeNull();
+    expect(dateText(4_999_999, 'Day', cal)).toBe(formatStep(cal!, 4_999_999));
     expect(performance.now() - t0).toBeLessThan(100);
   });
 

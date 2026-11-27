@@ -5,7 +5,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readWorldFile, writeWorldFile, type OwElement } from '@onlyworlds/sdk';
-import { lanternProducer, openWorldFile, slugify, toWorldFile, worldCopy } from '../src/worldfile';
+import { zipSync, strToU8 } from 'fflate';
+import { lanternProducer, openWorldFile, slugify, toWorldFile, worldCopy, WORLD_FAULT } from '../src/worldfile';
 import * as db from '../src/db';
 
 // The standard's own pair for private records (schema-dist fixtures/owworld, OW-8, serial 49):
@@ -84,6 +85,15 @@ describe('world files', () => {
     // the sizes and CRC honest. Read whole on SDK 4.72.0. Vendored; Atlas carries the same file.
     const before = (await db.listWorlds()).length;
     await expect(openWorldFile(ow8('fail-OW-14-deflate-early-end.owworld'))).rejects.toThrow(/^That file is not a world Lantern can open\.$/);
+    expect((await db.listWorlds()).length).toBe(before);
+  });
+
+  it("a world.json that is there and cannot be read is said for what it is, in Lantern's words, and nothing is kept", async () => {
+    const before = (await db.listWorlds()).length;
+    const file = (worldJson: string) => zipSync({ 'w/world.json': strToU8(worldJson), 'w/elements/character/a--1.json': strToU8('{"id":"1","name":"A"}') });
+    const deep = `{"id":"0192b000-0000-7000-8000-000000000148","name":"Deep","x":${'['.repeat(200)}${']'.repeat(200)}}`;
+    await expect(openWorldFile(file(deep))).rejects.toThrow(WORLD_FAULT.too_deep);
+    await expect(openWorldFile(file('{"id": '))).rejects.toThrow(WORLD_FAULT.not_json);
     expect((await db.listWorlds()).length).toBe(before);
   });
 
