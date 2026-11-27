@@ -5,10 +5,10 @@
 // The time line is keel's: a world's now is `time_range_current` (Atlas's folder writes it as
 // `time_current`), its unit `time_basic_unit`, an Event's dates the integers `start_date` and
 // `end_date`. Atlas can name those numbers with a calendar (`atlas_calendar`, SDK 4.20's copy of
-// Atlas's kernel): a world with exactly one names its dates here as Atlas does on a device that
-// never chose (which one a device chose is Atlas's own, not the world's); otherwise the numbers
-// with the unit. A calendar never changes the order.
-import { formatStep, resolveCalendar, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
+// Atlas's kernel): on a phone that never chose, the dates speak the calendar the World names in
+// `x_calendar`, or its only one when it names none (the calendar profile, "Which calendar speaks");
+// a pick on this phone wins; otherwise the numbers with the unit. A calendar never changes the order.
+import { formatStep, resolveCalendar, speakingCalendar, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
 
 export interface WorldClock {
   now?: number;
@@ -64,11 +64,14 @@ export function calendarTooCostly(cfg: CalendarConfig): boolean {
 
 /**
  * The world's calendar, as Atlas resolves it: the one chosen on this phone (`null`: the numbers),
- * else its only one; with several and no choice, none (nothing guessed). A calendar past
- * {@link CALENDAR_BOUNDS} names no dates: the numbers, with the unit.
+ * else the one the World names in `x_calendar` (`world`: the World's keys, a record's `extensions`;
+ * a name that points at no calendar is the numbers, never another in its place), else its only one;
+ * with several and no choice, none (nothing guessed). A calendar past {@link CALENDAR_BOUNDS} names
+ * no dates: the numbers, with the unit.
  */
-export function calendarOf(elements: Iterable<OwElement>, chosen?: string | null): CalendarConfig | null {
-  const cfg = resolveCalendar(elements, chosen, { fallbackToOnly: true })?.config ?? null;
+export function calendarOf(world: object | null | undefined, elements: Iterable<OwElement>, chosen?: string | null): CalendarConfig | null {
+  const keys = world && typeof world === 'object' && !Array.isArray(world) ? world : {};
+  const cfg = (chosen === undefined ? speakingCalendar(keys, elements) : resolveCalendar(elements, chosen))?.config ?? null;
   return cfg && !calendarTooCostly(cfg) ? cfg : null;
 }
 
