@@ -52,7 +52,7 @@ export function calendarTooCostly(cfg: CalendarConfig): boolean {
   const yearSteps = (months?.lengths ?? []).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0) + extra.length;
   const names = [cfg.step_name, ...eras.flatMap(e => [e.name, e.abbrev]), ...(months?.names ?? []), ...weekdays, ...extra.map(e => e.name)];
   return eras.length > B.eras
-    || (months?.names.length ?? 0) > B.months
+    || (months?.names?.length ?? 0) > B.months
     || extra.length > B.intercalary
     || extra.some(e => (e.except?.length ?? 0) > B.except)
     || weekdays.length > B.weekdays

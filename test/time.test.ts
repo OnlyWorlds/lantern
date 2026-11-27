@@ -142,4 +142,12 @@ describe("a calendar past the bound names no dates (a world is anyone's)", () =>
     expect(dateText(4_999_999, 'Day', cal)).toBe('Day 4999999');
     expect(performance.now() - t0).toBeLessThan(100);
   });
+
+  it("reads the calendar profile's absent-likes as a calendar, never throwing on a months bundle with no names", () => {
+    // The profile's fixture case `absent-likes`: the SDK reads it as a calendar with no months; the bound must too.
+    const value = { version: 1, grain: 'year', bundles: { months: false, week: null }, eras: null, intercalary: null };
+    const cal = calendarOf([calendar(value)]);
+    expect(cal).not.toBeNull();
+    expect(dateText(0, 'Year', cal)).toBe('Year 0');
+  });
 });
