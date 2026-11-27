@@ -3,6 +3,8 @@
 // Lantern, takes the consent page if it shows, and must land on Your worlds signed in with nothing typed
 // into Lantern. The token Lantern kept is revoked by its own id (only that one), then must answer 401.
 // Atlas 1.87.0's live walk, on a phone. Credentials come from CREW_FILE and are never printed.
+// CANCEL=1 presses Cancel on the consent page instead: back on the sign-in screen with the cancel line,
+// no token kept, no record left (SDK 4.213.0's `cancelled`).
 // Run from tools/lantern: CREW_FILE=<file> node walk/live-signin-ow.mjs <lantern origin> <out-prefix> [chromium|webkit] [crew-walk-b]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
@@ -56,7 +58,8 @@ if (!report.button) {
 // 3. The tap, the consent page the first time, the return.
 await button.tap();
 await p.waitForURL((u) => u.hostname === 'www.onlyworlds.com' || u.hash === '#/worlds', { timeout: 30000 });
-const consent = p.locator('button[name="decision"][value="continue"]');
+const CANCEL = Boolean(process.env.CANCEL);
+const consent = p.locator(`button[name="decision"][value="${CANCEL ? 'cancel' : 'continue'}"]`);
 if (await consent.waitFor({ timeout: 8000 }).then(() => true, () => false)) {
   await p.screenshot({ path: `${out}-2-consent.png` });
   step(`consent page: ${(await p.locator('h1, h2').first().textContent().catch(() => ''))?.trim()}`);
@@ -64,7 +67,8 @@ if (await consent.waitFor({ timeout: 8000 }).then(() => true, () => false)) {
 } else {
   step('no consent page (consented before)');
 }
-const landed = await p.waitForSelector('[data-screen="worlds"]', { timeout: 30000 }).then(() => true, () => false);
+const landed = await p.waitForSelector(CANCEL ? '[data-screen="signin"]' : '[data-screen="worlds"]', { timeout: 30000 }).then(() => true, () => false);
+const cancelLine = CANCEL ? await p.locator('text=was cancelled').first().textContent({ timeout: 15000 }).catch(() => null) : null;
 await p.waitForTimeout(1500);
 await p.screenshot({ path: `${out}-3-back.png` });
 // The token Lantern kept, and keel's id for it as the sign-in's answer gave it (kv accountTokenMint,
@@ -82,7 +86,7 @@ const token = await kv('accountToken');
 const mint = await kv('accountTokenMint');
 const tokenId = typeof token === 'string' && mint && typeof mint.tail === 'string' && mint.tail.length === 8 && token.endsWith(mint.tail) ? mint.id : null;
 Object.assign(report, {
-  landed, url: p.url(), tokenKept: Boolean(token?.startsWith('ow_a_')),
+  landed, url: p.url(), tokenKept: Boolean(token?.startsWith('ow_a_')), ...(CANCEL ? { cancelLine } : {}),
   recordLeft: await p.evaluate(() => localStorage.getItem('ow_signin:lantern')),
   buttonAfter: await p.goto(`${lantern}/#/signin`).then(() => p.waitForTimeout(800)).then(() => button.count()),
 });
@@ -102,4 +106,5 @@ const delWalk = await fetch(`${API}/account/tokens/${walkToken.id}`, { method: '
 const walkAfter = await fetch(`${API}/account`, { headers: walkAuth });
 report.walkTokenRevoked = `DELETE ${delWalk.status}, then GET /account ${walkAfter.status}`;
 console.log(JSON.stringify({ ...report, keel, errors }, null, 2));
+if (CANCEL) process.exit(report.landed && !report.tokenKept && report.cancelLine && !report.recordLeft && report.buttonAfter > 0 && /401$/.test(report.walkTokenRevoked) && !errors.length ? 0 : 1);
 process.exit(report.landed && report.tokenKept && !report.recordLeft && report.buttonAfter === 0 && /401$/.test(report.revoked ?? '') && /401$/.test(report.walkTokenRevoked) && !errors.length ? 0 : 1);
