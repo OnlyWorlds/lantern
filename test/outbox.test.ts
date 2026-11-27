@@ -72,6 +72,9 @@ class FakeKeel {
   hostBlock: RegExp | null = null;
   /** keel's limit on one element (keel 656): a write whose body matches is refused in keel's shape. */
   overLimit: RegExp | null = null;
+  /** keel's `limit` key on the over-limit refusal, and other words for its sentence (a keel that names the limit and rewords). */
+  overLimitKey: string | null = null;
+  overLimitWords: string | null = null;
   /** Set: the host refuses the feed's reads too. */
   hostBlockReads = false;
   /** The host's page title: its "Blocked" page, or another page of its own. */
@@ -98,7 +101,8 @@ class FakeKeel {
     if (this.overLimit && method !== 'GET' && this.overLimit.test(String(init.body ?? ''))) {
       // keel elements/weight.py and core/errors.py: 422 invalid_request, no param, the type in the sentence.
       const type = path.split('/')[1] ?? 'element';
-      return this.json(422, { error: { type: 'invalid_request', code: 'invalid_request', param: null, message: `This ${type} was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element.` } });
+      const message = this.overLimitWords ?? `This ${type} was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element.`;
+      return this.json(422, { error: { type: 'invalid_request', code: 'invalid_request', param: null, message, ...(this.overLimitKey ? { limit: this.overLimitKey } : {}) } });
     }
     // The media edge (its own host, the ticket is its pass) and, below, keel's ticket for it, as
     // test/online.test.ts fakes them.
@@ -1316,6 +1320,22 @@ describe("keel's limit on one element: the text stays on the screen, to shorten"
     const [row] = await db.outboxRows('w-old-flag');
     expect(row.keepsText).toBe(true);
     expect('hostRefused' in row).toBe(false);
+  });
+
+  it("keel's limit key is read before its words: reworded, the change still stays on the screen", async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.overLimit = /A chronicle A chronicle/;
+    keel.overLimitKey = 'element_link_ids';
+    keel.overLimitWords = 'This character was not saved: it is too large.';
+    await s.edit('a', { description: LONG });
+    await s.flush();
+    const row = s.outbox.find((r) => r.id === 'a');
+    expect(row).toMatchObject({ state: 'refused', keepsText: true });
+    expect(row?.error).toBe('This character was not saved: it is too large. Nothing is lost: it waits on this phone.');
+    expect(s.get('a')?.description).toBe(LONG);
   });
 
   it('a refused create stays in its list; shortened, it lands with its own id', async () => {

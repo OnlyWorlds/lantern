@@ -1766,6 +1766,9 @@ export class WorldSession {
  * limit a code of its own, the way Atlas reads it.
  */
 function isOverElementLimit(e: OwApiError): boolean {
+  // keel names which limit in the envelope's `limit`, read by the SDK's helpers; the sentence is the
+  // fallback for a server that does not send it.
+  if (e.isElementTooLarge || e.isElementTooManyLinks) return true;
   return e.status === 422 && !e.param && /an element holds at most/i.test(e.message);
 }
 
