@@ -1,7 +1,7 @@
 // Before now: a world's Events in order, split at the world's now (src/time.ts).
 import { describe, expect, it } from 'vitest';
 import { formatStep, type OwElement } from '@onlyworlds/sdk';
-import { CALENDAR_BOUNDS, calendarOf, clockFrom, dateText, hasDatedEvent, isDateField, ongoing, spanText, timeline } from '../src/time';
+import { calendarOf, clockFrom, dateText, hasDatedEvent, isDateField, ongoing, spanText, timeline } from '../src/time';
 
 const ev = (id: string, name: string, start?: number, end?: number) =>
   ({ id, type: 'event', name, start_date: start, end_date: end }) as unknown as OwElement;
@@ -55,25 +55,38 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
   const calendar = (id: string, value: unknown) => ({ id, type: 'construct', name: id, supertype: 'calendar', atlas_calendar: value }) as unknown as OwElement;
 
   it('names dates only when the world holds exactly one calendar, as Atlas does on a device that never chose', () => {
-    expect(calendarOf([ev('1', 'x', 3), calendar('c1', cfg)])).toEqual(cfg);
+    expect(calendarOf({}, [ev('1', 'x', 3), calendar('c1', cfg)])).toEqual(cfg);
     // Moppetopia, Titus's own world, holds two: numbers, nothing guessed.
-    expect(calendarOf([calendar('c1', cfg), calendar('c2', { version: 1, grain: 'Year' })])).toBeNull();
-    expect(calendarOf([ev('1', 'x', 3)])).toBeNull();
+    expect(calendarOf({}, [calendar('c1', cfg), calendar('c2', { version: 1, grain: 'Year' })])).toBeNull();
+    expect(calendarOf({}, [ev('1', 'x', 3)])).toBeNull();
     // A JSON string is read as Atlas's object (another tool may serialize it); a broken one is no calendar.
-    expect(calendarOf([calendar('c1', JSON.stringify(cfg))])).toEqual(cfg);
-    expect(calendarOf([calendar('c1', { grain: 7 })])).toBeNull();
+    expect(calendarOf({}, [calendar('c1', JSON.stringify(cfg))])).toEqual(cfg);
+    expect(calendarOf({}, [calendar('c1', { grain: 7 })])).toBeNull();
   });
 
   it("follows this phone's choice: a calendar by id, null for the numbers, a removed one as never chosen", () => {
     const two = [calendar('c1', cfg), calendar('c2', { version: 1, grain: 'Year', step_name: 'Turn' })];
-    expect(calendarOf(two, 'c1')).toEqual(cfg);
-    expect(calendarOf([calendar('c1', cfg)], null)).toBeNull();
+    expect(calendarOf({}, two, 'c1')).toEqual(cfg);
+    expect(calendarOf({}, [calendar('c1', cfg)], null)).toBeNull();
     // A dangling choice (the calendar deleted in Atlas) resolves to nothing, as Atlas's lens does.
-    expect(calendarOf(two, 'gone')).toBeNull();
+    expect(calendarOf({}, two, 'gone')).toBeNull();
+  });
+
+  it("speaks the calendar the World names in x_calendar (the calendar profile), this phone's pick first", () => {
+    const c2 = { version: 1, grain: 'Year', step_name: 'Turn' };
+    const two = [calendar('c1', cfg), calendar('c2', c2), { id: 'lore', type: 'construct', name: 'lore' } as unknown as OwElement];
+    expect(calendarOf({ x_calendar: 'c2' }, two)).toEqual(c2);
+    expect(calendarOf({ x_calendar: 'c2' }, two, 'c1')).toEqual(cfg);
+    expect(calendarOf({ x_calendar: 'c2' }, two, null)).toBeNull();
+    // A name that points at no calendar is the numbers, never the only calendar in its place.
+    for (const x of ['gone', 'lore', '', 'C1', 42]) expect(calendarOf({ x_calendar: x }, [calendar('c1', cfg)])).toBeNull();
+    // Named none: the only one.
+    expect(calendarOf({ x_calendar: null }, [calendar('c1', cfg)])).toEqual(cfg);
+    expect(calendarOf(undefined, [calendar('c1', cfg)])).toEqual(cfg);
   });
 
   it("speaks the calendar's words, and the numbers without one", () => {
-    const cal = calendarOf([calendar('c1', cfg)])!;
+    const cal = calendarOf({}, [calendar('c1', cfg)])!;
     expect(dateText(412, 'Year', cal)).toBe(formatStep(cal, 412));
     expect(dateText(412, 'Year', cal)).toMatch(/AE/);
     expect(dateText(412, 'Year', null)).toBe('Year 412');
@@ -92,7 +105,7 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
       intercalary: [{ name: 'Leap day', after_month: 2, every_years: 4, except: [100, 400], offset: 1 }],
       eras: [{ name: 'Common Era', abbrev: 'CE', start: 0 }],
     };
-    const cal = calendarOf([calendar('g', greg)]);
+    const cal = calendarOf({}, [calendar('g', greg)]);
     expect(cal).not.toBeNull();
     // The step after 28 Feb, counted by the proleptic Gregorian rule written out here, not the SDK's.
     const leap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
@@ -104,7 +117,7 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
 
   it('an open era runs to the next up era, a down era listed after it skipped (SDK 4.76)', () => {
     const eras = { version: 1, grain: 'Year', eras: [{ name: 'After', abbrev: 'AF', start: 0 }, { name: 'Before', abbrev: 'BF', start: 0, direction: 'down' }] };
-    expect(dateText(5, 'Year', calendarOf([calendar('e', eras)]))).toContain('6 AF');
+    expect(dateText(5, 'Year', calendarOf({}, [calendar('e', eras)]))).toContain('6 AF');
   });
 
   it("knows a schema date field by Atlas's rule, never a custom one", () => {
@@ -113,11 +126,13 @@ describe("the world's calendar (SDK 4.20, Atlas's kernel)", () => {
   });
 });
 
-describe("a calendar past the bound names no dates (a world is anyone's)", () => {
+// The calendar profile's size bounds (standard serial 149, profiles/calendar.md "Not a calendar"):
+// a calendar past one is no calendar in every reader, Lantern's own bounds gone with SDK 4.212.1.
+describe("a calendar past the profile's bounds names no dates (a world is anyone's)", () => {
   const months = (n: number, len = 3) => ({ names: Array.from({ length: n }, (_, i) => `M${i}`), lengths: Array.from({ length: n }, () => len) });
   const base = () => ({ version: 2, grain: 'day', bundles: { months: months(2) }, format: '{day} {month} {year}' });
   const calendar = (value: unknown) => ({ id: 'c1', type: 'construct', name: 'c1', supertype: 'calendar', atlas_calendar: value }) as unknown as OwElement;
-  const B = CALENDAR_BOUNDS;
+  const B = { eras: 256, months: 64, weekdays: 64, intercalary: 16, except: 8, template: 256, name: 256 };
   const shapes: Array<[string, (n: number) => object, number]> = [
     ['eras', n => ({ ...base(), eras: Array.from({ length: n }, (_, i) => ({ name: `E${i}`, start: i * 10 })) }), B.eras],
     ['months', n => ({ ...base(), bundles: { months: months(n) } }), B.months],
@@ -126,27 +141,26 @@ describe("a calendar past the bound names no dates (a world is anyone's)", () =>
     ['weekdays', n => ({ ...base(), bundles: { months: months(2), week: { length: n, names: Array.from({ length: n }, (_, i) => `W${i}`) } } }), B.weekdays],
     ['template', n => ({ ...base(), format: '{day}' + ' '.repeat(n - 5) }), B.template],
     ['a name', n => ({ ...base(), bundles: { months: { names: ['x'.repeat(n), 'B'], lengths: [3, 3] } } }), B.name],
-    ['steps in a year', n => ({ ...base(), bundles: { months: { names: ['A', 'B'], lengths: [n - 100, 100] } } }), B.yearSteps],
   ];
   for (const [what, make, bound] of shapes) {
     it(`${what}: ${bound} names dates, one more is the numbers`, () => {
-      expect(calendarOf([calendar(make(bound))])).not.toBeNull();
-      expect(calendarOf([calendar(make(bound + 1))])).toBeNull();
+      expect(calendarOf({}, [calendar(make(bound))])).not.toBeNull();
+      expect(calendarOf({}, [calendar(make(bound + 1))])).toBeNull();
     });
   }
 
-  it('a 5,000,000-day month is the numbers, at once', () => {
+  it('a 5,000,000-day month names its dates, at once (the SDK words a label of any year length cheaply)', () => {
     const t0 = performance.now();
-    const cal = calendarOf([calendar({ version: 2, grain: 'day', bundles: { months: { names: ['Long'], lengths: [5_000_000] } } })]);
-    expect(cal).toBeNull();
-    expect(dateText(4_999_999, 'Day', cal)).toBe('Day 4999999');
+    const cal = calendarOf({}, [calendar({ version: 2, grain: 'day', bundles: { months: { names: ['Long'], lengths: [5_000_000] } } })]);
+    expect(cal).not.toBeNull();
+    expect(dateText(4_999_999, 'Day', cal)).toBe(formatStep(cal!, 4_999_999));
     expect(performance.now() - t0).toBeLessThan(100);
   });
 
   it("reads the calendar profile's absent-likes as a calendar, never throwing on a months bundle with no names", () => {
     // The profile's fixture case `absent-likes`: the SDK reads it as a calendar with no months; the bound must too.
     const value = { version: 1, grain: 'year', bundles: { months: false, week: null }, eras: null, intercalary: null };
-    const cal = calendarOf([calendar(value)]);
+    const cal = calendarOf({}, [calendar(value)]);
     expect(cal).not.toBeNull();
     expect(dateText(0, 'Year', cal)).toBe('Year 0');
   });

@@ -180,11 +180,23 @@ export async function saveFile(bytes: Uint8Array, name: string): Promise<'shared
 /** Said for a file the SDK cannot read at all (damaged, cut short, not a zip), in place of its path-and-cause line. */
 export const NOT_OPENABLE = 'That file is not a world Lantern can open.';
 
+/** A file holding world.json, elements/ or spatial/ only in other capitals (the SDK's `name_case`). */
+export const NAME_CASE = 'That file is not a world Lantern can open: it holds world.json, elements/ or spatial/ in other capitals, where the folder format names them in small letters.';
+
+/** Said for a file whose world.json is there and cannot be read (the SDK's `worldFault`), never "it has none". */
+export const WORLD_FAULT: Record<NonNullable<OwWorldFileError['worldFault']>, string> = {
+  too_deep: "That file's world.json is nested too deep to read, so Lantern does not open it. Ask whoever sent it for a new copy.",
+  not_json: "That file's world.json cannot be read, so Lantern does not open it. Ask whoever sent it for a new copy.",
+  number_out_of_range: "That file's world.json holds a number too large to read, so Lantern does not open it. Ask whoever sent it for a new copy.",
+};
+
 export async function openWorldFile(bytes: Uint8Array): Promise<string> {
   let read: ReturnType<typeof readWorldFile>;
   try {
     read = readWorldFile(bytes);
   } catch (e) {
+    if (e instanceof OwWorldFileError && e.worldFault) throw new Error(WORLD_FAULT[e.worldFault] ?? NOT_OPENABLE);
+    if (e instanceof OwWorldFileError && e.reason === 'name_case') throw new Error(NAME_CASE);
     throw e instanceof OwWorldFileError && e.reason === 'not_openable' ? new Error(NOT_OPENABLE) : e;
   }
   if (await db.getWorldRecord(read.worldId)) {

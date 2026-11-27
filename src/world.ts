@@ -176,6 +176,8 @@ export class WorldSession {
   private listeners = new Set<() => void>();
   private backlinkCache: Map<string, string[]> | null = null;
   private calendarCache: CalendarConfig | null | undefined = undefined;
+  /** The World's `x_calendar` the cached calendar was worked out under. */
+  private calendarNamed: unknown = undefined;
   private lookupCache: OwWorldIndex<OwElement> | null = null;
   private handOnCache: OwWorldIndex<OwElement> | null = null;
   private aidsCache: AidsRead | null = null;
@@ -691,7 +693,12 @@ export class WorldSession {
 
   /** The world's calendar (src/time.ts `calendarOf`), worked out once per change. */
   calendar(): CalendarConfig | null {
-    if (this.calendarCache === undefined) this.calendarCache = calendarOf(this.view.values(), chosenCalendar(this.id));
+    // The World's x_calendar rides the record, which a GET /world can replace at any poll.
+    const named = this.rec.extensions?.x_calendar;
+    if (this.calendarCache === undefined || this.calendarNamed !== named) {
+      this.calendarCache = calendarOf(this.rec.extensions, this.view.values(), chosenCalendar(this.id));
+      this.calendarNamed = named;
+    }
     return this.calendarCache;
   }
 

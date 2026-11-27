@@ -5,10 +5,10 @@
 // The time line is keel's: a world's now is `time_range_current` (Atlas's folder writes it as
 // `time_current`), its unit `time_basic_unit`, an Event's dates the integers `start_date` and
 // `end_date`. Atlas can name those numbers with a calendar (`atlas_calendar`, SDK 4.20's copy of
-// Atlas's kernel): a world with exactly one names its dates here as Atlas does on a device that
-// never chose (which one a device chose is Atlas's own, not the world's); otherwise the numbers
-// with the unit. A calendar never changes the order.
-import { formatStep, resolveCalendar, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
+// Atlas's kernel): on a phone that never chose, the dates speak the calendar the World names in
+// `x_calendar`, or its only one when it names none (the calendar profile, "Which calendar speaks");
+// a pick on this phone wins; otherwise the numbers with the unit. A calendar never changes the order.
+import { formatStep, resolveCalendar, speakingCalendar, type CalendarConfig, type OwElement } from '@onlyworlds/sdk';
 
 export interface WorldClock {
   now?: number;
@@ -24,52 +24,15 @@ export function clockFrom(world: Record<string, unknown>): WorldClock {
 }
 
 /**
- * How much a calendar may hold before Lantern stops naming dates by it. A world is anyone's, and the
- * SDK's `formatStep` costs more with each era, month, extra day and template character: on SDK
- * 4.203.1, 15,000 eras cost 40 ms a label and 150,000 cost seconds. At these bounds a label costs
- * under 2 ms. Atlas keeps the same counts (its `CALENDAR_BOUNDS`) until one bound for every tool
- * lives in the standard. `yearSteps` was set on SDK 4.176.0, which built a whole year for every
- * label (a 5,000,000-day month cost 768 ms); 4.201.2 made that cheap, and the bound stays as a limit.
- */
-export const CALENDAR_BOUNDS = Object.freeze({
-  eras: 256,
-  months: 256,
-  intercalary: 64,
-  except: 8,
-  weekdays: 256,
-  template: 1000,
-  name: 1000,
-  yearSteps: 40_000,
-});
-
-/** Does `cfg` hold more than {@link CALENDAR_BOUNDS}? Reads only what `readCalendarConfig` let through. */
-export function calendarTooCostly(cfg: CalendarConfig): boolean {
-  const B = CALENDAR_BOUNDS;
-  const eras = cfg.eras ?? [];
-  const months = cfg.bundles?.months;
-  const weekdays = cfg.bundles?.week?.names ?? [];
-  const extra = cfg.intercalary ?? [];
-  const yearSteps = (months?.lengths ?? []).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0) + extra.length;
-  const names = [cfg.step_name, ...eras.flatMap(e => [e.name, e.abbrev]), ...(months?.names ?? []), ...weekdays, ...extra.map(e => e.name)];
-  return eras.length > B.eras
-    || (months?.names?.length ?? 0) > B.months
-    || extra.length > B.intercalary
-    || extra.some(e => (e.except?.length ?? 0) > B.except)
-    || weekdays.length > B.weekdays
-    || (cfg.format?.length ?? 0) > B.template
-    || (cfg.format_intercalary?.length ?? 0) > B.template
-    || yearSteps > B.yearSteps
-    || names.some(n => typeof n === 'string' && n.length > B.name);
-}
-
-/**
  * The world's calendar, as Atlas resolves it: the one chosen on this phone (`null`: the numbers),
- * else its only one; with several and no choice, none (nothing guessed). A calendar past
- * {@link CALENDAR_BOUNDS} names no dates: the numbers, with the unit.
+ * else the one the World names in `x_calendar` (`world`: the World's keys, a record's `extensions`;
+ * a name that points at no calendar is the numbers, never another in its place), else its only one;
+ * with several and no choice, none (nothing guessed). A calendar past the calendar profile's size
+ * bounds is no calendar, as the SDK's reader refuses it in every tool: the numbers, with the unit.
  */
-export function calendarOf(elements: Iterable<OwElement>, chosen?: string | null): CalendarConfig | null {
-  const cfg = resolveCalendar(elements, chosen, { fallbackToOnly: true })?.config ?? null;
-  return cfg && !calendarTooCostly(cfg) ? cfg : null;
+export function calendarOf(world: object | null | undefined, elements: Iterable<OwElement>, chosen?: string | null): CalendarConfig | null {
+  const keys = world && typeof world === 'object' && !Array.isArray(world) ? world : {};
+  return (chosen === undefined ? speakingCalendar(keys, elements) : resolveCalendar(elements, chosen))?.config ?? null;
 }
 
 /** "3 Frost 412 AE" in the world's calendar; else "Year 412", or the bare number when the world names no unit. */
