@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readWorldFile, writeWorldFile, type OwElement } from '@onlyworlds/sdk';
 import { zipSync, strToU8 } from 'fflate';
-import { lanternProducer, openWorldFile, slugify, toWorldFile, worldCopy, WORLD_FAULT } from '../src/worldfile';
+import { lanternProducer, NAME_CASE, openWorldFile, slugify, toWorldFile, worldCopy, WORLD_FAULT } from '../src/worldfile';
 import * as db from '../src/db';
 
 // The standard's own pair for private records (schema-dist fixtures/owworld, OW-8, serial 49):
@@ -94,6 +94,13 @@ describe('world files', () => {
     const deep = `{"id":"0192b000-0000-7000-8000-000000000148","name":"Deep","x":${'['.repeat(200)}${']'.repeat(200)}}`;
     await expect(openWorldFile(file(deep))).rejects.toThrow(WORLD_FAULT.too_deep);
     await expect(openWorldFile(file('{"id": '))).rejects.toThrow(WORLD_FAULT.not_json);
+    expect((await db.listWorlds()).length).toBe(before);
+  });
+
+  it('a world file holding elements/ in other capitals is said to be named wrong, and nothing is kept', async () => {
+    const before = (await db.listWorlds()).length;
+    const z = zipSync({ 'w/world.json': strToU8('{"id":"0192b000-0000-7000-8000-000000000149","name":"Caps"}'), 'w/Elements/character/a--1.json': strToU8('{"id":"1","name":"A"}') });
+    await expect(openWorldFile(z)).rejects.toThrow(NAME_CASE);
     expect((await db.listWorlds()).length).toBe(before);
   });
 
