@@ -89,7 +89,6 @@ class NoStorage extends Error {}
  * `/#/signing-in` before returning, so the router reads that and never the share target's query.
  */
 export function startSignInCallback(href: string = location.href, fetchImpl?: typeof fetch): Promise<SignInOutcome> {
-  const cancelled = new URL(href).searchParams.get('error') === 'access_denied';
   const storage = recordStore();
   const client = new OwV2Client({ baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchImpl ?? fetchWithin(SIGN_IN_EXCHANGE_LIMIT_MS) });
   const pending = storage
@@ -102,7 +101,8 @@ export function startSignInCallback(href: string = location.href, fetchImpl?: ty
   }
   return pending.then(
     (r): SignInOutcome => ({ ok: true, token: r.token, tokenId: r.tokenId ?? null, account: { id: r.account.id, username: r.account.username } }),
-    (error: unknown): SignInOutcome => ({ ok: false, cancelled, error }),
+    // keel's Cancel comes back as the SDK's `cancelled` (4.213.0): only on the sign-in started here.
+    (error: unknown): SignInOutcome => ({ ok: false, cancelled: error instanceof OwSignInError && error.reason === 'cancelled', error }),
   );
 }
 

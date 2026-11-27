@@ -220,6 +220,16 @@ describe('L6: a refusal is a sentence on the sign-in screen', () => {
     expect(keel.calls).toEqual([]);
   });
 
+  it("a Cancel carrying another sign-in's state is not this one's Cancel", async () => {
+    await signin.beginOnlyWorldsSignIn(() => {});
+    const out = await signin.startSignInCallback('https://lantern.onlyworlds.com/signin/callback?error=access_denied&state=not-this-one', keel.fetch as typeof fetch);
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.cancelled).toBe(false);
+    expect(out.error instanceof OwSignInError && out.error.reason).toBe('state_mismatch');
+    expect(keel.calls).toEqual([]);
+  });
+
   it('each reason in Lantern words, never keel text', () => {
     const line = (reason: string) => signin.signInCallbackLine({ cancelled: false, error: new OwSignInError(reason as never, 'keel words') });
     expect(line('state_mismatch')).toMatch(/not started here/);
