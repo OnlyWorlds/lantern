@@ -519,7 +519,7 @@ export class WorldSession {
     const gone = new Set(this.deletedHere);
     for (const row of [...this.outbox].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))) {
       // A row the web host refused stays on the screen: the person's own text, to change and send again.
-      if (row.state === 'refused' && !row.hostRefused) continue;
+      if (row.state === 'refused' && !row.keepsText) continue;
       if (row.op === 'delete') {
         gone.add(row.id);
         continue;
@@ -683,7 +683,7 @@ export class WorldSession {
     const m = new Map<string, OutboxRow>();
     for (const row of this.outbox) {
       // A row the web host refused is on the screen, so its fields say "not sent" (and the page why).
-      if (row.id !== id || (row.state === 'refused' && !row.hostRefused)) continue;
+      if (row.id !== id || (row.state === 'refused' && !row.keepsText)) continue;
       for (const f of Object.keys(row.values)) m.set(f, row);
       if (row.photo) m.set('image_url', row);
       if (row.op === 'create') m.set('*', row);
@@ -1052,7 +1052,7 @@ export class WorldSession {
     // The element's row the web host refused, wherever it sits: this edit merges into it and sends it
     // again, with any edits queued behind it folded in first (all in memory before any await, so an
     // edit saved meanwhile meets one consistent outbox).
-    const hostRow = this.outbox.find((r) => r.id === id && r.state === 'refused' && r.hostRefused);
+    const hostRow = this.outbox.find((r) => r.id === id && r.state === 'refused' && r.keepsText);
     const taken = hostRow ? this.foldBehind(hostRow) : [];
     // This edit's own picture is the newest: an older picture refused on its own goes with it, or its
     // Try again would land it after this one.
@@ -1067,7 +1067,7 @@ export class WorldSession {
     // refused is not on the screen, and a picture refused on its own keeps its own Try again.)
     const replaced = hostRow
       ? []
-      : this.outbox.filter((r) => r.id === id && r.state === 'refused' && !r.hostRefused && r.op !== 'create' && !isLonePicture(r));
+      : this.outbox.filter((r) => r.id === id && r.state === 'refused' && !r.keepsText && r.op !== 'create' && !isLonePicture(r));
     if (replaced.length) {
       this.outbox = this.outbox.filter((r) => !replaced.includes(r));
       taken.push(...replaced);
@@ -1080,7 +1080,7 @@ export class WorldSession {
       if (hostRow) {
         hostRow.state = 'waiting';
         hostRow.error = undefined;
-        hostRow.hostRefused = undefined;
+        hostRow.keepsText = undefined;
       }
       mergeInto(open, values, photo);
       await db.putOutboxRowFolding(this.id, open, taken.map((r) => r.seq!));
@@ -1199,7 +1199,7 @@ export class WorldSession {
       if (r.state === 'sending') continue;
       // A create that may have reached keel is sent, then deleted. One the web host refused is let go and
       // the delete sent: keel answers 404 if it never made it, and deletes it if an earlier send did.
-      if (r === create && !settledFirst && !r.hostRefused) continue;
+      if (r === create && !settledFirst && !r.keepsText) continue;
       await db.settleOutboxRow(this.id, r.seq!, null);
       this.outbox = this.outbox.filter((x) => x !== r);
     }
@@ -1421,7 +1421,12 @@ export class WorldSession {
         // account. This row is refused in the host's words and every other element goes on; it is
         // not sent again by itself (the same text meets the same refusal), only on a changed text or
         // Try again.
-        return this.hostRefused(row, e);
+        return this.keepRefused(row, hostRefusalText(e, row.op === 'delete' ? 'this delete' : 'this change', 'Nothing is lost: it waits on this phone.'));
+      }
+      if (row.op !== 'delete' && isOverElementLimit(e)) {
+        // keel's limit on one element (1 MB of text and links, 5,000 links): the way out is the
+        // person's own text, shortened or split, so it stays on the screen as the host's refusal does.
+        return this.keepRefused(row, `${e.message} Nothing is lost: it waits on this phone.`);
       }
       if (row.op === 'create' && (e.isIdConflict || e.isIdempotencyConflict) && attempt < 3) {
         // The create reached the server before (its answer was lost). Edits merged into the row
@@ -1579,22 +1584,23 @@ export class WorldSession {
   }
 
   /**
-   * A row the web host refused. A delete queued behind it makes it moot: it is let go and the delete
+   * A row refused for its text (`keepsText`: the web host's refusal, keel's limit on one element),
+   * refused in `error`'s words. A delete queued behind it makes it moot: it is let go and the delete
    * goes. Edits queued behind it fold into it (newest wins), and the element's next edit finds it
    * (edit()). A delete refused is refused like any other (nothing to show, nothing to fix). Every
    * change in memory happens before the first await; the merged row and the removal of the rows
    * folded into it are one transaction.
    */
-  private async hostRefused(row: OutboxRow, e: OwApiError): Promise<boolean> {
+  private async keepRefused(row: OutboxRow, error: string): Promise<boolean> {
     if (row.op !== 'delete' && this.outbox.some((r) => r !== row && r.id === row.id && (r.seq ?? 0) > (row.seq ?? 0) && r.op === 'delete' && r.state === 'waiting')) {
       this.outbox = this.outbox.filter((r) => r !== row);
       await db.settleOutboxRow(this.id, row.seq!, null);
       return false;
     }
     const taken = row.op === 'delete' ? [] : this.foldBehind(row);
-    if (row.op !== 'delete') row.hostRefused = true;
+    if (row.op !== 'delete') row.keepsText = true;
     row.state = 'refused';
-    row.error = hostRefusalText(e, row.op === 'delete' ? 'this delete' : 'this change', 'Nothing is lost: it waits on this phone.');
+    row.error = error;
     await db.putOutboxRowFolding(this.id, row, taken.map((r) => r.seq!));
     return false;
   }
@@ -1746,7 +1752,7 @@ export class WorldSession {
   async retryRefused(row: OutboxRow): Promise<void> {
     row.state = 'waiting';
     row.error = undefined;
-    row.hostRefused = undefined;
+    row.keepsText = undefined;
     await db.putOutboxRow(this.id, row);
     this.rebuild();
     this.emit();
@@ -1754,9 +1760,18 @@ export class WorldSession {
   }
 }
 
+/**
+ * keel's limit on one element (keel 656): a 422 `invalid_request` naming no field, its sentence
+ * "This <type> was not saved: an element holds at most ...". By the sentence until keel gives the
+ * limit a code of its own, the way Atlas reads it.
+ */
+function isOverElementLimit(e: OwApiError): boolean {
+  return e.status === 422 && !e.param && /an element holds at most/i.test(e.message);
+}
+
 /** A picture keel or the media edge refused on its own (a full store, the day's limit): its own row, nothing else in it. */
 function isLonePicture(r: OutboxRow): boolean {
-  return r.state === 'refused' && !r.hostRefused && !!r.photo && !Object.keys(r.values).length;
+  return r.state === 'refused' && !r.keepsText && !!r.photo && !Object.keys(r.values).length;
 }
 
 /**

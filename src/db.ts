@@ -122,10 +122,12 @@ export interface OutboxRow {
   current?: OwElement;
   error?: string;
   /**
-   * refused: the web host refused it before keel saw it (`isHostRefusal`). Its values stay on the
-   * screen, and the element's next edit merges into it and sends it again (a changed text goes up).
+   * refused for its text, so the text is the way out: the web host refused it before keel saw it
+   * (`isHostRefusal`), or keel's limit on one element (1 MB of text and links, 5,000 links). Its
+   * values stay on the screen, and the element's next edit merges into it and sends it again (a
+   * changed text goes up). Saved as `hostRefused` before 2026-11-27: `outboxRows` reads it as this.
    */
-  hostRefused?: boolean;
+  keepsText?: boolean;
   createdAt: string;
 }
 
@@ -331,7 +333,13 @@ export async function clearElements(worldId: string): Promise<void> {
 
 export async function outboxRows(worldId: string): Promise<OutboxRow[]> {
   const db = await world(worldId);
-  return req(db.transaction('outbox').objectStore('outbox').getAll() as IDBRequest<OutboxRow[]>);
+  const rows = await req(db.transaction('outbox').objectStore('outbox').getAll() as IDBRequest<(OutboxRow & { hostRefused?: boolean })[]>);
+  // A row saved before the flag's rename (2026-11-27) carries `hostRefused`: read as `keepsText`.
+  for (const r of rows) {
+    if (r.hostRefused) r.keepsText = true;
+    delete r.hostRefused;
+  }
+  return rows;
 }
 
 export async function putOutboxRow(worldId: string, row: OutboxRow): Promise<number> {

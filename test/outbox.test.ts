@@ -70,6 +70,8 @@ class FakeKeel {
 
   /** Set: the web host in front of keel refuses a write whose body matches, before keel sees it. */
   hostBlock: RegExp | null = null;
+  /** keel's limit on one element (keel 656): a write whose body matches is refused in keel's shape. */
+  overLimit: RegExp | null = null;
   /** Set: the host refuses the feed's reads too. */
   hostBlockReads = false;
   /** The host's page title: its "Blocked" page, or another page of its own. */
@@ -93,6 +95,11 @@ class FakeKeel {
       return this.hostPage();
     }
     if (this.hostBlockReads && method === 'GET' && path.startsWith('/changes')) return this.hostPage();
+    if (this.overLimit && method !== 'GET' && this.overLimit.test(String(init.body ?? ''))) {
+      // keel elements/weight.py and core/errors.py: 422 invalid_request, no param, the type in the sentence.
+      const type = path.split('/')[1] ?? 'element';
+      return this.json(422, { error: { type: 'invalid_request', code: 'invalid_request', param: null, message: `This ${type} was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element.` } });
+    }
     // The media edge (its own host, the ticket is its pass) and, below, keel's ticket for it, as
     // test/online.test.ts fakes them.
     if (url.host === 'edge.test') {
@@ -1274,6 +1281,60 @@ describe('a key keel no longer takes (as in Atlas)', () => {
   });
 });
 
+describe("keel's limit on one element: the text stays on the screen, to shorten", () => {
+  const LONG = 'A chronicle '.repeat(40);
+
+  it("a refused edit is said in keel's words, stays on the screen, and a shorter text goes up", async () => {
+    keel.put({ id: 'a', type: 'character', name: 'Ada' });
+    keel.put({ id: 'b', type: 'character', name: 'Bo' });
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.overLimit = /A chronicle A chronicle/;
+    await s.edit('a', { description: LONG });
+    await s.edit('b', { name: 'Bo Vell' });
+    await s.flush();
+    expect(keel.els.get('b')?.name).toBe('Bo Vell');
+    const row = s.outbox.find((r) => r.id === 'a');
+    expect(row).toMatchObject({ state: 'refused', keepsText: true });
+    expect(row?.error).toBe('This character was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element. Nothing is lost: it waits on this phone.');
+    expect(s.keyRefused).toBe(false);
+    // The person's text is on the element's page, its field marked as not sent.
+    expect(s.get('a')?.description).toBe(LONG);
+    expect(s.pending('a').get('description')).toBe(row);
+    const sent = keel.calls.filter((c) => c === 'PATCH /character/a').length;
+    await s.flush();
+    expect(keel.calls.filter((c) => c === 'PATCH /character/a').length).toBe(sent);
+    await s.edit('a', { description: 'A chronicle, shortened' });
+    await s.flush();
+    expect(keel.els.get('a')?.description).toBe('A chronicle, shortened');
+    expect(s.outbox.length).toBe(0);
+  });
+
+  it('a row an older build saved as hostRefused reads back as keepsText', async () => {
+    await db.putOutboxRow('w-old-flag', { op: 'patch', id: 'a', type: 'character', values: { description: 'x' }, state: 'refused', error: 'e', hostRefused: true, createdAt: '2026-11-20T00:00:00Z' } as never);
+    const [row] = await db.outboxRows('w-old-flag');
+    expect(row.keepsText).toBe(true);
+    expect('hostRefused' in row).toBe(false);
+  });
+
+  it('a refused create stays in its list; shortened, it lands with its own id', async () => {
+    const s = await freshWorld();
+    await s.pull();
+    setPin(s.rec, '1234');
+    keel.overLimit = /A chronicle A chronicle/;
+    const id = await s.create('narrative', { name: 'The long page', supertype: 'Unsorted', description: LONG });
+    await s.flush();
+    expect(keel.els.has(id)).toBe(false);
+    expect(s.get(id)?.name).toBe('The long page');
+    expect(s.refusedRow(id)?.keepsText).toBe(true);
+    await s.edit(id, { description: 'A chronicle, in short' });
+    await s.flush();
+    expect(keel.els.get(id)).toMatchObject({ name: 'The long page', description: 'A chronicle, in short' });
+    expect(s.outbox.length).toBe(0);
+  });
+});
+
 describe("the web host's refusal: one write refused in the host's words, never the key", () => {
   const BAD = 'Runs `python -m http.server` at dusk';
   const patches = (id: string) => keel.calls.filter((c) => c === `PATCH /character/${id}`).length;
@@ -1290,7 +1351,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     await s.flush();
     expect(keel.els.get('b')?.name).toBe('Bo Vell');
     const row = s.outbox.find((r) => r.id === 'a');
-    expect(row).toMatchObject({ state: 'refused', hostRefused: true });
+    expect(row).toMatchObject({ state: 'refused', keepsText: true });
     expect(row?.error).toMatch(/^The web host in front of OnlyWorlds refused this change before it reached OnlyWorlds\. A command written between code marks/);
     expect(row?.error).toMatch(/Nothing is lost: it waits on this phone\.$/);
     expect(row?.error).not.toMatch(/key|PIN|sign/i);
@@ -1324,7 +1385,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     expect(keel.els.get('b')?.name).toBe('Bo Vell');
     expect(keel.els.has(id)).toBe(false);
     expect(s.get(id)?.name).toBe('A page');
-    expect(s.refusedRow(id)?.hostRefused).toBe(true);
+    expect(s.refusedRow(id)?.keepsText).toBe(true);
     await s.edit(id, { description: 'Runs a small server' });
     await s.flush();
     expect(keel.els.get(id)).toMatchObject({ name: 'A page', supertype: 'Unsorted', description: 'Runs a small server' });
@@ -1363,7 +1424,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     expect(s.keyRefused).toBe(true);
     expect(s.keyRefusal).toBe('read_only_key');
     expect(s.statusText).toMatch(/only reads/);
-    expect(s.outbox.every((r) => r.state === 'waiting' && !r.hostRefused)).toBe(true);
+    expect(s.outbox.every((r) => r.state === 'waiting' && !r.keepsText)).toBe(true);
     expect(keel.els.get('b')?.name).toBe('Bo');
   });
 
@@ -1383,7 +1444,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     release();
     await s.flush();
     expect(s.outbox.length).toBe(1);
-    expect(s.outbox[0]).toMatchObject({ state: 'refused', hostRefused: true, values: { description: BAD, name: 'Ada Vell' } });
+    expect(s.outbox[0]).toMatchObject({ state: 'refused', keepsText: true, values: { description: BAD, name: 'Ada Vell' } });
     await s.edit('a', { description: 'A small server' });
     await s.flush();
     expect(keel.els.get('a')).toMatchObject({ name: 'Ada Vell', description: 'A small server' });
@@ -1401,7 +1462,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     await s.edit('a', { description: BAD }, s.serverCopy('a'), photo);
     await s.flush();
     // The picture's own row sits behind the host's row.
-    expect(s.outbox.map((r) => [r.state, !!r.hostRefused, !!r.photo])).toEqual([['refused', true, false], ['refused', false, true]]);
+    expect(s.outbox.map((r) => [r.state, !!r.keepsText, !!r.photo])).toEqual([['refused', true, false], ['refused', false, true]]);
     keel.refuseTicket = null;
     await s.edit('a', { description: 'A small server' });
     await s.flush();
@@ -1561,7 +1622,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     const flushing = s.flush();
     // The first moment the fold shows (the row behind read into it, or the refusal marked), before its writes land.
     let spins = 0;
-    while (!(x.values.name === 'Ada Vell' || x.hostRefused) && spins < 2000) {
+    while (!(x.values.name === 'Ada Vell' || x.keepsText) && spins < 2000) {
       await new Promise((r) => setImmediate(r));
       spins++;
     }
@@ -1606,7 +1667,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     keel.hostBlock = /python -m/;
     const id = await s.create('narrative', { name: 'A page', supertype: 'Unsorted', description: BAD });
     await s.flush();
-    expect(s.refusedRow(id)?.hostRefused).toBe(true);
+    expect(s.refusedRow(id)?.keepsText).toBe(true);
     await s.remove(id);
     await s.flush();
     expect(s.outbox.length).toBe(0);
@@ -1629,7 +1690,7 @@ describe("the web host's refusal: one write refused in the host's words, never t
     await s.flush();
     expect(patches('a')).toBe(sent + 1);
     expect(row).toMatchObject({ state: 'refused', error: 'You can change only what you made in this world' });
-    expect(row.hostRefused).toBeUndefined();
+    expect(row.keepsText).toBeUndefined();
     expect(s.get('a')?.description).toBeUndefined();
   });
 

@@ -2,7 +2,8 @@
 // command after a code mark with its own 403 page ("Blocked"), before keel sees it. On a played keel
 // that refuses only such text, the phone says the host refused that one change, keeps the text on the
 // screen, sends every other element's change, never blames the key, never sends the refused text again
-// by itself, and sends it once the text is changed.
+// by itself, and sends it once the text is changed. Then the same walk for keel's limit on one element
+// (keel 656: a 422 naming no field), whose way out is the same: the text shortened.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/hostrefusal.mjs [chromium|webkit]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
@@ -35,8 +36,13 @@ const zip = Buffer.from(
   ),
 );
 const BAD = 'Ada, who runs `python -m http.server`';
+// The limit's walk: a name standing in for a text past 1 MB (keel answers it in its own shape).
+const LONG = 'Ada, whose chronicle runs past a megabyte';
+const LIMIT = 'This character was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element.';
 
-async function run(engine, name, device) {
+async function run(engine, engineName, device, mode) {
+  const name = mode === 'limit' ? `${engineName} limit` : engineName;
+  const bad = mode === 'limit' ? LONG : BAD;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...devices[device], serviceWorkers: 'block' });
   const page = await ctx.newPage();
@@ -60,7 +66,11 @@ async function run(engine, name, device) {
     }
     if (method === 'PATCH' || method === 'POST' || method === 'DELETE') {
       const body = req.postData() ?? '';
-      if (/python -m/.test(body)) {
+      if (mode === 'limit' && body.includes(LONG)) {
+        writes.push({ method, path, answer: 422 });
+        return r.fulfill({ ...json({ error: { type: 'invalid_request', code: 'invalid_request', param: null, message: LIMIT } }, 422), headers: cors });
+      }
+      if (mode !== 'limit' && /python -m/.test(body)) {
         writes.push({ method, path, answer: 403 });
         return r.fulfill({ status: 403, headers: { ...cors, server: 'cloudflare' }, contentType: 'text/html; charset=UTF-8', body: HTML403 });
       }
@@ -113,18 +123,19 @@ async function run(engine, name, device) {
   const text = () => page.evaluate(() => document.body.innerText);
   const patches = (id) => writes.filter((w) => w.method === 'PATCH' && w.path.includes(id));
 
-  await rename(ADA, BAD);
+  await rename(ADA, bad);
   await rename(BO, 'Bo Vell');
   check(name, patches(BO).some((w) => w.answer === 200), "the next element's change is sent after the refused one");
   await page.goto(`${BASE}/#/w/${worldId}/e/${ADA}`);
   await page.waitForSelector(`[data-screen="element"][data-id="${ADA}"] .el-head h1`);
-  check(name, (await page.locator('.el-head h1').innerText()).includes('python -m'), 'the refused text stays on the screen');
+  check(name, (await page.locator('.el-head h1').innerText()).includes(bad), 'the refused text stays on the screen');
   check(name, /A change to this was not sent/.test(await text()), "the element's page says a change was not sent");
   await page.goto(`${BASE}/#/w/${worldId}/outbox`);
   await page.waitForSelector('[data-screen="outbox"]');
   const box = await text();
-  check(name, /The web host in front of OnlyWorlds refused this change before it reached OnlyWorlds\. A command written between code marks/.test(box), 'Waiting to send says the host refused it, and the usual cause');
-  await page.screenshot({ path: `${OUT}/hostrefusal-${name}-outbox.png` });
+  if (mode === 'limit') check(name, box.includes(LIMIT) && /Nothing is lost: it waits on this phone/.test(box), "Waiting to send says keel's limit, and that nothing is lost");
+  else check(name, /The web host in front of OnlyWorlds refused this change before it reached OnlyWorlds\. A command written between code marks/.test(box), 'Waiting to send says the host refused it, and the usual cause');
+  await page.screenshot({ path: `${OUT}/hostrefusal-${name.replace(' ', '-')}-outbox.png` });
   await page.goto(`${BASE}/#/w/${worldId}`);
   await page.waitForSelector('[data-screen="home"]');
   const sent = patches(ADA).length;
@@ -143,7 +154,9 @@ async function run(engine, name, device) {
   await browser.close();
 }
 
-if (!only || only === 'chromium') await run(chromium, 'chromium', 'Pixel 7');
-if (!only || only === 'webkit') await run(webkit, 'webkit', 'iPhone 13');
+for (const mode of ['host', 'limit']) {
+  if (!only || only === 'chromium') await run(chromium, 'chromium', 'Pixel 7', mode);
+  if (!only || only === 'webkit') await run(webkit, 'webkit', 'iPhone 13', mode);
+}
 console.log(failures ? `${failures} failed` : 'all ok');
 process.exit(failures ? 1 : 0);
