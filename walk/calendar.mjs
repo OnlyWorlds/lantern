@@ -25,11 +25,11 @@ const CAL = { version: 1, grain: 'Year', eras: [{ name: 'After the Eruption', ab
 const id = (w, n) => `ca1e000${w}-0000-4000-8000-00000000000${n}`;
 
 /** A world file: a clock at 453, two Events, and `cals` calendar Constructs. */
-const world = (w, name, cals) =>
+const world = (w, name, cals, keys = {}) =>
   Buffer.from(
     writeWorldFile(
       [
-        { path: 'world.json', data: enc({ id: id(w, 0), name, time_current: 453, time_basic_unit: 'Year' }) },
+        { path: 'world.json', data: enc({ id: id(w, 0), name, time_current: 453, time_basic_unit: 'Year', ...keys }) },
         { path: 'elements/event/siege.json', data: enc({ id: id(w, 1), name: 'The siege', start_date: 400, end_date: 410 }) },
         { path: 'elements/event/flood.json', data: enc({ id: id(w, 2), name: 'The flood', start_date: 460 }) },
         ...cals.map((c, i) => ({ path: `elements/construct/cal${i}.json`, data: enc({ id: id(w, 5 + i), name: `Calendar ${i + 1}`, supertype: 'calendar', atlas_calendar: c }) })),
@@ -102,6 +102,18 @@ async function walk(engine, deviceName, tag) {
   await page.goto(`${BASE}/#/w/${id(2, 0)}/e/${id(2, 1)}`);
   await page.waitForSelector('[data-screen=element]');
   check(tag, (await page.locator('[data-part=calendar-date]').count()) === 0, 'and the date fields stay numbers');
+
+  // Two calendars, the World naming the second in x_calendar (the calendar profile): it speaks.
+  const SECOND = { version: 1, grain: 'Year', eras: [{ name: 'Second Age', abbrev: 'SA', start: 0 }], format: '{year} {era}' };
+  await open(page, world(4, 'Named calendar', [CAL, SECOND], { x_calendar: id(4, 6) }), 'named');
+  await page.goto(`${BASE}/#/w/${id(4, 0)}/time`);
+  await page.waitForSelector('.now-line');
+  const namedNow = (await page.locator('.now-line').textContent()).trim();
+  check(tag, namedNow === `Now · ${formatStep(SECOND, 453)}`, `two calendars, the World naming the second: its words (${namedNow})`);
+  await page.goto(`${BASE}/#/w/${id(4, 0)}/e/${id(4, 1)}`);
+  await page.waitForSelector('[data-screen=element]');
+  const namedDates = await page.$$eval('[data-part=calendar-date]', (els) => els.map((e) => e.textContent));
+  check(tag, JSON.stringify(namedDates) === JSON.stringify([`${formatStep(SECOND, 400)} · 400`, `${formatStep(SECOND, 410)} · 410`]), `and an Event's date fields speak it (${JSON.stringify(namedDates)})`);
 
   // This phone's choice: one of them, kept; then the numbers again.
   await page.goto(`${BASE}/#/w/${id(2, 0)}/time`);
