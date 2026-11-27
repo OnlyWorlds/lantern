@@ -3,7 +3,8 @@
 // that refuses only such text, the phone says the host refused that one change, keeps the text on the
 // screen, sends every other element's change, never blames the key, never sends the refused text again
 // by itself, and sends it once the text is changed. Then the same walk for keel's limit on one element
-// (keel 656: a 422 naming no field), whose way out is the same: the text shortened.
+// (keel 656: a 422 naming no field), whose way out is the same: the text shortened; and once more with
+// keel's `limit` key and other words, so the key alone carries it.
 // Run: npm run build && (npx vite preview --port 5181 &) && node walk/hostrefusal.mjs [chromium|webkit]
 import './guard.mjs';
 import { chromium, webkit, devices } from 'playwright';
@@ -39,10 +40,12 @@ const BAD = 'Ada, who runs `python -m http.server`';
 // The limit's walk: a name standing in for a text past 1 MB (keel answers it in its own shape).
 const LONG = 'Ada, whose chronicle runs past a megabyte';
 const LIMIT = 'This character was not saved: an element holds at most 1 MB of text and links. Shorten a text, or split it over more than one element.';
+// keel naming the limit in the envelope's `limit`, its sentence reworded: the key alone must carry it.
+const KEYED = 'This character was not saved: it is too large.';
 
 async function run(engine, engineName, device, mode) {
-  const name = mode === 'limit' ? `${engineName} limit` : engineName;
-  const bad = mode === 'limit' ? LONG : BAD;
+  const name = mode === 'host' ? engineName : `${engineName} ${mode}`;
+  const bad = mode === 'host' ? BAD : LONG;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...devices[device], serviceWorkers: 'block' });
   const page = await ctx.newPage();
@@ -66,11 +69,14 @@ async function run(engine, engineName, device, mode) {
     }
     if (method === 'PATCH' || method === 'POST' || method === 'DELETE') {
       const body = req.postData() ?? '';
-      if (mode === 'limit' && body.includes(LONG)) {
+      if (mode !== 'host' && body.includes(LONG)) {
         writes.push({ method, path, answer: 422 });
-        return r.fulfill({ ...json({ error: { type: 'invalid_request', code: 'invalid_request', param: null, message: LIMIT } }, 422), headers: cors });
+        const error = mode === 'limitkey'
+          ? { type: 'invalid_request', code: 'invalid_request', param: null, message: KEYED, limit: 'element_bytes' }
+          : { type: 'invalid_request', code: 'invalid_request', param: null, message: LIMIT };
+        return r.fulfill({ ...json({ error }, 422), headers: cors });
       }
-      if (mode !== 'limit' && /python -m/.test(body)) {
+      if (mode === 'host' && /python -m/.test(body)) {
         writes.push({ method, path, answer: 403 });
         return r.fulfill({ status: 403, headers: { ...cors, server: 'cloudflare' }, contentType: 'text/html; charset=UTF-8', body: HTML403 });
       }
@@ -134,6 +140,7 @@ async function run(engine, engineName, device, mode) {
   await page.waitForSelector('[data-screen="outbox"]');
   const box = await text();
   if (mode === 'limit') check(name, box.includes(LIMIT) && /Nothing is lost: it waits on this phone/.test(box), "Waiting to send says keel's limit, and that nothing is lost");
+  else if (mode === 'limitkey') check(name, box.includes(KEYED) && /Nothing is lost: it waits on this phone/.test(box), "by keel's limit key alone, Waiting to send says keel's words, and that nothing is lost");
   else check(name, /The web host in front of OnlyWorlds refused this change before it reached OnlyWorlds\. A command written between code marks/.test(box), 'Waiting to send says the host refused it, and the usual cause');
   await page.screenshot({ path: `${OUT}/hostrefusal-${name.replace(' ', '-')}-outbox.png` });
   await page.goto(`${BASE}/#/w/${worldId}`);
@@ -154,7 +161,7 @@ async function run(engine, engineName, device, mode) {
   await browser.close();
 }
 
-for (const mode of ['host', 'limit']) {
+for (const mode of ['host', 'limit', 'limitkey']) {
   if (!only || only === 'chromium') await run(chromium, 'chromium', 'Pixel 7', mode);
   if (!only || only === 'webkit') await run(webkit, 'webkit', 'iPhone 13', mode);
 }
