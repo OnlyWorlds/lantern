@@ -20,6 +20,7 @@ import * as db from './db';
 import type { OutboxRow, WorldRecord } from './db';
 import { uuid7 } from './uuid7';
 import { isEmptyValue, withoutLinksTo } from './schema';
+import { kindFault, kindFaultWords } from './kinds';
 import { pinFor, setPin } from './pin';
 import { keyRefusalOf, keyRefusalText, type KeyRefusal } from './keyrefusal';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
@@ -1365,6 +1366,15 @@ export class WorldSession {
           delete row.photo;
           await db.putOutboxRow(this.id, { ...row, state: 'waiting' });
         }
+      }
+      // A value of the wrong kind: the SDK refuses it before sending (4.220) with a TypeError the catch
+      // below would read as no network, so the row is refused here, in words, and every other element goes on.
+      const fault = kindFault(row.type, row.values);
+      if (fault) {
+        row.state = 'refused';
+        row.error = `Its ${kindFaultWords(fault)} Change it on its page.`;
+        await db.putOutboxRow(this.id, row);
+        return false;
       }
       let el: OwElement;
       if (row.op === 'create') {

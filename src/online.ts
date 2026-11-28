@@ -7,7 +7,7 @@
 // one atomic /bulk that sets them, the description and the now, a read back, and only when every
 // element, picture and own key came back as sent does the phone-only copy go.
 import { OwApiError, OwV2Client, typeWord, type ElementType } from '@onlyworlds/sdk';
-import { kindFault } from './kinds';
+import { kindFault, kindFaultWords } from './kinds';
 import * as db from './db';
 import { KEPT, accountName, accountToken, deviceName, whoAmI } from './account';
 import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession, pictureRefusalText } from './world';
@@ -17,7 +17,7 @@ import { mintKey } from './mints';
 import { moveDraft } from './draft';
 import { isKnownOf } from './knownof';
 import { withHiddenForCreate } from './hidden';
-import { SERVED_TRIMMED, fieldLabel } from './schema';
+import { SERVED_TRIMMED } from './schema';
 import { mintOf } from './revoke';
 import { hostRefusalText, isHostRefusal } from './hostrefusal';
 import { fetchThatHolds, holdSends, readWait, tryAfterText, type WaitScope } from './sendwait';
@@ -130,8 +130,7 @@ export function wrongKindLine(elements: Record<string, unknown>[]): string | nul
     const fault = kindFault(type, bodyOf(el));
     if (!fault) continue;
     const who = typeof el.name === 'string' && el.name.trim() ? el.name.trim() : `A ${typeWord(null, type as ElementType)}`;
-    const takes = fault.kind === 'integer' ? 'a whole number' : 'text';
-    return `${who}'s ${fieldLabel(fault.field)} holds ${fault.shown}, and that field takes ${takes}: OnlyWorlds would store it as another value. Change it on its page, then try again. Nothing was sent.`;
+    return `${who}'s ${kindFaultWords(fault)} Change it on its page, then try again. Nothing was sent.`;
   }
   return null;
 }

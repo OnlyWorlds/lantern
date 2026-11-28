@@ -16,6 +16,8 @@
 // Then a second world file holding an id the first world now holds is put online: nothing may be made
 // (keel's hand-over, one write). a331c51 is that control: it makes the world, the bulk is refused, an
 // empty world stays (recorded from the account's list by this run's name, and torn down).
+// A third holds "7" in a Character's height: said by element, field and value, nothing made; 5702584 is that
+// control (it makes the world, recorded and torn down).
 // Secrets are never printed.
 // Run from tools/lantern:
 //   CREW_FILE=<crew-walk-accounts.txt> [SERVE_DIST=dist] node walk/live-online.mjs [url] [chromium|webkit|firefox] [tag]
@@ -79,6 +81,15 @@ const refusedFile = writeWorldFile([
   el('character', 'bram', { id: id(5), name: 'Bram' }),
 ], `online-refused-${run}`);
 
+// Since 2026-11-28: a third world file whose Character holds "7" in an integer field (keel would store 7, and
+// the SDK from 4.220 refuses it before sending). Put it online must say the element, field and value with
+// nothing made. The build before (5702584) sends it: keel makes the world (recorded, torn down).
+const WRONG_NAME = `${WORLD_NAME} wrong kind`;
+const wrongFile = writeWorldFile([
+  { path: 'world.json', data: enc.encode(JSON.stringify({ id: id(97), name: WRONG_NAME })) },
+  el('character', 'vera', { id: id(6), name: 'Vera', height: '7' }),
+], `online-wrong-${run}`);
+
 // The record: what this run minted, by id. Only these are revoked or deleted.
 const tokens = []; // { id, token, by }
 const worlds = []; // { id, name, key }
@@ -95,7 +106,7 @@ function teardown(why) {
       try {
         const page = await b.newPage({ viewport: { width: 1280, height: 900 } });
         for (const w of worlds) {
-          if (w.name !== WORLD_NAME && w.name !== REFUSED_NAME) { check(false, `teardown: world ${w.id} is named ${JSON.stringify(w.name)}, not this run's: left alone`); continue; }
+          if (w.name !== WORLD_NAME && w.name !== REFUSED_NAME && w.name !== WRONG_NAME) { check(false, `teardown: world ${w.id} is named ${JSON.stringify(w.name)}, not this run's: left alone`); continue; }
           const del = `https://www.onlyworlds.com/account/worlds/${w.id}/delete`;
           await page.goto(del);
           await page.waitForLoadState('networkidle');
@@ -275,6 +286,27 @@ try {
   check(listed2.filter((x) => x.name === REFUSED_NAME).length === 0 && worlds.filter((x) => x.name === REFUSED_NAME).length === 0,
     `the refused put leaves no world on the account (listed ${listed2.filter((x) => x.name === REFUSED_NAME).length}, recorded ${worlds.filter((x) => x.name === REFUSED_NAME).length})`);
   await p.screenshot({ path: `${OUT}/live-online-${engine}-${tag}-2-refused.png` });
+
+  // ---- 6. A world file holding "7" in an integer field: said, no world made ----
+  await p.goto(new URL('/#/worlds', url).href);
+  await p.locator('input[aria-label="A world file"]').waitFor({ state: 'attached', timeout: 15000 });
+  await p.locator('input[aria-label="A world file"]').setInputFiles({ name: 'wrong.owworld', mimeType: 'application/zip', buffer: Buffer.from(wrongFile) });
+  need(await p.waitForSelector('[data-screen="home"]', { timeout: 15000 }).then(() => true, () => false), 'the third world file opens on the phone');
+  await p.goto(new URL('/#/worlds', url).href);
+  const g3 = p.locator('.local-group', { hasText: WRONG_NAME });
+  await g3.waitFor({ timeout: 15000 });
+  await g3.getByRole('button', { name: 'Put it online' }).tap();
+  await p.locator('.sheet input[aria-label="PIN"]').fill(pin);
+  await p.locator('.sheet button[type="submit"]').tap();
+  const wrongKindSaid = await p.locator('.sheet .error').filter({ hasText: /\S/ }).first().innerText({ timeout: 30000 }).catch(() => '');
+  await p.waitForTimeout(1500);
+  await Promise.allSettled(pending);
+  const listed3 = ((await (await fetch(`${API}/account/worlds`, { headers: { Authorization: `Bearer ${own.token}` }, ...limit() })).json().catch(() => ({}))).data ?? []);
+  for (const w of listed3.filter((x) => x.name === WRONG_NAME)) if (!worlds.some((x) => x.id === w.id)) worlds.push({ id: w.id, name: w.name });
+  check(/Vera's .*holds "7".*whole number.*Nothing was sent\./.test(wrongKindSaid), `"7" in an integer field is said by element, field and value (${JSON.stringify(wrongKindSaid.trim())})`);
+  check(listed3.filter((x) => x.name === WRONG_NAME).length === 0 && worlds.filter((x) => x.name === WRONG_NAME).length === 0,
+    `the wrong kind leaves no world on the account (listed ${listed3.filter((x) => x.name === WRONG_NAME).length}, recorded ${worlds.filter((x) => x.name === WRONG_NAME).length})`);
+  await p.screenshot({ path: `${OUT}/live-online-${engine}-${tag}-3-wrong-kind.png` });
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } catch (e) {
   if (!String(e.message).startsWith('stopped:')) { console.log(`${T} FAIL threw: ${String(e).slice(0, 200)}`); failures++; }

@@ -2,19 +2,16 @@
 //
 // keel takes a wrong kind with a 200 and changes it: an integer field stores int(value) (2.5 as 2,
 // "7" as 7, true as 1), a text field the text of any other value (12 as "12"). The SDK refuses such a
-// value before sending, from the release after 4.219.3, with a TypeError that stops a whole /bulk. A
-// world file written by another tool can hold one, and Put it online sends a file's elements as it
-// holds them, so the phone finds the first one first and says which element, field and value.
-//
-// The predicate is the SDK client's `checkKinds`, copied: an integer field takes a whole number (never
-// a boolean or a number as text), a text field a string, each or null; a field outside the schema and a
-// link field are not read. To be replaced by the SDK's own when it exports it (asked).
-import { FIELD_SCHEMA } from '@onlyworlds/sdk';
+// value before sending, with a TypeError that stops a whole /bulk. A world file written by another
+// tool can hold one, and Put it online sends a file's elements as it holds them, so the phone asks the
+// SDK's own rule (`kindFaults`, since 4.222.0) first and says which element, field and value.
+import { kindFaults } from '@onlyworlds/sdk';
+import { fieldLabel } from './schema';
 
 export interface KindFault {
   field: string;
   kind: 'integer' | 'text';
-  /** As a person reads it: 2.5, "7", true, a list. */
+  /** As a person reads it: 2.5, "7", yes, a list. */
   shown: string;
 }
 
@@ -28,13 +25,11 @@ function shownValue(v: unknown): string {
 
 /** The first field, in the element's own order, whose value OnlyWorlds would store as another; or null. */
 export function kindFault(type: string, element: Record<string, unknown>): KindFault | null {
-  const fields = (FIELD_SCHEMA as unknown as Record<string, Record<string, { type: string }> | undefined>)[type];
-  if (!fields) return null;
-  for (const [field, value] of Object.entries(element)) {
-    const kind = fields[field]?.type;
-    if (value === null || value === undefined || kind === undefined) continue;
-    if (kind === 'integer' && !(typeof value === 'number' && Number.isInteger(value))) return { field, kind, shown: shownValue(value) };
-    if (kind === 'text' && typeof value !== 'string') return { field, kind, shown: shownValue(value) };
-  }
-  return null;
+  const first = kindFaults(type, element)[0];
+  return first ? { field: first.field, kind: first.kind, shown: shownValue(first.value) } : null;
+}
+
+/** The fault in words, after the element's name: 'height holds "7", and that field takes a whole number: ...'. */
+export function kindFaultWords(fault: KindFault): string {
+  return `${fieldLabel(fault.field)} holds ${fault.shown}, and that field takes ${fault.kind === 'integer' ? 'a whole number' : 'text'}: OnlyWorlds would store it as another value.`;
 }
