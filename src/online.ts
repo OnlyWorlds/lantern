@@ -6,7 +6,8 @@
 // so a retry sends the very same body. Then a key for this phone, the pictures the phone holds and
 // one atomic /bulk that sets them, the description and the now, a read back, and only when every
 // element, picture and own key came back as sent does the phone-only copy go.
-import { OwApiError, OwV2Client } from '@onlyworlds/sdk';
+import { OwApiError, OwV2Client, typeWord, type ElementType } from '@onlyworlds/sdk';
+import { kindFault, kindFaultWords } from './kinds';
 import * as db from './db';
 import { KEPT, accountName, accountToken, deviceName, whoAmI } from './account';
 import { API_BASE, LANTERN_CLIENT_NAME, openWorld, forgetSession, pictureRefusalText } from './world';
@@ -116,6 +117,21 @@ export function notSendable(rec: db.WorldRecord, ownKeys: Record<string, unknown
   if (bad) return `This world's setting ${bad} holds a character OnlyWorlds cannot keep. ${after}`;
   const bytes = new TextEncoder().encode(JSON.stringify(ownKeys)).length;
   if (bytes > WORLD_KEYS_MAX_BYTES) return `This world's own settings are more than OnlyWorlds keeps for a world (${bytes} bytes, at most ${WORLD_KEYS_MAX_BYTES}). ${after}`;
+  return null;
+}
+
+/**
+ * The first element holding a value OnlyWorlds would store as another (`kinds.ts`), said with its name,
+ * field and value before anything is made: the SDK refuses one, and that refusal stops the whole hand-over.
+ */
+export function wrongKindLine(elements: Record<string, unknown>[]): string | null {
+  for (const el of elements) {
+    const type = typeof el.type === 'string' ? el.type : '';
+    const fault = kindFault(type, bodyOf(el));
+    if (!fault) continue;
+    const who = typeof el.name === 'string' && el.name.trim() ? el.name.trim() : `A ${typeWord(null, type as ElementType)}`;
+    return `${who}'s ${kindFaultWords(fault)} Change it on its page, then try again. Nothing was sent.`;
+  }
   return null;
 }
 
@@ -275,6 +291,8 @@ export async function putOnline(localId: string, pin: string, onStep: (text: str
   const ownKeys = worldOwnKeys(rec);
   const refused = notSendable(rec, ownKeys);
   if (refused) throw new OnlineSaid(refused);
+  const wrongKind = wrongKindLine(elements as unknown as Record<string, unknown>[]);
+  if (wrongKind) throw new OnlineSaid(wrongKind);
   const held = elements.filter((el) => isHeld(el as Record<string, unknown>)) as Record<string, unknown>[];
   // Every element goes in the hand-over without a picture the phone holds: a picture needs the world's key.
   const items = elements.map((el) => {
@@ -649,6 +667,8 @@ async function finishOld(
 ): Promise<string> {
   const localId = rec.id;
   const ownKeys = worldOwnKeys(rec);
+  const wrongKind = wrongKindLine(elements as unknown as Record<string, unknown>[]);
+  if (wrongKind) throw new OnlineSaid(wrongKind);
   const client = new OwV2Client({ apiKey: pending.key, apiPin: pin, baseUrl: API_BASE, client: LANTERN_CLIENT_NAME, fetch: fetchThatHolds(putScope(localId)) });
   const held = elements.filter((el) => isHeld(el as Record<string, unknown>));
   for (const [i, el] of held.entries()) {

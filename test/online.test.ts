@@ -459,6 +459,30 @@ describe('put it online', () => {
     expect((await db.allElements(local)).length).toBe(2);
   });
 
+  it('a world file holding "7" or 2.5 in a whole-number field, or 12 in a text field: said by element, field and value, nothing made, the copy stays', async () => {
+    keel.accountPin = '4321';
+    for (const [extra, said] of [
+      [{ height: '7' }, `Vera's Height holds "7", and that field takes a whole number: OnlyWorlds would store it as another value. Change it on its page, then try again. Nothing was sent.`],
+      [{ weight: 72.5 }, `Vera's Weight holds 72.5, and that field takes a whole number:`],
+      [{ supertype: 12 }, `Vera's Supertype holds 12, and that field takes text:`],
+    ] as const) {
+      const local = await localWorld([...ELS, { id: 'e1000000-0000-7000-8000-000000000016', type: 'character', name: 'Vera', ...extra }]);
+      const err = await putOnline(local, '4321').then(() => null, (e: Error) => e);
+      expect(err?.message.startsWith(said), err?.message).toBe(true);
+      expect(keel.worlds.size).toBe(0);
+      expect(keel.bulks).toBe(0);
+      expect((await db.allElements(local)).length).toBe(3);
+      expect((await db.getWorldRecord(local))?.pendingOnline).toBeUndefined();
+    }
+  });
+
+  it('a whole number, an unset field and a custom field of any kind go up as before', async () => {
+    keel.accountPin = '4321';
+    const local = await localWorld([...ELS, { id: 'e1000000-0000-7000-8000-000000000017', type: 'character', name: 'Vera', height: 180, weight: null, x_mood: 2.5 }]);
+    await putOnline(local, '4321');
+    expect(keel.worlds.size).toBe(1);
+  });
+
   it('a hidden element goes up hidden, as the boolean keel takes; a false or null mark is never sent (folder spec §4.8)', async () => {
     keel.accountPin = '4321';
     const ids = ['e1000000-0000-7000-8000-000000000011', 'e1000000-0000-7000-8000-000000000012', 'e1000000-0000-7000-8000-000000000013', 'e1000000-0000-7000-8000-000000000014'];

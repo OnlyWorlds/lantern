@@ -230,6 +230,23 @@ describe('a stub is never changed, deleted or sent from here (rules 3 and 5)', (
     expect(again.status).not.toBe('offline');
     expect(keel.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
   });
+
+  it('a row holding a value of the wrong kind is refused in words, never left waiting for signal (SDK 4.220)', async () => {
+    const s = await playerWorld({ apiKey: 'ow_w_' + 'w'.repeat(40), keyKind: 'write', memberRole: undefined, role: 'owner', characterId: null });
+    setPin(s.rec, '1234');
+    await s.pull();
+    // Hand-built, as an older outbox or a world file's element could hold one: the SDK refuses the body before it is sent.
+    await db.putOutboxRow(s.id, { op: 'patch', type: 'character', id: ANA, values: { height: '7' }, state: 'waiting', createdAt: '' });
+    await db.putOutboxRow(s.id, { op: 'create', type: 'character', id: '01a15929-0000-7000-8000-00000000000b', values: { name: 'Bo', description: 12 }, idempotencyKey: 'k2', state: 'waiting', createdAt: '' });
+    forgetSession(s.id);
+    const again = await openWorld(s.id);
+    await again.flush();
+    expect(again.outbox.map((r) => r.state)).toEqual(['refused', 'refused']);
+    expect(again.outbox[0].error).toBe('Its Height holds "7", and that field takes a whole number: OnlyWorlds would store it as another value. Change it on its page.');
+    expect(again.outbox[1].error).toMatch(/^Its Description holds 12, and that field takes text:/);
+    expect(again.status).not.toBe('offline');
+    expect(keel.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
+  });
 });
 
 describe('the stub gate', () => {
